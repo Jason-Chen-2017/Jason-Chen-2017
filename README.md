@@ -1,37 +1,26 @@
-## Welcome to GitHub Pages
+#关于作者
+ 
+陈光剑，江苏东海人, 号行走江湖一剑客，字之剑。程序员，诗人, 作家。光剑免费图书馆创始人, 天才. 
 
-You can use the [editor on GitHub](https://github.com/Jason-Chen-2017/Jason-Chen-2017/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
+邮箱:universsky@163.com
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+#光剑免费图书馆
 
-### Markdown
+https://universsky.github.io/
 
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
 
-```markdown
-Syntax highlighted code block
+(如果您有好的书籍推荐, 请联系我.)
 
-# Header 1
-## Header 2
-### Header 3
+> 读书使人充实，讨论使人机智，笔记使人准确，读史使人明智，读诗使人灵秀，数学使人周密，科学使人深刻，伦理使人庄重，逻辑修辞使人善辩。凡有所学，皆成性格。
 
-- Bulleted
-- List
 
-1. Numbered
-2. List
 
-**Bold** and _Italic_ and `Code` text
+零度格局,盲众看到的是幻象和噪声
 
-[Link](url) and ![Image](src)
-```
+一度格局,逐利者看到的是自己的能力和欲望
 
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
+二度格局,理念人看到的是这个世界深处的真善美
 
-### Jekyll Themes
+三度格局,至善之人看到的是自我与世界,自我与整个人类之间的纽带
 
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/Jason-Chen-2017/Jason-Chen-2017/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
 
-### Support or Contact
-
-Having trouble with Pages? Check out our [documentation](https://help.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.

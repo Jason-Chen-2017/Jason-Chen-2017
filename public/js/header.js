@@ -2,10 +2,10 @@ var Header = React.createClass({
 
     render: function () {
         var h1Style = {
-            marginLeft: '2em'
+            marginLeft: '20'
         };
         var h2Style = {
-            marginLeft: '6em'
+            marginLeft: '40'
         };
 
         return (

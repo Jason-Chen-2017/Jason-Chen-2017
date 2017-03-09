@@ -29,7 +29,7 @@ var SideBar = React.createClass({
             <div style={helloWorldStyle}>
                 <aside id="sidebar">
                     <button onClick={this.goHome} style={btnStyle}>博客首页</button>
-                    <p class="repo-owner"> Author: <a href="https://github.com/Jason-Chen-2017">Jason Chen,2017</a>.</p>
+                    <p class="repo-owner"> Author: <a href="https://github.com/Jason-Chen-2017" target="_blank">Jason Chen,2017</a>.</p>
                     <p>作者:
                         陈光剑，江苏东海人, 号行走江湖一剑客，字之剑。程序员，诗人, 作家。邮箱: universsky@163.com, 微信:universskyoh</p>
 

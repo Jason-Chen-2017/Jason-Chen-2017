@@ -5,6 +5,9 @@ $(function () {
     $('#goHome').on('click',function () {
         location.href = "https://jason-chen-2017.github.io/Jason-Chen-2017/";
     });
+
+    //meditor 默认点开全屏
+    $('.fa-arrows-alt').click();
 });
 
 function goHome() {

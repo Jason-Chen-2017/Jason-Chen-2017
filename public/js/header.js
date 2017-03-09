@@ -11,8 +11,8 @@ var Header = React.createClass({
         return (
             <header>
                 <div class="inner">
-                    <h1 style={h1Style}>Jason-Chen-2017</h1>
-                    <h2 style={h2Style}>东海陈光剑(Jason Chen , 2017) 个人博客</h2>
+                    <h1 style={h1Style}>Jason Chen, 2017</h1>
+                    <h2 style={h2Style}>陈光剑博客</h2>
 
                     <a href="https://github.com/Jason-Chen-2017/Jason-Chen-2017" class="button">
                         <small>View project on</small>

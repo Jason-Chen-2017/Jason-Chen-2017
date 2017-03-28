@@ -7,7 +7,7 @@ $(function () {
     });
 
     //meditor 默认点开全屏
-    $('.fa-arrows-alt').click();
+    //$('.fa-arrows-alt').click();
 });
 
 function goHome() {

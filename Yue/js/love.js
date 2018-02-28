@@ -75,8 +75,11 @@
     Seed = function(tree, point, scale, color) {
         this.tree = tree;
 
-        var scale = scale || 1
-        var color = color || '#ff181a';
+        var scale = scale || 1.2
+
+        var colorValue = '#ff716f';
+        var color = color || colorValue;
+        color = colorValue;
 
         this.heart = {
             point  : point,
@@ -237,7 +240,7 @@
             var x = seed.x || this.width / 2;
             var y = seed.y || this.height / 2;
             var point = new Point(x, y);
-            var color = seed.color || '#ff8c77';
+            var color = seed.color || '#ff513d';
             var scale = seed.scale || 1;
 
             this.seed = new Seed(this, point, scale, color);

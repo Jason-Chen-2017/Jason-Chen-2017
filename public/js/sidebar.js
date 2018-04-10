@@ -36,16 +36,26 @@ var SideBar = React.createClass({
                 <aside id="sidebar">
                     <div onClick={this.goHome} style={btnStyle}>回到首页</div>
 
-                    <p>作者:
-                        陈光剑，江苏东海人, 号行走江湖一剑客，字之剑。程序员，诗人, 作家。邮箱: universsky@163.com, 微信:universskyoh</p>
+                    <div>作者:
+                        陈光剑，江苏东海人, 号行走江湖一剑客，字之剑。程序员，诗人, 作家。
+                    </div>
+                    <div>邮箱: universsky@163.com</div>
+                    <div>微信:universskyoh</div>
+
+                    <hr></hr>
+                    <div data-myattribute="somevalue">
+                        <div>道之所在，虽千万人吾往矣；</div>
+                        <div>义之所当，千金散尽不后悔；</div>
+                        <div>情之所钟，世俗礼法如粪土；</div>
+                        <div>兴之所至，与君痛饮三百杯.</div>
+                        <div>(Jason Chen,2017)</div>
+                    </div>
 
                     <div onClick={this.goFreeBook} style={btnStyle}>光剑免费图书馆</div>
 
-                    <p data-myattribute="somevalue">道之所在，虽千万人吾往矣；义之所当，千金散尽不后悔；情之所钟，世俗礼法如粪土；兴之所至，与君痛饮三百杯.(Jason
-                        Chen,2017)</p>
-
-                    <p class="repo-owner"> Author: <a href="https://github.com/Jason-Chen-2017" target="_blank">Jason
-                        Chen,2017</a>.</p>
+                    <div class="repo-owner"> Author:
+                        <a href="https://github.com/Jason-Chen-2017" target="_blank">Jason Chen,2017</a>
+                    </div>
 
                 </aside>
             </div>

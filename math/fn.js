@@ -19,6 +19,12 @@ var frames = [
   {name: 'heart(x)', data: [{x: [], y: []}]}, // 13
   {name: 'x*sin(x)', data: [{x: [], y: []}]}, // 14
   {name: 'sin(x)/x', data: [{x: [], y: []}]}, // 15
+  {name: 'rose(x)', data: [{x: [], y: []}]}, // 16
+  {name: 'dcurv(x)', data: [{x: [], y: []}]}, // 17
+  {name: 'spiral(x)', data: [{x: [], y: []}]}, // 18
+  {name: 'gaussian(x)', data: [{x: [], y: []}]}, // 19
+  {name: 'star(x)', data: [{x: [], y: []}]}, // 20
+  {name: 'open(x)', data: [{x: [], y: []}]}, // 21
 ];
 
 function sin(x) {
@@ -68,7 +74,7 @@ for (let i = 0; i < N; i++) {
 
   // A circle:
   frames[2].data[0].x[i] = A * Math.sin(t);
-  frames[2].data[0].y[i] = A * Math.cos(t);
+  frames[2].data[0].y[i] = B * Math.cos(t);
 
   // 2^x:
   frames[3].data[0].x[i] = t;
@@ -118,6 +124,30 @@ for (let i = 0; i < N; i++) {
   // sin(x)/x:
   frames[15].data[0].x[i] = t;
   frames[15].data[0].y[i] = sin(t) / t;
+  // rose(x):
+  const r = 15;
+  frames[16].data[0].x[i] = r * sin(4 * t) * cos(t);
+  frames[16].data[0].y[i] = r * sin(4 * t) * sin(t);
+  // dcurv(x): 双曲函数
+  frames[17].data[0].x[i] = 3 / cos(t);
+  frames[17].data[0].y[i] = 5 * tan(t);
+
+  // spiral(x): 双曲函数
+  frames[18].data[0].x[i] = (2 + 1 * t) * cos(t);
+  frames[18].data[0].y[i] = (2 + 1 * t) * sin(t);
+
+  // gaussian(x): 双曲函数
+  frames[19].data[0].x[i] = t;
+  frames[19].data[0].y[i] = A * pow(Math.E, -(t - 0) * (t - 0) / (2 * 3 * 3));
+
+  // star(x): 双曲函数
+  frames[20].data[0].x[i] = A * pow(cos(t), 3);
+  frames[20].data[0].y[i] = A * pow(sin(t), 3);
+
+  // open(x): 圆的渐开线函数
+  frames[21].data[0].x[i] = 1 * (cos(t) + t * sin(t));
+  frames[21].data[0].y[i] = 1 * (sin(t) - t * cos(t));
+
 
 }
 
@@ -150,6 +180,12 @@ Plotly.plot('fn', // 'id'
         {method: 'animate', args: [['heart(x)']], label: '心形函数: heart(x)'},//13
         {method: 'animate', args: [['x*sin(x)']], label: '函数: x*sin(x)'},//14
         {method: 'animate', args: [['sin(x)/x']], label: '函数: sin(x)/x'},//15
+        {method: 'animate', args: [['rose(x)']], label: '玫瑰函数: rose(x)'},//16
+        {method: 'animate', args: [['dcurv(x)']], label: '双曲函数: dcurv(x)'},//17
+        {method: 'animate', args: [['spiral(x)']], label: '阿基米德螺线: spiral(x)'},//18
+        {method: 'animate', args: [['gaussian(x)']], label: '高斯函数: gaussian(x)'},//19
+        {method: 'animate', args: [['star(x)']], label: '星星函数: star(x)'},//20
+        {method: 'animate', args: [['open(x)']], label: '圆的渐开线函数: open(x)'},//21
       ]
     }]
   }, // layout

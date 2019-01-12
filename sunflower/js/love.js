@@ -172,7 +172,7 @@
             ctx.moveTo(0, 0);
             ctx.scale(0.75, 0.75);
             ctx.font = "12px SimSun,微软雅黑,Verdana";
-            ctx.fillText("<- Click Heart :) 生命的泥委弃在地上, 长出五彩斑斓的花朵", 30, 10);
+            ctx.fillText("生命的泥委弃在地上, 长出五彩斑斓的花朵", 30, 10);
             ctx.restore();
         },
         clear: function() {

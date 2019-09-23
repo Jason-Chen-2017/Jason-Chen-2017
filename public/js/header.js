@@ -4,8 +4,6 @@ var Header = React.createClass({
         return (
             <header>
                 <h1>一个会写诗的程序员</h1>
-                <h2><a href={'https://jason-chen-2017.github.io/Jason-Chen-2017/'}> Jason Chen's Personal Website </a>
-                </h2>
             </header>
         );
     }

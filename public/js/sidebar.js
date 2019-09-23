@@ -10,9 +10,6 @@ var SideBar = React.createClass({
     goHome: function (event) {
         goHome();
     },
-    goFreeBook: function () {
-        goFreeBook();
-    },
 
     render: function () {
 
@@ -34,7 +31,6 @@ var SideBar = React.createClass({
             <div style={helloWorldStyle}>
                 <hr></hr>
                 <aside id="sidebar">
-                    <div onClick={this.goHome} style={btnStyle}>回到首页</div>
 
                     <div>
                         关于作者: 陈光剑,江苏东海人。程序员,诗人,作家。
@@ -52,12 +48,10 @@ var SideBar = React.createClass({
                         <div>兴之所至，与君痛饮三百杯.</div>
                     </div>
 
-                    <div onClick={this.goFreeBook} style={btnStyle}>光剑免费图书馆</div>
-
                     <div class="repo-owner"> Author:
                         <a href="https://github.com/Jason-Chen-2017" target="_blank">Jason Chen,2017</a>
                     </div>
-
+                    <div onClick={this.goHome} style={btnStyle}>回到首页</div>
                 </aside>
             </div>
         );

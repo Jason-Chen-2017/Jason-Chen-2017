@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prometheus 监控指标体系设计 - 端到端研发自动化系统</title>
+    <style>
+        :root {
+            --primary-color: #00f5ff;
+            --secondary-color: #7b2cbf;
+            --accent-color: #ff006e;
+            --bg-dark: #0a0e27;
+            --bg-card: rgba(16, 20, 50, 0.8);
+            --text-primary: #ffffff;
+            --text-secondary: #b8c5d6;
+            --border-glow: 0 0 20px rgba(0, 245, 255, 0.3);
+            --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a103c 50%, #0f172a 100%);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(123, 44, 191, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(0, 245, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(255, 0, 110, 0.08) 0%, transparent 40%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+            padding: 40px;
+            background: var(--bg-card);
+            border-radius: 20px;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            box-shadow: var(--card-shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-size: 2.8em;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+            text-shadow: 0 0 40px rgba(0, 245, 255, 0.3);
+            animation: glow 3s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.2); }
+        }
+
+        .subtitle {
+            font-size: 1.3em;
+            color: var(--text-secondary);
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .section {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 40px;
+            border: 1px solid rgba(0, 245, 255, 0.15);
+            box-shadow: var(--card-shadow);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .section:hover {
+            border-color: rgba(0, 245, 255, 0.3);
+            box-shadow: var(--border-glow), var(--card-shadow);
+        }
+
+        h2 {
+            font-size: 2em;
+            color: var(--primary-color);
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(0, 245, 255, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        h2::before {
+            content: '◈';
+            color: var(--accent-color);
+            font-size: 1.2em;
+            text-shadow: 0 0 10px var(--accent-color);
+        }
+
+        h3 {
+            font-size: 1.5em;
+            color: var(--secondary-color);
+            margin: 25px 0 15px 0;
+            padding-left: 15px;
+            border-left: 4px solid var(--accent-color);
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin-top: 30px;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(0, 245, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .metric-card:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--primary-color);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 245, 255, 0.2);
+        }
+
+        .metric-name {
+            font-family: 'Courier New', monospace;
+            font-size: 1.1em;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+            word-break: break-all;
+        }
+
+        .metric-type {
+            display: inline-block;
+            padding: 4px 12px;
+            background: rgba(123, 44, 191, 0.3);
+            border-radius: 12px;
+            font-size: 0.85em;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+
+        .metric-description {
+            color: var(--text-secondary);
+            font-size: 0.95em;
+            line-height: 1.7;
+        }
+
+        .metric-labels {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px dashed rgba(255, 255, 255, 0.1);
+        }
+
+        .metric-labels strong {
+            color: var(--accent-color);
+            font-size: 0.9em;
+        }
+
+        .metric-labels code {
+            display: inline-block;
+            background: rgba(0, 245, 255, 0.1);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            margin: 3px;
+            color: var(--primary-color);
+        }
+
+        .architecture-diagram {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+            overflow-x: auto;
+        }
+
+        .agent-flow {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .agent-node {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.3), rgba(0, 245, 255, 0.2));
+            padding: 15px 25px;
+            border-radius: 10px;
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            text-align: center;
+            min-width: 150px;
+        }
+
+        .agent-node strong {
+            color: var(--primary-color);
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .agent-node span {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+        }
+
+        .arrow {
+            color: var(--accent-color);
+            font-size: 1.5em;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        th {
+            background: rgba(0, 245, 255, 0.1);
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .alert-rule {
+            background: rgba(255, 0, 110, 0.1);
+            border-left: 4px solid var(--accent-color);
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .alert-rule h4 {
+            color: var(--accent-color);
+            margin-bottom: 10px;
+        }
+
+        .alert-rule code {
+            display: block;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            color: var(--primary-color);
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(123, 44, 191, 0.15));
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 25px 0;
+        }
+
+        .highlight-box ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .highlight-box li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+            color: var(--text-secondary);
+        }
+
+        .highlight-box li::before {
+            content: '▸';
+            position: absolute;
+            left: 0;
+            color: var(--primary-color);
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin-top: 60px;
+        }
+
+        .toc {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 40px;
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            border: none;
+            padding: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 10px;
+        }
+
+        .toc a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 8px 15px;
+            display: block;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .toc a:hover {
+            background: rgba(0, 245, 255, 0.1);
+            color: var(--primary-color);
+        }
+
+        .phase-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            background: rgba(0, 245, 255, 0.15);
+            border-radius: 15px;
+            font-size: 0.85em;
+            color: var(--primary-color);
+            margin: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Prometheus 监控指标体系设计</h1>
+            <p class="subtitle">基于 OpenClaw + Claude Code 的端到端研发自动化系统 - 全链路监控埋点方案</p>
+            <p style="margin-top: 20px; color: var(--text-secondary);">
+                覆盖需求分析 → PRD 设计 → 技术方案 → API 设计 → AI Coding → 单元测试 → 集成测试 → CI/CD → K8s 部署 → UI 自动化验收全流程
+            </p>
+        </header>
+
+        <!-- 目录 -->
+        <div class="toc">
+            <h3>📑 目录导航</h3>
+            <ul>
+                <li><a href="#overview">1. 监控体系概述</a></li>
+                <li><a href="#architecture">2. 整体架构设计</a></li>
+                <li><a href="#agent-metrics">3. Agent 角色监控指标</a></li>
+                <li><a href="#service-metrics">4. 服务层监控指标</a></li>
+                <li><a href="#alerts">5. 告警规则设计</a></li>
+                <li><a href="#dashboards">6. Grafana 仪表盘</a></li>
+                <li><a href="#implementation">7. 埋点实现方案</a></li>
+            </ul>
+        </div>
+
+        <!-- 1. 监控体系概述 -->
+        <section id="overview" class="section">
+            <h2>1. 监控体系概述</h2>
+            
+            <div class="highlight-box">
+                <h3>🎯 设计目标</h3>
+                <ul>
+                    <li><strong>全链路可观测性:</strong> 覆盖从需求到部署的完整研发流程，实现端到端追踪</li>
+                    <li><strong>多维度指标采集:</strong> 包含业务指标、性能指标、资源指标、质量指标</li>
+                    <li><strong>实时告警能力:</strong> 基于 PromQL 的灵活告警规则，支持分级告警策略</li>
+                    <li><strong>人机协同监控:</strong> 支持人工干预节点的监控与审计追踪</li>
+                    <li><strong>AI Agent 专项监控:</strong> 针对 LLM 调用、Token 消耗、推理延迟的专项指标</li>
+                </ul>
+            </div>
+
+            <h3>核心监控维度</h3>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-type">业务维度</div>
+                    <div class="metric-name">研发流程效率指标</div>
+                    <div class="metric-description">
+                        各阶段耗时、转化率、阻塞率、人机协同介入频率、自动化成功率
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">性能维度</div>
+                    <div class="metric-name">AI 推理性能指标</div>
+                    <div class="metric-description">
+                        LLM API 延迟、Token 生成速率、并发请求数、缓存命中率
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">质量维度</div>
+                    <div class="metric-name">代码质量指标</div>
+                    <div class="metric-description">
+                        单元测试覆盖率、代码审查通过率、缺陷密度、技术债务指数
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">资源维度</div>
+                    <div class="metric-name">基础设施指标</div>
+                    <div class="metric-description">
+                        CPU/内存使用率、容器健康状态、K8s Pod 状态、网络 IO
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. 整体架构设计 -->
+        <section id="architecture" class="section">
+            <h2>2. 整体架构设计</h2>
+            
+            <div class="architecture-diagram">
+                <h3 style="text-align: center; border: none;">监控数据流架构</h3>
+                <div class="agent-flow">
+                    <div class="agent-node">
+                        <strong>Agents 层</strong>
+                        <span>需求/PRD/技术/API/<br>Coding/Test/Deploy</span>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="agent-node">
+                        <strong>Prometheus Client</strong>
+                        <span>指标采集 SDK<br>(Python/NodeJS/Go)</span>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="agent-node">
+                        <strong>/metrics 端点</strong>
+                        <span>HTTP Exposition<br>Prometheus Format</span>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="agent-node">
+                        <strong>Prometheus Server</strong>
+                        <span>时序数据存储<br>PromQL 查询</span>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="agent-node">
+                        <strong>Grafana</strong>
+                        <span>可视化仪表盘<br>实时监控</span>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="agent-node">
+                        <strong>Alertmanager</strong>
+                        <span>告警路由<br>通知分发</span>
+                    </div>
+                </div>
+            </div>
+
+            <h3>监控层级划分</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>层级</th>
+                        <th>监控对象</th>
+                        <th>关键指标类型</th>
+                        <th>采集频率</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>L1 - Agent 应用层</strong></td>
+                        <td>各研发角色 Agents</td>
+                        <td>任务执行指标、LLM 调用指标、业务转化指标</td>
+                        <td>实时 (15s)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>L2 - 服务层</strong></td>
+                        <td>Jenkins/Docker/K8s</td>
+                        <td>CI/CD 流水线指标、容器指标、集群指标</td>
+                        <td>实时 (15s)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>L3 - 基础设施层</strong></td>
+                        <td>Node/Pod/Network</td>
+                        <td>CPU/内存/磁盘/网络 IO</td>
+                        <td>高频 (5s)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>L4 - 业务层</strong></td>
+                        <td>研发流程效率</td>
+                        <td>阶段耗时、成功率、质量评分</td>
+                        <td>中频 (1min)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- 3. Agent 角色监控指标 -->
+        <section id="agent-metrics" class="section">
+            <h2>3. Agent 角色监控指标</h2>
+            
+            <h3>3.1 需求分析 Agent (RequirementAgent)</h3>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-type">Counter</div>
+                    <div class="metric-name">req_agent_tasks_total</div>
+                    <div class="metric-description">
+                        需求分析任务总数（按状态分类：received/analyzing/completed/failed）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>status</code> <code>project_id</code> <code>priority</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Histogram</div>
+                    <div class="metric-name">req_agent_task_duration_seconds</div>
+                    <div class="metric-description">
+                        单个需求分析任务耗时分布（从接收到输出 PRD 初稿）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>complexity_level</code> <code>outcome</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">req_agent_llm_tokens_total</div>
+                    <div class="metric-description">
+                        需求分析过程消耗的 Token 总数（input + output）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>token_type</code> <code>model_name</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">req_agent_stakeholder_interventions</div>
+                    <div class="metric-description">
+                        需要人工介入澄清的需求数量（人机协同指标）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>intervention_type</code> <code>resolution_status</code>
+                    </div>
+                </div>
+            </div>
+
+            <h3>3.2 PRD 设计 Agent (PRDAgent)</h3>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-type">Counter</div>
+                    <div class="metric-name">prd_agent_documents_generated_total</div>
+                    <div class="metric-description">
+                        生成的 PRD 文档总数（按版本迭代计数）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>version</code> <code>approval_status</code> <code>project_id</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Histogram</div>
+                    <div class="metric-name">prd_agent_review_cycle_duration_seconds</div>
+                    <div class="metric-description">
+                        PRD 评审周期耗时（从初稿到最终批准）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>review_rounds</code> <code>change_count</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">prd_agent_requirement_coverage</div>
+                    <div class="metric-description">
+                        PRD 对原始需求的覆盖率百分比（通过语义相似度计算）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>requirement_category</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Counter</div>
+                    <div class="metric-name">prd_agent_revision_requests_total</div>
+                    <div class="metric-description">
+                        PRD 修订请求次数（反映文档质量）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>revision_reason</code> <code>requester_role</code>
+                    </div>
+                </div>
+            </div>
+
+            <h3>3.3 技术方案设计 Agent (ArchitectureAgent)</h3>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-type">Counter</div>
+                    <div class="metric-name">arch_agent_designs_created_total</div>
+                    <div class="metric-description">
+                        创建的技术方案总数（后端 + 前端）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>design_type</code> <code>complexity_score</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">arch_agent_component_count</div>
+                    <div class="metric-description">
+                        设计方案中的组件/模块数量
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>component_type</code> <code>layer</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Histogram</div>
+                    <div class="metric-name">arch_agent_api_definition_latency_seconds</div>
+                    <div class="metric-description">
+                        API 接口定义生成的延迟分布
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>api_count</code> <code>specification_format</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">arch_agent_technical_debt_score</div>
+                    <div class="metric-description">
+                        技术方案的技术债务评分（0-100，越低越好）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>debt_category</code>
+                    </div>
+                </div>
+            </div>
+
+            <h3>3.4 AI Coding Agent (CodingAgent)</h3>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-type">Counter</div>
+                    <div class="metric-name">coding_agent_code_lines_generated_total</div>
+                    <div class="metric-description">
+                        生成的代码总行数（按语言分类）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>language</code> <code>file_type</code> <code>project_id</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Histogram</div>
+                    <div class="metric-name">coding_agent_function_generation_duration_seconds</div>
+                    <div class="metric-description">
+                        单个函数/方法生成的耗时分布
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>complexity</code> <code>lines_of_code</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">coding_agent_llm_inference_latency_seconds</div>
+                    <div class="metric-description">
+                        Claude Code API 推理延迟（首次 Token 时间 + 总生成时间）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>model</code> <code>endpoint</code> <code>streaming</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Counter</div>
+                    <div class="metric-name">coding_agent_code_review_iterations_total</div>
+                    <div class="metric-description">
+                        代码审查迭代次数（反映一次通过率）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>review_outcome</code> <code>issue_severity</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">coding_agent_context_window_utilization</div>
+                    <div class="metric-description">
+                        LLM 上下文窗口利用率（已用 tokens / 最大 tokens）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>task_type</code>
+                    </div>
+                </div>
+            </div>
+
+            <h3>3.5 测试 Agent (TestAgent)</h3>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-type">Counter</div>
+                    <div class="metric-name">test_agent_test_cases_generated_total</div>
+                    <div class="metric-description">
+                        生成的测试用例总数（单元/集成/E2E）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>test_type</code> <code>coverage_area</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">test_agent_code_coverage_percent</div>
+                    <div class="metric-description">
+                        代码覆盖率百分比（行覆盖/分支覆盖）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>coverage_type</code> <code>module</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Histogram</div>
+                    <div class="metric-name">test_agent_execution_duration_seconds</div>
+                    <div class="metric-description">
+                        测试套件执行耗时分布
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>test_suite</code> <code>parallel_workers</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Counter</div>
+                    <div class="metric-name">test_agent_defects_detected_total</div>
+                    <div class="metric-description">
+                        检测到的缺陷总数（按严重程度分类）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>severity</code> <code>detection_stage</code> <code>status</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">test_agent_flaky_test_rate</div>
+                    <div class="metric-description">
+                        不稳定测试的比例（偶尔失败/总测试数）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>test_category</code>
+                    </div>
+                </div>
+            </div>
+
+            <h3>3.6 部署 Agent (DeployAgent)</h3>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-type">Counter</div>
+                    <div class="metric-name">deploy_agent_deployments_total</div>
+                    <div class="metric-description">
+                        部署总次数（按环境分类：dev/staging/prod）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>environment</code> <code>deployment_strategy</code> <code>outcome</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Histogram</div>
+                    <div class="metric-name">deploy_agent_pipeline_duration_seconds</div>
+                    <div class="metric-description">
+                        CI/CD 流水线总耗时分布（从 commit 到 deploy）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>pipeline_stage</code> <code>artifact_size_mb</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">deploy_agent_k8s_pod_health</div>
+                    <div class="metric-description">
+                        Kubernetes Pod 健康状态（1=Ready, 0=Not Ready）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>pod_name</code> <code>namespace</code> <code>deployment</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Counter</div>
+                    <div class="metric-name">deploy_agent_rollbacks_total</div>
+                    <div class="metric-description">
+                        部署回滚次数（反映部署质量）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>rollback_reason</code> <code>time_to_rollback</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">deploy_agent_container_resource_utilization</div>
+                    <div class="metric-description">
+                        容器资源利用率（CPU/内存请求 vs 实际使用）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>resource_type</code> <code>container_name</code>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. 服务层监控指标 -->
+        <section id="service-metrics" class="section">
+            <h2>4. 服务层监控指标</h2>
+            
+            <h3>4.1 Jenkins CI/CD 监控指标</h3>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-type">Counter</div>
+                    <div class="metric-name">jenkins_builds_total</div>
+                    <div class="metric-description">
+                        Jenkins 构建总次数（按结果分类）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>job_name</code> <code>result</code> <code>branch</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">jenkins_build_queue_length</div>
+                    <div class="metric-description">
+                        当前构建队列长度（等待执行的构建数）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>node_label</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Histogram</div>
+                    <div class="metric-name">jenkins_build_duration_seconds</div>
+                    <div class="metric-description">
+                        单次构建耗时分布（按阶段细分）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>job_name</code> <code>stage</code> <code>outcome</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">jenkins_executor_available</div>
+                    <div class="metric-description">
+                        可用的 Jenkins Executor 数量
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>node_name</code> <code>executor_type</code>
+                    </div>
+                </div>
+            </div>
+
+            <h3>4.2 Docker 容器监控指标</h3>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">container_cpu_usage_percentage</div>
+                    <div class="metric-description">
+                        容器 CPU 使用率百分比
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>container_name</code> <code>image</code> <code>host</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">container_memory_usage_bytes</div>
+                    <div class="metric-description">
+                        容器内存使用量（字节）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>container_name</code> <code>memory_limit</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Counter</div>
+                    <div class="metric-name">container_network_receive_bytes_total</div>
+                    <div class="metric-description">
+                        容器网络接收字节总数
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>container_name</code> <code>interface</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">container_health_check_status</div>
+                    <div class="metric-description">
+                        容器健康检查状态（1=healthy, 0=unhealthy）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>container_name</code> <code>check_name</code>
+                    </div>
+                </div>
+            </div>
+
+            <h3>4.3 Kubernetes/KubeSphere 监控指标</h3>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">kube_pod_status_phase</div>
+                    <div class="metric-description">
+                        Pod 当前状态阶段（Pending/Running/Succeeded/Failed/Unknown）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>pod</code> <code>namespace</code> <code>phase</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">kube_deployment_status_replicas_available</div>
+                    <div class="metric-description">
+                        Deployment 可用的副本数
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>deployment</code> <code>namespace</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">kube_node_status_condition</div>
+                    <div class="metric-description">
+                        Node 状态条件（Ready/MemoryPressure/DiskPressure 等）
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>node</code> <code>condition</code> <code>status</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Histogram</div>
+                    <div class="metric-name">kube_pod_container_status_restart_reason</div>
+                    <div class="metric-description">
+                        容器重启原因统计
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>pod</code> <code>container</code> <code>reason</code>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-type">Gauge</div>
+                    <div class="metric-name">kubesphere_workspace_resource_quota_usage</div>
+                    <div class="metric-description">
+                        KubeSphere 工作空间资源配额使用率
+                    </div>
+                    <div class="metric-labels">
+                        <strong>Labels:</strong>
+                        <code>workspace</code> <code>resource_type</code>
+                    </div>
+                </div>
+            </div>
+
+            <h3>4.4 通用服务指标 (RED 方法)</h3>
+            <div class="highlight-box">
+                <h3>🔴 RED 方法核心指标</h3>
+                <ul>
+                    <li><strong>Rate (请求速率):</strong> <code>service_requests_total{service, endpoint, method}</code> - 每秒请求数</li>
+                    <li><strong>Errors (错误率):</strong> <code>service_errors_total{service, error_type}</code> - 错误请求占比</li>
+                    <li><strong>Duration (延迟):</strong> <code>service_request_duration_seconds{service, endpoint, quantile}</code> - 请求延迟分布 (P50/P90/P99)</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 5. 告警规则设计 -->
+        <section id="alerts" class="section">
+            <h2>5. 告警规则设计</h2>
+            
+            <h3>5.1 Agent 执行异常告警</h3>
+            <div class="alert-rule">
+                <h4>🚨 Agent 任务失败率过高</h4>
+                <code>
+ALERT: AgentHighFailureRate<br>
+IF: sum(rate(req_agent_tasks_total{status="failed"}[5m])) / sum(rate(req_agent_tasks_total[5m])) > 0.1<br>
+FOR: 5m<br>
+LABELS: {severity="warning", team="ai-agents"}<br>
+ANNOTATIONS:<br>
+  summary: "Agent 任务失败率超过 10%"<br>
+  description: "过去 5 分钟内 {{ $value | humanizePercentage }} 的任务执行失败"
+                </code>
+            </div>
+
+            <div class="alert-rule">
+                <h4>🚨 LLM API 延迟异常</h4>
+                <code>
+ALERT: HighLLMLatency<br>
+IF: histogram_quantile(0.95, rate(coding_agent_llm_inference_latency_seconds_bucket[5m])) > 30<br>
+FOR: 10m<br>
+LABELS: {severity="critical", team="platform"}<br>
+ANNOTATIONS:<br>
+  summary: "LLM API P95 延迟超过 30 秒"<br>
+  description: "当前 P95 延迟为 {{ $value }} 秒，严重影响编码效率"
+                </code>
+            </div>
+
+            <div class="alert-rule">
+                <h4>🚨 Token 消耗异常</h4>
+                <code>
+ALERT: AbnormalTokenConsumption<br>
+IF: sum(rate(coding_agent_llm_tokens_total[1h])) > 1000000<br>
+FOR: 1h<br>
+LABELS: {severity="warning", team="finance"}<br>
+ANNOTATIONS:<br>
+  summary: "小时级 Token 消耗超过 100 万"<br>
+  description: "过去 1 小时消耗 {{ $value }} tokens，可能产生高额费用"
+                </code>
+            </div>
+
+            <h3>5.2 CI/CD 流水线告警</h3>
+            <div class="alert-rule">
+                <h4>🚨 构建失败率过高</h4>
+                <code>
+ALERT: HighBuildFailureRate<br>
+IF: sum(rate(jenkins_builds_total{result="FAILURE"}[30m])) / sum(rate(jenkins_builds_total[30m])) > 0.2<br>
+FOR: 30m<br>
+LABELS: {severity="critical", team="devops"}<br>
+ANNOTATIONS:<br>
+  summary: "Jenkins 构建失败率超过 20%"<br>
+  description: "过去 30 分钟失败率为 {{ $value | humanizePercentage }}"
+                </code>
+            </div>
+
+            <div class="alert-rule">
+                <h4>🚨 部署回滚频繁</h4>
+                <code>
+ALERT: FrequentDeploymentRollbacks<br>
+IF: increase(deploy_agent_rollbacks_total[1h]) > 3<br>
+FOR: 1h<br>
+LABELS: {severity="critical", team="release"}<br>
+ANNOTATIONS:<br>
+  summary: "1 小时内发生多次部署回滚"<br>
+  description: "过去 1 小时回滚 {{ $value }} 次，部署质量需关注"
+                </code>
+            </div>
+
+            <h3>5.3 基础设施告警</h3>
+            <div class="alert-rule">
+                <h4>🚨 Pod 持续崩溃重启</h4>
+                <code>
+ALERT: PodCrashLooping<br>
+IF: increase(kube_pod_container_status_restarts_total[1h]) > 5<br>
+FOR: 1h<br>
+LABELS: {severity="critical", team="platform"}<br>
+ANNOTATIONS:<br>
+  summary: "Pod 进入崩溃循环"<br>
+  description: "Pod {{ $labels.pod }} 在 1 小时内重启 {{ $value }} 次"
+                </code>
+            </div>
+
+            <div class="alert-rule">
+                <h4>🚨 节点资源耗尽</h4>
+                <code>
+ALERT: NodeResourceExhausted<br>
+IF: (1 - sum(kube_node_status_condition{condition="Ready", status="true"}) / count(kube_node_status_condition{condition="Ready"})) > 0.2<br>
+FOR: 5m<br>
+LABELS: {severity="critical", team="infra"}<br>
+ANNOTATIONS:<br>
+  summary: "超过 20% 的节点不可用"<br>
+  description: "集群健康状况恶化，请立即检查"
+                </code>
+            </div>
+
+            <h3>5.4 质量门禁告警</h3>
+            <div class="alert-rule">
+                <h4>🚨 代码覆盖率下降</h4>
+                <code>
+ALERT: CodeCoverageDrop<br>
+IF: test_agent_code_coverage_percent{coverage_type="branch"} < 80<br>
+FOR: 1d<br>
+LABELS: {severity="warning", team="quality"}<br>
+ANNOTATIONS:<br>
+  summary: "分支覆盖率低于 80%"<br>
+  description: "当前分支覆盖率为 {{ $value }}%，未达到质量门禁"
+                </code>
+            </div>
+        </section>
+
+        <!-- 6. Grafana 仪表盘 -->
+        <section id="dashboards" class="section">
+            <h2>6. Grafana 仪表盘设计</h2>
+            
+            <h3>6.1 研发流程全景仪表盘</h3>
+            <div class="highlight-box">
+                <h3>📊 Dashboard: R&D Pipeline Overview</h3>
+                <p><strong>用途:</strong> 管理层视角，展示端到端研发流程的整体健康度和效率</p>
+                <ul>
+                    <li><strong>Panel 1:</strong> 各阶段任务漏斗图（需求→PRD→设计→编码→测试→部署）</li>
+                    <li><strong>Panel 2:</strong> 平均阶段耗时趋势图（按周聚合）</li>
+                    <li><strong>Panel 3:</strong> 自动化成功率 vs 人工介入率</li>
+                    <li><strong>Panel 4:</strong> 本周交付特性数量 & 部署频率</li>
+                    <li><strong>Panel 5:</strong> 缺陷发现/修复率趋势</li>
+                    <li><strong>Panel 6:</strong> 团队产能热力图（按 Agent 角色）</li>
+                </ul>
+            </div>
+
+            <h3>6.2 AI Agent 性能仪表盘</h3>
+            <div class="highlight-box">
+                <h3>🤖 Dashboard: AI Agent Performance</h3>
+                <p><strong>用途:</strong> AI 工程师视角，监控各 Agent 的运行状态和 LLM 使用情况</p>
+                <ul>
+                    <li><strong>Panel 1:</strong> 各 Agent 任务执行成功率（实时）</li>
+                    <li><strong>Panel 2:</strong> LLM Token 消耗 Top10（按 Agent/项目）</li>
+                    <li><strong>Panel 3:</strong> 推理延迟 P50/P90/P99 对比</li>
+                    <li><strong>Panel 4:</strong> 上下文窗口利用率分布</li>
+                    <li><strong>Panel 5:</strong> 代码生成质量指标（一次通过率/审查迭代次数）</li>
+                    <li><strong>Panel 6:</strong> 人机协同介入事件时间线</li>
+                </ul>
+            </div>
+
+            <h3>6.3 CI/CD 流水线仪表盘</h3>
+            <div class="highlight-box">
+                <h3>🔄 Dashboard: CI/CD Pipeline Health</h3>
+                <p><strong>用途:</strong> DevOps 团队视角，监控构建/测试/部署流水线</p>
+                <ul>
+                    <li><strong>Panel 1:</strong> 构建成功率趋势（按项目/分支）</li>
+                    <li><strong>Panel 2:</strong> 流水线各阶段耗时分解（瀑布图）</li>
+                    <li><strong>Panel 3:</strong> 构建队列长度 & Executor 利用率</li>
+                    <li><strong>Panel 4:</strong> 部署频率 & 前置时间（DORA 指标）</li>
+                    <li><strong>Panel 5:</strong> K8s Pod 健康状态矩阵</li>
+                    <li><strong>Panel 6:</strong> 回滚事件时间线 & 原因分析</li>
+                </ul>
+            </div>
+
+            <h3>6.4 资源成本仪表盘</h3>
+            <div class="highlight-box">
+                <h3>💰 Dashboard: Resource & Cost Optimization</h3>
+                <p><strong>用途:</strong> 财务/运营视角，监控资源使用和成本优化</p>
+                <ul>
+                    <li><strong>Panel 1:</strong> LLM API 成本趋势（按模型/Agent）</li>
+                    <li><strong>Panel 2:</strong> K8s 集群资源利用率（CPU/内存/存储）</li>
+                    <li><strong>Panel 3:</strong> 容器实例数量 & 自动扩缩容事件</li>
+                    <li><strong>Panel 4:</strong> 单位特性开发成本（元/特性点）</li>
+                    <li><strong>Panel 5:</strong> 资源闲置检测（低利用率实例）</li>
+                    <li><strong>Panel 6:</strong> 成本预测（基于当前消耗速率）</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 7. 埋点实现方案 -->
+        <section id="implementation" class="section">
+            <h2>7. 埋点实现方案</h2>
+            
+            <h3>7.1 Python Agent 埋点示例</h3>
+            <div class="highlight-box">
+                <h3>🐍 Prometheus Python Client 集成</h3>
+                <p><strong>依赖安装:</strong> <code>pip install prometheus-client</code></p>
+                <p><strong>核心代码结构:</strong></p>
+                <ul>
+                    <li>使用 <code>Counter</code> 记录任务执行次数</li>
+                    <li>使用 <code>Histogram</code> 记录耗时分布</li>
+                    <li>使用 <code>Gauge</code> 记录实时状态</li>
+                    <li>使用 <code>Summary</code> 记录分位数统计</li>
+                    <li>通过 <code>@monitor_task</code> 装饰器统一埋点</li>
+                    <li>暴露 <code>/metrics</code> HTTP 端点供 Prometheus 抓取</li>
+                </ul>
+            </div>
+
+            <h3>7.2 NodeJS Agent 埋点示例</h3>
+            <div class="highlight-box">
+                <h3>🟨 Prometheus NodeJS Client 集成</h3>
+                <p><strong>依赖安装:</strong> <code>npm install prom-client</code></p>
+                <p><strong>核心代码结构:</strong></p>
+                <ul>
+                    <li>使用 <code>prom-client</code> 库定义指标</li>
+                    <li>通过 Express middleware 暴露 <code>/metrics</code> 端点</li>
+                    <li>使用 <code>async_hooks</code> 追踪异步任务上下文</li>
+                    <li>集成 <code>opentelemetry</code> 实现分布式追踪</li>
+                </ul>
+            </div>
+
+            <h3>7.3 Jenkins Pipeline 埋点</h3>
+            <div class="highlight-box">
+                <h3>🏗️ Jenkins Prometheus Plugin</h3>
+                <p><strong>插件安装:</strong> Prometheus Metrics Plugin</p>
+                <p><strong>配置要点:</strong></p>
+                <ul>
+                    <li>启用 <code>Default Job Collector</code> 自动采集构建指标</li>
+                    <li>配置 <code>Custom Metrics</code> 采集业务特定指标</li>
+                    <li>在 Pipeline script 中使用 <code>prometheus.gauge()</code> 自定义指标</li>
+                    <li>暴露 <code>/prometheus</code> 端点（默认端口 8080）</li>
+                </ul>
+            </div>
+
+            <h3>7.4 Kubernetes 监控集成</h3>
+            <div class="highlight-box">
+                <h3>☸️ K8s Native Monitoring</h3>
+                <p><strong>核心组件:</strong></p>
+                <ul>
+                    <li><strong>kube-state-metrics:</strong> 采集 K8s 对象状态指标</li>
+                    <li><strong>node-exporter:</strong> 采集节点硬件/OS 指标</li>
+                    <li><strong>cAdvisor:</strong> 采集容器资源使用指标</li>
+                    <li><strong>Prometheus Operator:</strong> 自动化部署和管理 Prometheus 实例</li>
+                    <li><strong>ServiceMonitor CRD:</strong> 声明式配置服务发现</li>
+                </ul>
+            </div>
+
+            <h3>7.5 最佳实践建议</h3>
+            <div class="highlight-box">
+                <h3>✅ 监控埋点最佳实践</h3>
+                <ul>
+                    <li><strong>指标命名规范:</strong> 使用 <code>&lt;service&gt;_&lt;feature&gt;_&lt;metric_type&gt;</code> 格式，单位明确（seconds/bytes）</li>
+                    <li><strong>Label 基数控制:</strong> 避免高基数 Label（如 user_id），防止内存爆炸</li>
+                    <li><strong>直方图 Bucket:</strong> 根据实际延迟分布设置合理的 bucket 边界</li>
+                    <li><strong>指标过期策略:</strong> 使用 recording rules 预计算常用查询，降低查询负载</li>
+                    <li><strong>健康检查端点:</strong> 同时暴露 <code>/health</code> 和 <code>/ready</code> 端点</li>
+                    <li><strong>日志关联:</strong> 在指标中加入 trace_id，便于与日志系统联动排查</li>
+                </ul>
+            </div>
+        </section>
+
+        <footer>
+            <p>© 2026 端到端研发自动化系统监控体系设计 | 基于 Prometheus + Grafana + OpenClaw + Claude Code</p>
+            <p style="margin-top: 10px; font-size: 0.9em;">
+                文档版本：v1.0 | 最后更新：2026-03-14 | 适用系统：Ubuntu Linux + K8s (KubeSphere)
+            </p>
+        </footer>
+    </div>
+</body>
+</html>

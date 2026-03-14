@@ -1,0 +1,1798 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基于 OpenClaw + Claude Code 的端到端研发自动化系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --quantum-blue: #00f5ff;
+            --quantum-purple: #bd00ff;
+            --quantum-pink: #ff00e6;
+            --quantum-green: #00ff9d;
+            --dark-bg: #0a0a1a;
+            --panel-bg: rgba(15, 15, 35, 0.9);
+            --border-glow: 0 0 20px rgba(0, 245, 255, 0.3);
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a0a2e 50%, #0a1a2a 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(189, 0, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(0, 245, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(255, 0, 230, 0.05) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header {
+            text-align: center;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, rgba(189, 0, 255, 0.2), rgba(0, 245, 255, 0.2));
+            border-radius: 20px;
+            margin-bottom: 30px;
+            border: 2px solid rgba(0, 245, 255, 0.3);
+            box-shadow: var(--border-glow);
+            backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            background: linear-gradient(90deg, var(--quantum-blue), var(--quantum-purple), var(--quantum-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 15px;
+            animation: glow 3s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.3); }
+        }
+
+        .header p {
+            font-size: 1.2em;
+            color: var(--quantum-green);
+            opacity: 0.9;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .nav-tab {
+            padding: 15px 30px;
+            background: var(--panel-bg);
+            border: 2px solid var(--quantum-blue);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            color: var(--quantum-blue);
+        }
+
+        .nav-tab:hover, .nav-tab.active {
+            background: linear-gradient(135deg, var(--quantum-blue), var(--quantum-purple));
+            color: white;
+            box-shadow: 0 0 30px rgba(0, 245, 255, 0.5);
+            transform: translateY(-3px);
+        }
+
+        .section {
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border: 2px solid rgba(0, 245, 255, 0.3);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: var(--border-glow);
+            backdrop-filter: blur(10px);
+        }
+
+        .panel h2 {
+            color: var(--quantum-blue);
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            border-bottom: 2px solid var(--quantum-purple);
+            padding-bottom: 10px;
+        }
+
+        .panel h3 {
+            color: var(--quantum-green);
+            margin: 20px 0 15px 0;
+            font-size: 1.4em;
+        }
+
+        .diagram-container {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            padding: 20px;
+            overflow-x: auto;
+            margin: 20px 0;
+            border: 1px solid var(--quantum-purple);
+        }
+
+        .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+
+        .agent-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .agent-card {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(189, 0, 255, 0.1));
+            border: 2px solid var(--quantum-blue);
+            border-radius: 15px;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .agent-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(0, 245, 255, 0.4);
+        }
+
+        .agent-card h4 {
+            color: var(--quantum-blue);
+            font-size: 1.3em;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .agent-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--quantum-blue), var(--quantum-purple));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+        }
+
+        .agent-card ul {
+            list-style: none;
+            margin-top: 10px;
+        }
+
+        .agent-card li {
+            padding: 5px 0;
+            color: rgba(255, 255, 255, 0.9);
+            position: relative;
+            padding-left: 20px;
+        }
+
+        .agent-card li::before {
+            content: '▸';
+            position: absolute;
+            left: 0;
+            color: var(--quantum-green);
+        }
+
+        .workflow-step {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            background: rgba(0, 245, 255, 0.05);
+            border-left: 4px solid var(--quantum-blue);
+            margin: 10px 0;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .step-number {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--quantum-blue), var(--quantum-purple));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.3em;
+            flex-shrink: 0;
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        .step-content h4 {
+            color: var(--quantum-green);
+            margin-bottom: 5px;
+        }
+
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .tech-badge {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.2), rgba(189, 0, 255, 0.2));
+            border: 1px solid var(--quantum-blue);
+            border-radius: 20px;
+            font-size: 0.9em;
+            color: var(--quantum-blue);
+        }
+
+        .feature-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .feature-item {
+            padding: 15px;
+            background: rgba(189, 0, 255, 0.1);
+            border-radius: 10px;
+            border: 1px solid var(--quantum-purple);
+        }
+
+        .feature-item h4 {
+            color: var(--quantum-pink);
+            margin-bottom: 8px;
+        }
+
+        .control-panel {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .control-btn {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, var(--quantum-blue), var(--quantum-purple));
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .control-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(0, 245, 255, 0.5);
+        }
+
+        .info-box {
+            background: rgba(0, 245, 255, 0.1);
+            border-left: 4px solid var(--quantum-blue);
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(0, 245, 255, 0.2);
+        }
+
+        th {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.2), rgba(189, 0, 255, 0.2));
+            color: var(--quantum-blue);
+            font-weight: bold;
+        }
+
+        tr:hover {
+            background: rgba(0, 245, 255, 0.05);
+        }
+
+        .phase-indicator {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .phase-design { background: rgba(0, 245, 255, 0.2); color: var(--quantum-blue); }
+        .phase-dev { background: rgba(0, 255, 157, 0.2); color: var(--quantum-green); }
+        .phase-test { background: rgba(255, 0, 230, 0.2); color: var(--quantum-pink); }
+        .phase-deploy { background: rgba(189, 0, 255, 0.2); color: var(--quantum-purple); }
+
+        .footer {
+            text-align: center;
+            padding: 30px;
+            margin-top: 40px;
+            border-top: 2px solid var(--quantum-blue);
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .quantum-particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: var(--quantum-blue);
+            border-radius: 50%;
+            animation: float 15s infinite;
+            opacity: 0.5;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+            10% { opacity: 0.5; }
+            90% { opacity: 0.5; }
+            100% { transform: translateY(-100vh) rotate(720deg); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="quantum-particles" id="particles"></div>
+    
+    <div class="container">
+        <header class="header">
+            <h1>🚀 基于 OpenClaw + Claude Code 的端到端研发自动化系统</h1>
+            <p>System Architecture & Database ER Diagram Auto-Generation Module</p>
+            <p style="margin-top: 10px; font-size: 1em; opacity: 0.8;">从需求 → PRD 设计 → 技术方案 → API 开发 → AI Coding → 测试 → 部署全流程自动化</p>
+        </header>
+
+        <nav class="nav-tabs">
+            <div class="nav-tab active" onclick="showSection('overview')">📊 系统概览</div>
+            <div class="nav-tab" onclick="showSection('architecture')">🏗️ 系统架构</div>
+            <div class="nav-tab" onclick="showSection('erd')">🗄️ 数据库 ERD</div>
+            <div class="nav-tab" onclick="showSection('agents')">🤖 Agent 角色</div>
+            <div class="nav-tab" onclick="showSection('workflow')">⚙️ 工作流程</div>
+            <div class="nav-tab" onclick="showSection('deployment')">☁️ 部署架构</div>
+        </nav>
+
+        <!-- 系统概览 -->
+        <section id="overview" class="section active">
+            <div class="panel">
+                <h2>🎯 系统核心能力</h2>
+                <div class="feature-list">
+                    <div class="feature-item">
+                        <h4>📝 需求智能分析</h4>
+                        <p>基于 NLP 技术自动解析用户需求，生成结构化 PRD 文档</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>🏛️ 架构自动设计</h4>
+                        <p>AI 驱动的系统架构设计，自动生成架构图和技术方案</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>💻 智能代码生成</h4>
+                        <p>Claude Code 驱动的前后端代码自动生成</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>🧪 全链路测试</h4>
+                        <p>单元测试、集成测试、UI 自动化测试全覆盖</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>🚀 一键部署</h4>
+                        <p>CI/Jenkins + Docker + K8S 自动化部署流水线</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>👁️ 人机协同</h4>
+                        <p>关键节点支持人工审核与干预</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>🔄 端到端研发流程总览</h2>
+                <div class="diagram-container">
+                    <div class="mermaid">
+flowchart TD
+    A[📋 需求收集] --> B[📄 PRD 设计]
+    B --> C[🏗️ 后端技术方案]
+    B --> D[🎨 前端技术方案]
+    C --> E[🔌 API 接口协议设计]
+    D --> E
+    E --> F[🤖 AI Coding]
+    F --> G[✅ Unit Test]
+    G --> H[🔗 集成测试]
+    H --> I[🚀 CI/CD 部署]
+    I --> J[🖼️ UI 自动化测试]
+    J --> K{验收通过？}
+    K -->|是 | L[📦 生产发布]
+    K -->|否 | F
+    style A fill:#00f5ff33,stroke:#00f5ff
+    style B fill:#bd00ff33,stroke:#bd00ff
+    style C fill:#00ff9d33,stroke:#00ff9d
+    style D fill:#00ff9d33,stroke:#00ff9d
+    style E fill:#ff00e633,stroke:#ff00e6
+    style F fill:#00f5ff33,stroke:#00f5ff
+    style G fill:#00ff9d33,stroke:#00ff9d
+    style H fill:#ff00e633,stroke:#ff00e6
+    style I fill:#bd00ff33,stroke:#bd00ff
+    style J fill:#00f5ff33,stroke:#00f5ff
+    style K fill:#ff00e633,stroke:#ff00e6
+    style L fill:#00ff9d33,stroke:#00ff9d
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>🛠️ 技术栈</h2>
+                <div class="tech-stack">
+                    <span class="tech-badge">OpenClaw</span>
+                    <span class="tech-badge">Claude Code</span>
+                    <span class="tech-badge">Mermaid.js</span>
+                    <span class="tech-badge">PlantUML</span>
+                    <span class="tech-badge">Jenkins</span>
+                    <span class="tech-badge">Docker</span>
+                    <span class="tech-badge">Kubernetes</span>
+                    <span class="tech-badge">KubeSphere</span>
+                    <span class="tech-badge">Selenium</span>
+                    <span class="tech-badge">Playwright</span>
+                    <span class="tech-badge">GitLab CI</span>
+                    <span class="tech-badge">GitHub Actions</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 系统架构 -->
+        <section id="architecture" class="section">
+            <div class="panel">
+                <h2>🏗️ 系统整体架构图</h2>
+                <div class="control-panel">
+                    <button class="control-btn" onclick="renderDiagram('c4-context')">C4 Context 视图</button>
+                    <button class="control-btn" onclick="renderDiagram('c4-container')">C4 Container 视图</button>
+                    <button class="control-btn" onclick="renderDiagram('component')">组件交互视图</button>
+                    <button class="control-btn" onclick="renderDiagram('dataflow')">数据流视图</button>
+                </div>
+                <div class="diagram-container">
+                    <div class="mermaid" id="architecture-diagram">
+<!-- Dynamic diagram will be rendered here -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>📐 C4 架构模型详解</h2>
+                
+                <h3>Level 1: System Context (系统上下文)</h3>
+                <div class="info-box">
+                    <strong>描述：</strong>展示系统与外部用户、系统的交互关系，定义系统边界
+                </div>
+                <div class="diagram-container">
+                    <div class="mermaid">
+C4Context
+    title 端到端研发自动化系统 - 系统上下文图
+    
+    Person_(developer, "开发工程师", "使用系统进行项目开发")
+    Person_(tester, "测试工程师", "执行测试验证工作")
+    Person_(pm, "产品经理", "输入需求并验收成果")
+    Person_(devops, "运维工程师", "管理部署与监控")
+    
+    System_Boundary(system, "研发自动化系统") {
+        System(app, "自动化平台", "统一管理研发全流程")
+        SystemDb(db, "中央数据库", "存储项目数据与配置")
+    }
+    
+    Person_(claude, "Claude Code AI", "代码生成与分析")
+    Person_(openclaw, "OpenClaw", "技能编排与执行")
+    SystemExt(git, "Git 仓库", "代码版本管理")
+    SystemExt(jenkins, "Jenkins", "CI/CD 流水线")
+    SystemExt(k8s, "K8S 集群", "容器化部署环境")
+    
+    Rel(developer, app, "使用")
+    Rel(tester, app, "执行测试")
+    Rel(pm, app, "输入需求/验收")
+    Rel(devops, app, "配置部署")
+    
+    Rel(app, claude, "调用")
+    Rel(app, openclaw, "编排")
+    Rel(app, git, "代码提交")
+    Rel(app, jenkins, "触发构建")
+    Rel(jenkins, k8s, "部署到")
+                    </div>
+                </div>
+
+                <h3>Level 2: Container (容器架构)</h3>
+                <div class="info-box">
+                    <strong>描述：</strong>展示系统内部的主要技术组件及其交互
+                </div>
+                <div class="diagram-container">
+                    <div class="mermaid">
+C4Container
+    title 研发自动化系统 - 容器架构图
+    
+    Container_Boundary(b1, "前端层") {
+        Container(web, "Web 控制台", "React + TypeScript", "用户交互界面")
+        Container(api_gateway, "API Gateway", "Nginx", "请求路由与认证")
+    }
+    
+    Container_Boundary(b2, "应用服务层") {
+        Container(requirement_svc, "需求分析服务", "Python + FastAPI", "NLP 需求解析")
+        Container(prd_svc, "PRD 生成服务", "Python + LangChain", "PRD 文档生成")
+        Container(architect_svc, "架构设计服务", "Python + AI", "技术方案设计")
+        Container(api_design_svc, "API 设计服务", "Node.js", "接口协议生成")
+        Container(coding_svc, "AI Coding 服务", "Claude Code SDK", "代码自动生成")
+        Container(test_svc, "测试服务", "Python + pytest", "自动化测试执行")
+        Container(deploy_svc, "部署服务", "Go + K8s Client", "容器化部署")
+    }
+    
+    Container_Boundary(b3, "数据层") {
+        ContainerDb(postgres, "PostgreSQL", "关系型数据库", "业务数据存储")
+        ContainerDb(mongo, "MongoDB", "文档数据库", "非结构化数据存储")
+        ContainerDb(redis, "Redis", "缓存数据库", "会话与任务缓存")
+    }
+    
+    Container_Boundary(b4, "基础设施") {
+        Container(message_queue, "RabbitMQ", "消息队列", "异步任务处理")
+        Container(file_storage, "MinIO", "对象存储", "文件与产物存储")
+    }
+    
+    Rel(web, api_gateway, "HTTPS")
+    Rel(api_gateway, requirement_svc, "REST")
+    Rel(api_gateway, prd_svc, "REST")
+    Rel(api_gateway, architect_svc, "REST")
+    Rel(api_gateway, api_design_svc, "REST")
+    Rel(api_gateway, coding_svc, "REST")
+    Rel(api_gateway, test_svc, "REST")
+    Rel(api_gateway, deploy_svc, "REST")
+    
+    Rel(requirement_svc, postgres, "读写")
+    Rel(prd_svc, mongo, "读写")
+    Rel(architect_svc, mongo, "读写")
+    Rel(coding_svc, redis, "缓存")
+    Rel(test_svc, file_storage, "存储报告")
+    Rel(deploy_svc, message_queue, "异步任务")
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 数据库 ERD -->
+        <section id="erd" class="section">
+            <div class="panel">
+                <h2>🗄️ 数据库实体关系图 (ERD)</h2>
+                <div class="control-panel">
+                    <button class="control-btn" onclick="renderERD('core')">核心实体</button>
+                    <button class="control-btn" onclick="renderERD('project')">项目管理</button>
+                    <button class="control-btn" onclick="renderERD('pipeline')">流水线</button>
+                    <button class="control-btn" onclick="renderERD('full')">完整 ERD</button>
+                </div>
+                <div class="diagram-container">
+                    <div class="mermaid" id="erd-diagram">
+<!-- Dynamic ERD will be rendered here -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>📋 核心数据表结构</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>表名</th>
+                                <th>描述</th>
+                                <th>主要字段</th>
+                                <th>关系</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>projects</code></td>
+                                <td>项目基本信息</td>
+                                <td>id, name, description, status, created_at</td>
+                                <td>1:N requirements</td>
+                            </tr>
+                            <tr>
+                                <td><code>requirements</code></td>
+                                <td>需求条目</td>
+                                <td>id, project_id, title, content, priority, status</td>
+                                <td>N:M features</td>
+                            </tr>
+                            <tr>
+                                <td><code>prd_documents</code></td>
+                                <td>PRD 文档</td>
+                                <td>id, project_id, version, content, approval_status</td>
+                                <td>1:1 project</td>
+                            </tr>
+                            <tr>
+                                <td><code>architecture_designs</code></td>
+                                <td>架构设计方案</td>
+                                <td>id, project_id, tech_stack, components, diagrams</td>
+                                <td>1:1 project</td>
+                            </tr>
+                            <tr>
+                                <td><code>api_specifications</code></td>
+                                <td>API 接口规范</td>
+                                <td>id, project_id, endpoint, method, request_schema, response_schema</td>
+                                <td>N:1 project</td>
+                            </tr>
+                            <tr>
+                                <td><code>code_generations</code></td>
+                                <td>代码生成记录</td>
+                                <td>id, api_id, generated_code, language, status, review_comments</td>
+                                <td>1:1 api_specifications</td>
+                            </tr>
+                            <tr>
+                                <td><code>test_cases</code></td>
+                                <td>测试用例</td>
+                                <td>id, project_id, type, steps, expected_result, actual_result</td>
+                                <td>N:1 project</td>
+                            </tr>
+                            <tr>
+                                <td><code>deployment_configs</code></td>
+                                <td>部署配置</td>
+                                <td>id, project_id, environment, docker_image, k8s_manifest</td>
+                                <td>N:1 project</td>
+                            </tr>
+                            <tr>
+                                <td><code>pipeline_runs</code></td>
+                                <td>流水线执行记录</td>
+                                <td>id, project_id, stage, status, logs, duration</td>
+                                <td>N:1 project</td>
+                            </tr>
+                            <tr>
+                                <td><code>agents</code></td>
+                                <td>Agent 角色配置</td>
+                                <td>id, name, role, capabilities, prompt_template</td>
+                                <td>1:N tasks</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>🔗 完整 ER 关系图</h2>
+                <div class="diagram-container">
+                    <div class="mermaid">
+erDiagram
+    PROJECT ||--o{ REQUIREMENT : contains
+    PROJECT ||--|| PRD_DOCUMENT : has
+    PROJECT ||--|| ARCHITECTURE_DESIGN : has
+    PROJECT ||--o{ API_SPECIFICATION : defines
+    PROJECT ||--o{ TEST_CASE : includes
+    PROJECT ||--o{ DEPLOYMENT_CONFIG : deploys
+    PROJECT ||--o{ PIPELINE_RUN : executes
+    
+    REQUIREMENT ||--o{ FEATURE : implements
+    REQUIREMENT }|--|| PRIORITY : has
+    
+    PRD_DOCUMENT ||--o{ USER_STORY : contains
+    PRD_DOCUMENT ||--o{ ACCEPTANCE_CRITERIA : defines
+    
+    ARCHITECTURE_DESIGN ||--o{ COMPONENT : consists_of
+    ARCHITECTURE_DESIGN ||--o{ TECH_STACK : uses
+    
+    API_SPECIFICATION ||--|| CODE_GENERATION : generates
+    API_SPECIFICATION ||--o{ API_PARAMETER : has
+    API_SPECIFICATION ||--o{ API_RESPONSE : returns
+    
+    CODE_GENERATION ||--o{ CODE_REVIEW : reviewed_by
+    CODE_GENERATION ||--|| UNIT_TEST : tested_by
+    
+    TEST_CASE ||--|| TEST_RESULT : produces
+    TEST_CASE }|--|| TEST_TYPE : categorized_as
+    
+    DEPLOYMENT_CONFIG ||--|| DOCKER_IMAGE : builds
+    DEPLOYMENT_CONFIG ||--|| K8S_MANIFEST : deploys
+    
+    PIPELINE_RUN ||--o{ PIPELINE_STAGE : contains
+    PIPELINE_RUN ||--|| BUILD_ARTIFACT : produces
+    
+    AGENT ||--o{ TASK : executes
+    AGENT ||--o{ SKILL : possesses
+    
+    USER ||--o{ PROJECT : owns
+    USER ||--o{ TASK : assigned_to
+    
+    PROJECT {
+        int id PK
+        string name
+        text description
+        string status
+        timestamp created_at
+        int owner_id FK
+    }
+    
+    REQUIREMENT {
+        int id PK
+        int project_id FK
+        string title
+        text content
+        string priority
+        string status
+    }
+    
+    PRD_DOCUMENT {
+        int id PK
+        int project_id FK
+        string version
+        json content
+        string approval_status
+    }
+    
+    API_SPECIFICATION {
+        int id PK
+        int project_id FK
+        string endpoint
+        string method
+        json request_schema
+        json response_schema
+    }
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Agent 角色 -->
+        <section id="agents" class="section">
+            <div class="panel">
+                <h2>🤖 研发 Agent 角色体系</h2>
+                <p style="margin-bottom: 20px; opacity: 0.8;">基于 OpenClaw + Claude Code 的多智能体协作系统</p>
+                
+                <div class="agent-grid">
+                    <div class="agent-card">
+                        <h4><span class="agent-icon">📋</span> Planner Agent</h4>
+                        <p>需求规划师</p>
+                        <ul>
+                            <li>需求拆解与任务分解</li>
+                            <li>制定项目里程碑</li>
+                            <li>资源分配与排期</li>
+                            <li>风险评估与预案</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="agent-card">
+                        <h4><span class="agent-icon">🏛️</span> Architect Agent</h4>
+                        <p>系统架构师</p>
+                        <ul>
+                            <li>系统架构设计</li>
+                            <li>技术选型建议</li>
+                            <li>架构图自动生成</li>
+                            <li>性能与安全评估</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="agent-card">
+                        <h4><span class="agent-icon">📝</span> PRD Designer Agent</h4>
+                        <p>产品设计师</p>
+                        <ul>
+                            <li>PRD 文档自动生成</li>
+                            <li>用户故事编写</li>
+                            <li>验收标准定义</li>
+                            <li>原型图生成</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="agent-card">
+                        <h4><span class="agent-icon">🔌</span> API Designer Agent</h4>
+                        <p>接口设计师</p>
+                        <ul>
+                            <li>RESTful API 设计</li>
+                            <li>GraphQL Schema 定义</li>
+                            <li>接口文档生成</li>
+                            <li>Mock 数据生成</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="agent-card">
+                        <h4><span class="agent-icon">💻</span> Backend Developer Agent</h4>
+                        <p>后端开发工程师</p>
+                        <ul>
+                            <li>后端代码生成</li>
+                            <li>数据库设计与优化</li>
+                            <li>API 实现</li>
+                            <li>微服务开发</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="agent-card">
+                        <h4><span class="agent-icon">🎨</span> Frontend Developer Agent</h4>
+                        <p>前端开发工程师</p>
+                        <ul>
+                            <li>前端页面生成</li>
+                            <li>组件库开发</li>
+                            <li>状态管理实现</li>
+                            <li>响应式适配</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="agent-card">
+                        <h4><span class="agent-icon">🧪</span> QA Engineer Agent</h4>
+                        <p>测试工程师</p>
+                        <ul>
+                            <li>测试用例生成</li>
+                            <li>单元测试编写</li>
+                            <li>集成测试执行</li>
+                            <li>测试报告生成</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="agent-card">
+                        <h4><span class="agent-icon">🔒</span> Security Reviewer Agent</h4>
+                        <p>安全审计师</p>
+                        <ul>
+                            <li>代码安全扫描</li>
+                            <li>漏洞检测</li>
+                            <li>合规性检查</li>
+                            <li>安全加固建议</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="agent-card">
+                        <h4><span class="agent-icon">👀</span> Code Reviewer Agent</h4>
+                        <p>代码审查师</p>
+                        <ul>
+                            <li>代码质量检查</li>
+                            <li>最佳实践遵循</li>
+                            <li>性能优化建议</li>
+                            <li>代码风格统一</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="agent-card">
+                        <h4><span class="agent-icon">🚀</span> DevOps Engineer Agent</h4>
+                        <p>运维工程师</p>
+                        <ul>
+                            <li>CI/CD 流水线配置</li>
+                            <li>Docker 镜像构建</li>
+                            <li>K8S 部署编排</li>
+                            <li>监控告警设置</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="agent-card">
+                        <h4><span class="agent-icon">🖼️</span> UI Test Agent</h4>
+                        <p>UI 自动化测试师</p>
+                        <ul>
+                            <li>Selenium 脚本生成</li>
+                            <li>Playwright 测试编写</li>
+                            <li>视觉回归测试</li>
+                            <li>跨浏览器测试</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="agent-card">
+                        <h4><span class="agent-icon">🔧</span> Build Resolver Agent</h4>
+                        <p>编译救火队员</p>
+                        <ul>
+                            <li>构建错误诊断</li>
+                            <li>依赖冲突解决</li>
+                            <li>编译优化</li>
+                            <li>环境配置修复</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>🔗 Agent 协作流程图</h2>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    participant PM as 产品经理
+    participant Planner as Planner Agent
+    participant PRD as PRD Designer
+    participant Arch as Architect
+    participant API as API Designer
+    participant Dev as Developer Agents
+    participant QA as QA Engineer
+    participant DevOps as DevOps Engineer
+    participant UITest as UI Test Agent
+    
+    PM->>Planner: 输入原始需求
+    Planner->>Planner: 需求拆解分析
+    Planner->>PRD: 传递拆解后的需求
+    PRD->>PRD: 生成 PRD 文档
+    PRD->>Arch: 传递 PRD
+    Arch->>Arch: 设计系统架构
+    Arch->>API: 传递架构方案
+    API->>API: 设计 API 接口
+    API->>Dev: 传递 API 规范
+    Dev->>Dev: AI Coding 生成代码
+    Dev->>QA: 提交代码
+    QA->>QA: 执行单元/集成测试
+    QA->>DevOps: 测试通过
+    DevOps->>DevOps: CI/CD 部署
+    DevOps->>UITest: 部署完成
+    UITest->>UITest: UI 自动化测试
+    UITest->>PM: 验收报告
+    Note over PM,UITest: 人机协同节点支持人工审核
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 工作流程 -->
+        <section id="workflow" class="section">
+            <div class="panel">
+                <h2>⚙️ 端到端研发工作流程</h2>
+                
+                <div class="workflow-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>📋 需求收集与分析</h4>
+                        <p><strong>输入：</strong>原始需求描述、业务目标、用户故事</p>
+                        <p><strong>处理 Agent：</strong>Planner Agent</p>
+                        <p><strong>输出：</strong>结构化需求列表、任务分解、优先级排序</p>
+                        <p><strong>人机协同点：</strong>需求确认与调整</p>
+                    </div>
+                </div>
+                
+                <div class="workflow-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>📄 PRD 文档设计</h4>
+                        <p><strong>输入：</strong>结构化需求</p>
+                        <p><strong>处理 Agent：</strong>PRD Designer Agent</p>
+                        <p><strong>输出：</strong>完整 PRD 文档、用户故事、验收标准</p>
+                        <p><strong>人机协同点：</strong>PRD 评审与批准</p>
+                    </div>
+                </div>
+                
+                <div class="workflow-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h4>🏗️ 技术方案设计</h4>
+                        <p><strong>输入：</strong>批准的 PRD</p>
+                        <p><strong>处理 Agent：</strong>Architect Agent</p>
+                        <p><strong>输出：</strong>系统架构图、技术选型、组件设计、数据库设计</p>
+                        <p><strong>人机协同点：</strong>架构评审与技术决策</p>
+                    </div>
+                </div>
+                
+                <div class="workflow-step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h4>🔌 API 接口协议设计</h4>
+                        <p><strong>输入：</strong>技术方案</p>
+                        <p><strong>处理 Agent：</strong>API Designer Agent</p>
+                        <p><strong>输出：</strong>OpenAPI/Swagger 规范、Mock 服务</p>
+                        <p><strong>人机协同点：</strong>接口评审</p>
+                    </div>
+                </div>
+                
+                <div class="workflow-step">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <h4>💻 AI Coding 代码生成</h4>
+                        <p><strong>输入：</strong>API 规范、架构设计</p>
+                        <p><strong>处理 Agent：</strong>Backend/Frontend Developer Agents + Claude Code</p>
+                        <p><strong>输出：</strong>前后端源代码、配置文件</p>
+                        <p><strong>人机协同点：</strong>代码审查与优化建议</p>
+                    </div>
+                </div>
+                
+                <div class="workflow-step">
+                    <div class="step-number">6</div>
+                    <div class="step-content">
+                        <h4>✅ 单元测试</h4>
+                        <p><strong>输入：</strong>生成的代码</p>
+                        <p><strong>处理 Agent：</strong>QA Engineer Agent</p>
+                        <p><strong>输出：</strong>测试用例、测试报告、覆盖率报告</p>
+                        <p><strong>人机协同点：</strong>测试用例评审</p>
+                    </div>
+                </div>
+                
+                <div class="workflow-step">
+                    <div class="step-number">7</div>
+                    <div class="step-content">
+                        <h4>🔗 集成测试</h4>
+                        <p><strong>输入：</strong>通过单元测试的代码</p>
+                        <p><strong>处理 Agent：</strong>QA Engineer Agent</p>
+                        <p><strong>输出：</strong>集成测试报告、性能测试结果</p>
+                        <p><strong>人机协同点：</strong>缺陷修复确认</p>
+                    </div>
+                </div>
+                
+                <div class="workflow-step">
+                    <div class="step-number">8</div>
+                    <div class="step-content">
+                        <h4>🚀 CI/CD 自动部署</h4>
+                        <p><strong>输入：</strong>测试通过的代码</p>
+                        <p><strong>处理 Agent：</strong>DevOps Engineer Agent</p>
+                        <p><strong>输出：</strong>Docker 镜像、K8S 部署、运行环境</p>
+                        <p><strong>人机协同点：</strong>部署审批（生产环境）</p>
+                    </div>
+                </div>
+                
+                <div class="workflow-step">
+                    <div class="step-number">9</div>
+                    <div class="step-content">
+                        <h4>🖼️ UI 自动化测试验收</h4>
+                        <p><strong>输入：</strong>部署完成的应用</p>
+                        <p><strong>处理 Agent：</strong>UI Test Agent</p>
+                        <p><strong>输出：</strong>UI 测试报告、视觉回归报告</p>
+                        <p><strong>人机协同点：</strong>最终验收确认</p>
+                    </div>
+                </div>
+                
+                <div class="workflow-step">
+                    <div class="step-number">10</div>
+                    <div class="step-content">
+                        <h4>📦 生产发布与监控</h4>
+                        <p><strong>输入：</strong>验收通过的应用</p>
+                        <p><strong>处理 Agent：</strong>DevOps Engineer Agent</p>
+                        <p><strong>输出：</strong>生产环境、监控仪表盘、告警配置</p>
+                        <p><strong>人机协同点：</strong>发布决策</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>📊 完整泳道流程图</h2>
+                <div class="diagram-container">
+                    <div class="mermaid">
+flowchart LR
+    subgraph 需求阶段
+        A1[需求输入] --> A2[Planner 拆解]
+        A2 --> A3{人工确认}
+        A3 -->|修改 | A2
+        A3 -->|通过 | A4[PRD 生成]
+    end
+    
+    subgraph 设计阶段
+        A4 --> B1[架构设计]
+        B1 --> B2{架构评审}
+        B2 -->|修改 | B1
+        B2 -->|通过 | B3[API 设计]
+        B3 --> B4{接口评审}
+        B4 -->|修改 | B3
+    end
+    
+    subgraph 开发阶段
+        B4 -->|通过 | C1[Claude Code 编码]
+        C1 --> C2[代码审查]
+        C2 -->|不通过 | C1
+        C2 -->|通过 | C3[单元测试]
+        C3 --> C4{测试通过？}
+        C4 -->|失败 | C1
+    end
+    
+    subgraph 测试阶段
+        C4 -->|通过 | D1[集成测试]
+        D1 --> D2{测试通过？}
+        D2 -->|失败 | C1
+        D2 -->|通过 | D3[UI 自动化测试]
+        D3 --> D4{验收通过？}
+    end
+    
+    subgraph 部署阶段
+        D4 -->|通过 | E1[Docker 构建]
+        E1 --> E2[K8S 部署]
+        E2 --> E3{人工审批}
+        E3 -->|拒绝 | E1
+        E3 -->|批准 | E4[生产发布]
+        E4 --> E5[监控告警]
+    end
+    
+    需求阶段 --> 设计阶段
+    设计阶段 --> 开发阶段
+    开发阶段 --> 测试阶段
+    测试阶段 --> 部署阶段
+    
+    style A1 fill:#00f5ff33,stroke:#00f5ff
+    style A4 fill:#bd00ff33,stroke:#bd00ff
+    style B1 fill:#00ff9d33,stroke:#00ff9d
+    style B3 fill:#ff00e633,stroke:#ff00e6
+    style C1 fill:#00f5ff33,stroke:#00f5ff
+    style D1 fill:#00ff9d33,stroke:#00ff9d
+    style D3 fill:#ff00e633,stroke:#ff00e6
+    style E1 fill:#bd00ff33,stroke:#bd00ff
+    style E4 fill:#00ff9d33,stroke:#00ff9d
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 部署架构 -->
+        <section id="deployment" class="section">
+            <div class="panel">
+                <h2>☁️ 部署架构设计</h2>
+                
+                <h3>Kubernetes 集群部署拓扑</h3>
+                <div class="diagram-container">
+                    <div class="mermaid">
+flowchart TB
+    subgraph LB["负载均衡层"]
+        NGINX[Nginx Ingress]
+    end
+    
+    subgraph APP["应用服务层 - K8S Cluster"]
+        subgraph NS1["命名空间：frontend"]
+            WEB[Web Pod x3]
+        end
+        
+        subgraph NS2["命名空间：backend"]
+            REQ[需求分析 Pod x2]
+            PRD[PRD 生成 Pod x2]
+            ARCH[架构设计 Pod x2]
+            API[API 设计 Pod x2]
+            CODE[AI Coding Pod x3]
+            TEST[测试服务 Pod x2]
+            DEPLOY[部署服务 Pod x2]
+        end
+        
+        subgraph NS3["命名空间：middleware"]
+            MQ[RabbitMQ Cluster]
+            REDIS[Redis Cluster]
+        end
+    end
+    
+    subgraph DATA["数据持久层"]
+        PG[(PostgreSQL Primary<br/>+ Replicas)]
+        MG[(MongoDB Replica Set)]
+        MINIO[MinIO Object Storage]
+    end
+    
+    subgraph CI["CI/CD 流水线"]
+        JENKINS[Jenkins Master]
+        AGENT[Jenkins Agents]
+        GIT[GitLab Repository]
+    end
+    
+    subgraph MONITOR["监控告警"]
+        PROM[Prometheus]
+        GRAF[Grafana]
+        ALERT[AlertManager]
+    end
+    
+    NGINX --> WEB
+    WEB --> REQ
+    WEB --> PRD
+    WEB --> ARCH
+    WEB --> API
+    WEB --> CODE
+    WEB --> TEST
+    WEB --> DEPLOY
+    
+    REQ --> PG
+    PRD --> MG
+    ARCH --> MG
+    CODE --> REDIS
+    TEST --> MINIO
+    DEPLOY --> MQ
+    
+    GIT --> JENKINS
+    JENKINS --> AGENT
+    AGENT --> NS1
+    AGENT --> NS2
+    
+    NS1 --> PROM
+    NS2 --> PROM
+    DATA --> PROM
+    PROM --> GRAF
+    PROM --> ALERT
+    
+    style NGINX fill:#00f5ff33,stroke:#00f5ff
+    style WEB fill:#00ff9d33,stroke:#00ff9d
+    style REQ fill:#bd00ff33,stroke:#bd00ff
+    style PRD fill:#bd00ff33,stroke:#bd00ff
+    style ARCH fill:#bd00ff33,stroke:#bd00ff
+    style API fill:#ff00e633,stroke:#ff00e6
+    style CODE fill:#00f5ff33,stroke:#00f5ff
+    style TEST fill:#00ff9d33,stroke:#00ff9d
+    style DEPLOY fill:#bd00ff33,stroke:#bd00ff
+    style PG fill:#00f5ff33,stroke:#00f5ff
+    style MG fill:#00f5ff33,stroke:#00f5ff
+    style MINIO fill:#00f5ff33,stroke:#00f5ff
+    style JENKINS fill:#ff00e633,stroke:#ff00e6
+    style PROM fill:#00ff9d33,stroke:#00ff9d
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>🐳 Docker Compose 开发环境</h2>
+                <div class="info-box">
+                    <strong>说明：</strong>本地开发环境使用 Docker Compose 快速启动所有服务
+                </div>
+                <div class="diagram-container">
+                    <div class="mermaid">
+flowchart LR
+    subgraph Host["开发主机"]
+        DC[Docker Compose]
+    end
+    
+    subgraph Containers["容器组"]
+        WEB_C[Web Console:3000]
+        API_C[API Gateway:8080]
+        REQ_C[Requirement Service:8001]
+        PRD_C[PRD Service:8002]
+        ARCH_C[Architect Service:8003]
+        API_D_C[API Design Service:8004]
+        CODE_C[Coding Service:8005]
+        TEST_C[Test Service:8006]
+        DEPLOY_C[Deploy Service:8007]
+    end
+    
+    subgraph DataStores["数据存储"]
+        PG_C[PostgreSQL:5432]
+        MG_C[MongoDB:27017]
+        REDIS_C[Redis:6379]
+        MQ_C[RabbitMQ:5672]
+        MINIO_C[MinIO:9000]
+    end
+    
+    DC --> WEB_C
+    DC --> API_C
+    DC --> REQ_C
+    DC --> PRD_C
+    DC --> ARCH_C
+    DC --> API_D_C
+    DC --> CODE_C
+    DC --> TEST_C
+    DC --> DEPLOY_C
+    DC --> PG_C
+    DC --> MG_C
+    DC --> REDIS_C
+    DC --> MQ_C
+    DC --> MINIO_C
+    
+    WEB_C --> API_C
+    API_C --> REQ_C
+    API_C --> PRD_C
+    API_C --> ARCH_C
+    API_C --> API_D_C
+    API_C --> CODE_C
+    API_C --> TEST_C
+    API_C --> DEPLOY_C
+    
+    REQ_C --> PG_C
+    PRD_C --> MG_C
+    ARCH_C --> MG_C
+    CODE_C --> REDIS_C
+    TEST_C --> MINIO_C
+    DEPLOY_C --> MQ_C
+    
+    style DC fill:#00f5ff33,stroke:#00f5ff
+    style WEB_C fill:#00ff9d33,stroke:#00ff9d
+    style API_C fill:#00f5ff33,stroke:#00f5ff
+    style PG_C fill:#bd00ff33,stroke:#bd00ff
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>📈 CI/CD Pipeline 流程</h2>
+                <div class="diagram-container">
+                    <div class="mermaid">
+flowchart LR
+    A[代码提交] --> B[Git Webhook]
+    B --> C[Jenkins 触发构建]
+    C --> D[拉取代码]
+    D --> E[安装依赖]
+    E --> F[代码检查 ESLint]
+    F --> G{检查通过？}
+    G -->|失败 | H[发送通知]
+    G -->|通过 | I[运行单元测试]
+    I --> J{测试通过？}
+    J -->|失败 | H
+    J -->|通过 | K[构建 Docker 镜像]
+    K --> L[推送镜像到 Registry]
+    L --> M[更新 K8S Deployment]
+    M --> N[滚动更新 Pod]
+    N --> O[健康检查]
+    O --> P{检查通过？}
+    P -->|失败 | Q[回滚]
+    P -->|通过 | R[运行集成测试]
+    R --> S{测试通过？}
+    S -->|失败 | Q
+    S -->|通过 | T[运行 UI 自动化测试]
+    T --> U{验收通过？}
+    U -->|失败 | Q
+    U -->|通过 | V[部署成功]
+    V --> W[发送通知]
+    
+    style A fill:#00f5ff33,stroke:#00f5ff
+    style C fill:#bd00ff33,stroke:#bd00ff
+    style I fill:#00ff9d33,stroke:#00ff9d
+    style K fill:#ff00e633,stroke:#ff00e6
+    style M fill:#00f5ff33,stroke:#00f5ff
+    style R fill:#00ff9d33,stroke:#00ff9d
+    style T fill:#ff00e633,stroke:#ff00e6
+    style V fill:#00ff9d33,stroke:#00ff9d
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>🔧 KubeSphere 集成配置</h2>
+                <div class="feature-list">
+                    <div class="feature-item">
+                        <h4>多集群管理</h4>
+                        <p>支持开发、测试、生产多环境隔离</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>DevOps 流水线</h4>
+                        <p>可视化 CI/CD 流水线编排</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>应用商店</h4>
+                        <p>一键部署常用中间件</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>监控告警</h4>
+                        <p>内置 Prometheus + Grafana</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>日志收集</h4>
+                        <p>ELK Stack 集成</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4>服务网格</h4>
+                        <p>Istio 流量管理与可观测性</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <p>© 2026 基于 OpenClaw + Claude Code 的端到端研发自动化系统 | 系统架构图与数据库 ERD 自动生成模块</p>
+            <p style="margin-top: 10px;">AI 科幻量子炫彩风格 | Mermaid.js 动态渲染 | 支持人机协同</p>
+        </footer>
+    </div>
+
+    <script>
+        // Initialize Mermaid
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            themeVariables: {
+                primaryColor: '#00f5ff',
+                primaryTextColor: '#ffffff',
+                primaryBorderColor: '#00f5ff',
+                lineColor: '#bd00ff',
+                secondaryColor: '#ff00e6',
+                tertiaryColor: '#00ff9d'
+            },
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+
+        // Tab navigation
+        function showSection(sectionId) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            
+            document.getElementById(sectionId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Render different architecture diagrams
+        function renderDiagram(type) {
+            const container = document.getElementById('architecture-diagram');
+            
+            const diagrams = {
+                'c4-context': `
+C4Context
+    title 端到端研发自动化系统 - C4 Context 视图
+    
+    Person(developer, "开发工程师", "使用系统进行项目开发")
+    Person(tester, "测试工程师", "执行测试验证")
+    Person(pm, "产品经理", "输入需求并验收")
+    Person(devops, "运维工程师", "管理部署")
+    
+    System_Boundary(b1, "研发自动化平台") {
+        System(app, "自动化平台", "统一管理研发全流程")
+        SystemDb(db, "中央数据库", "存储项目数据")
+    }
+    
+    System_Ext(claude, "Claude Code AI", "代码生成")
+    System_Ext(openclaw, "OpenClaw", "技能编排")
+    System_Ext(git, "Git 仓库", "版本管理")
+    System_Ext(jenkins, "Jenkins", "CI/CD")
+    System_Ext(k8s, "K8S 集群", "容器部署")
+    
+    Rel(developer, app, "使用")
+    Rel(tester, app, "执行测试")
+    Rel(pm, app, "输入需求")
+    Rel(devops, app, "配置")
+    Rel(app, claude, "调用")
+    Rel(app, openclaw, "编排")
+    Rel(app, git, "提交代码")
+    Rel(app, jenkins, "触发构建")
+    Rel(jenkins, k8s, "部署")
+`,
+                'c4-container': `
+C4Container
+    title 研发自动化系统 - C4 Container 视图
+    
+    Container_Boundary(frontend, "前端层") {
+        Container(web, "Web 控制台", "React", "用户界面")
+        Container(gateway, "API Gateway", "Nginx", "请求路由")
+    }
+    
+    Container_Boundary(backend, "后端服务层") {
+        Container(req_svc, "需求分析服务", "Python", "NLP 解析")
+        Container(prd_svc, "PRD 生成服务", "Python", "文档生成")
+        Container(arch_svc, "架构设计服务", "Python", "方案设计")
+        Container(api_svc, "API 设计服务", "Node.js", "接口定义")
+        Container(code_svc, "AI Coding 服务", "Claude SDK", "代码生成")
+        Container(test_svc, "测试服务", "Python", "自动化测试")
+        Container(dep_svc, "部署服务", "Go", "K8S 部署")
+    }
+    
+    Container_Boundary(data, "数据层") {
+        ContainerDb(pg, "PostgreSQL", "关系数据")
+        ContainerDb(mongo, "MongoDB", "文档数据")
+        ContainerDb(redis, "Redis", "缓存")
+    }
+    
+    Rel(web, gateway, "HTTPS")
+    Rel(gateway, req_svc, "REST")
+    Rel(gateway, prd_svc, "REST")
+    Rel(gateway, arch_svc, "REST")
+    Rel(gateway, api_svc, "REST")
+    Rel(gateway, code_svc, "REST")
+    Rel(gateway, test_svc, "REST")
+    Rel(gateway, dep_svc, "REST")
+    Rel(req_svc, pg, "读写")
+    Rel(prd_svc, mongo, "读写")
+    Rel(code_svc, redis, "缓存")
+`,
+                'component': `
+flowchart TB
+    subgraph Client["客户端"]
+        Browser[Web Browser]
+    end
+    
+    subgraph Gateway["网关层"]
+        Nginx[Nginx Ingress]
+        Auth[认证中间件]
+    end
+    
+    subgraph Services["微服务群"]
+        ReqService[需求分析服务]
+        PrdService[PRD 生成服务]
+        ArchService[架构设计服务]
+        ApiService[API 设计服务]
+        CodeService[AI Coding 服务]
+        TestService[测试服务]
+        DeployService[部署服务]
+    end
+    
+    subgraph MessageQueue["消息队列"]
+        RabbitMQ[RabbitMQ]
+    end
+    
+    subgraph Storage["存储层"]
+        PostgreSQL[(PostgreSQL)]
+        MongoDB[(MongoDB)]
+        Redis[(Redis)]
+        MinIO[MinIO]
+    end
+    
+    Browser --> Nginx
+    Nginx --> Auth
+    Auth --> ReqService
+    Auth --> PrdService
+    Auth --> ArchService
+    Auth --> ApiService
+    Auth --> CodeService
+    Auth --> TestService
+    Auth --> DeployService
+    
+    ReqService --> PostgreSQL
+    PrdService --> MongoDB
+    ArchService --> MongoDB
+    CodeService --> Redis
+    TestService --> MinIO
+    DeployService --> RabbitMQ
+    
+    style Browser fill:#00f5ff33,stroke:#00f5ff
+    style Nginx fill:#bd00ff33,stroke:#bd00ff
+    style ReqService fill:#00ff9d33,stroke:#00ff9d
+    style PostgreSQL fill:#00f5ff33,stroke:#00f5ff
+`,
+                'dataflow': `
+flowchart LR
+    A[用户需求] --> B[需求分析]
+    B --> C[PRD 文档]
+    C --> D[架构设计]
+    D --> E[API 规范]
+    E --> F[代码生成]
+    F --> G[单元测试]
+    G --> H[集成测试]
+    H --> I[部署包]
+    I --> J[生产环境]
+    
+    B -.存储.-> DB1[(需求 DB)]
+    C -.存储.-> DB2[(文档 DB)]
+    D -.存储.-> DB3[(设计 DB)]
+    E -.存储.-> DB4[(API DB)]
+    F -.存储.-> DB5[(代码库)]
+    G -.存储.-> DB6[(测试结果)]
+    H -.存储.-> DB6
+    I -.存储.-> DB7[(镜像仓库)]
+    
+    style A fill:#00f5ff33,stroke:#00f5ff
+    style F fill:#bd00ff33,stroke:#bd00ff
+    style J fill:#00ff9d33,stroke:#00ff9d
+`
+            };
+            
+            container.innerHTML = `<div class="mermaid">${diagrams[type]}</div>`;
+            mermaid.init(undefined, container.querySelector('.mermaid'));
+        }
+
+        // Render different ERDs
+        function renderERD(type) {
+            const container = document.getElementById('erd-diagram');
+            
+            const erds = {
+                'core': `
+erDiagram
+    PROJECT ||--o{ REQUIREMENT : contains
+    PROJECT ||--|| PRD_DOCUMENT : has
+    PROJECT ||--|| ARCHITECTURE_DESIGN : has
+    
+    PROJECT {
+        int id PK
+        string name
+        text description
+        string status
+        timestamp created_at
+    }
+    
+    REQUIREMENT {
+        int id PK
+        int project_id FK
+        string title
+        text content
+        string priority
+    }
+    
+    PRD_DOCUMENT {
+        int id PK
+        int project_id FK
+        string version
+        json content
+    }
+    
+    ARCHITECTURE_DESIGN {
+        int id PK
+        int project_id FK
+        json tech_stack
+        json components
+    }
+`,
+                'project': `
+erDiagram
+    USER ||--o{ PROJECT : owns
+    PROJECT ||--o{ REQUIREMENT : contains
+    PROJECT ||--o{ TASK : includes
+    PROJECT ||--o{ MEMBER : has
+    
+    USER {
+        int id PK
+        string username
+        string email
+        string role
+    }
+    
+    PROJECT {
+        int id PK
+        string name
+        int owner_id FK
+        string status
+    }
+    
+    REQUIREMENT {
+        int id PK
+        int project_id FK
+        string title
+        string status
+    }
+    
+    TASK {
+        int id PK
+        int project_id FK
+        string description
+        int assignee_id FK
+        string status
+    }
+    
+    MEMBER {
+        int id PK
+        int project_id FK
+        int user_id FK
+        string role
+    }
+`,
+                'pipeline': `
+erDiagram
+    PROJECT ||--o{ PIPELINE : has
+    PIPELINE ||--o{ STAGE : contains
+    STAGE ||--o{ STEP : includes
+    PIPELINE ||--o{ BUILD : produces
+    
+    PIPELINE {
+        int id PK
+        int project_id FK
+        string name
+        string trigger_type
+    }
+    
+    STAGE {
+        int id PK
+        int pipeline_id FK
+        string name
+        int order
+    }
+    
+    STEP {
+        int id PK
+        int stage_id FK
+        string command
+        int timeout
+    }
+    
+    BUILD {
+        int id PK
+        int pipeline_id FK
+        string commit_hash
+        string status
+        string artifact_url
+    }
+`,
+                'full': `
+erDiagram
+    USER ||--o{ PROJECT : owns
+    PROJECT ||--o{ REQUIREMENT : contains
+    PROJECT ||--|| PRD_DOCUMENT : has
+    PROJECT ||--|| ARCHITECTURE_DESIGN : has
+    PROJECT ||--o{ API_SPECIFICATION : defines
+    PROJECT ||--o{ CODE_GENERATION : produces
+    PROJECT ||--o{ TEST_CASE : includes
+    PROJECT ||--o{ DEPLOYMENT : has
+    
+    REQUIREMENT ||--o{ TASK : broken_into
+    PRD_DOCUMENT ||--o{ USER_STORY : contains
+    ARCHITECTURE_DESIGN ||--o{ COMPONENT : consists_of
+    API_SPECIFICATION ||--|| CODE_GENERATION : generates
+    CODE_GENERATION ||--o{ CODE_REVIEW : reviewed_by
+    TEST_CASE ||--|| TEST_RESULT : produces
+    DEPLOYMENT ||--|| ENVIRONMENT : deploys_to
+    
+    USER {
+        int id PK
+        string username
+        string email
+    }
+    
+    PROJECT {
+        int id PK
+        string name
+        int owner_id FK
+    }
+    
+    REQUIREMENT {
+        int id PK
+        int project_id FK
+        string title
+    }
+    
+    API_SPECIFICATION {
+        int id PK
+        int project_id FK
+        string endpoint
+        string method
+    }
+    
+    CODE_GENERATION {
+        int id PK
+        int api_id FK
+        string language
+        string code_path
+    }
+`
+            };
+            
+            container.innerHTML = `<div class="mermaid">${erds[type]}</div>`;
+            mermaid.init(undefined, container.querySelector('.mermaid'));
+        }
+
+        // Create quantum particles
+        function createParticles() {
+            const container = document.getElementById('particles');
+            const particleCount = 50;
+            
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 15 + 's';
+                particle.style.animationDuration = (Math.random() * 10 + 10) + 's';
+                
+                const colors = ['#00f5ff', '#bd00ff', '#ff00e6', '#00ff9d'];
+                particle.style.background = colors[Math.floor(Math.random() * colors.length)];
+                
+                container.appendChild(particle);
+            }
+        }
+
+        // Initialize
+        createParticles();
+        
+        // Initial render
+        renderDiagram('c4-context');
+        renderERD('full');
+    </script>
+</body>
+</html>

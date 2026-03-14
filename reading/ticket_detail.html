@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工单详情 - AI 智能工单处理系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #6366f1;
+            --secondary-color: #8b5cf6;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #1e1b4b 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding-bottom: 2rem;
+        }
+
+        /* 顶部导航栏 */
+        .navbar {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-decoration: none;
+        }
+
+        .back-btn {
+            color: var(--text-secondary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: color 0.3s;
+        }
+
+        .back-btn:hover {
+            color: var(--primary-color);
+        }
+
+        /* 主容器 */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* 页面标题 */
+        .page-header {
+            margin-bottom: 2rem;
+        }
+
+        .ticket-number {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .ticket-title {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+
+        .ticket-meta {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        /* 状态和优先级标签 */
+        .status-badge, .priority-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .status-received { background: #3b82f6; color: white; }
+        .status-classified { background: #8b5cf6; color: white; }
+        .status-analyzing { background: #f59e0b; color: white; }
+        .status-assigned { background: #3b82f6; color: white; }
+        .status-in_progress { background: #f59e0b; color: white; }
+        .status-resolved { background: #10b981; color: white; }
+        .status-closed { background: #6b7280; color: white; }
+
+        .priority-p0 { background: #ef4444; color: white; }
+        .priority-p1 { background: #f97316; color: white; }
+        .priority-p2 { background: #eab308; color: black; }
+        .priority-p3 { background: #22c55e; color: white; }
+
+        /* 网格布局 */
+        .grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        @media (max-width: 1024px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 卡片样式 */
+        .card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        /* 工作流时间线 */
+        .timeline {
+            position: relative;
+            padding-left: 2rem;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--border-color);
+        }
+
+        .timeline-item {
+            position: relative;
+            padding-bottom: 1.5rem;
+        }
+
+        .timeline-item:last-child {
+            padding-bottom: 0;
+        }
+
+        .timeline-dot {
+            position: absolute;
+            left: -2rem;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            border: 3px solid var(--bg-card);
+        }
+
+        .timeline-dot.completed {
+            background: var(--success-color);
+        }
+
+        .timeline-dot.current {
+            background: var(--warning-color);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+        }
+
+        .timeline-content {
+            margin-left: 1rem;
+        }
+
+        .timeline-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .timeline-time {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .timeline-description {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        /* RCA 报告 */
+        .rca-section {
+            margin-top: 1rem;
+        }
+
+        .rca-item {
+            background: rgba(99, 102, 241, 0.1);
+            border-left: 4px solid var(--primary-color);
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .rca-cause {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .rca-evidence {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .confidence-bar {
+            height: 6px;
+            background: var(--border-color);
+            border-radius: 3px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            transition: width 0.5s ease;
+        }
+
+        /* 解决方案 */
+        .solution-steps {
+            list-style: none;
+            counter-reset: step-counter;
+        }
+
+        .solution-step {
+            counter-increment: step-counter;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background: rgba(16, 185, 129, 0.1);
+            border-radius: 8px;
+            position: relative;
+            padding-left: 3rem;
+        }
+
+        .solution-step::before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 24px;
+            background: var(--success-color);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: bold;
+        }
+
+        .step-action {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .step-details {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* 代码块 */
+        .code-block {
+            background: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 0.5rem;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+
+        /* 操作按钮 */
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-warning {
+            background: var(--warning-color);
+            color: black;
+        }
+
+        .btn-secondary {
+            background: var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+            transform: scale(1.05);
+        }
+
+        /* 日志列表 */
+        .log-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .log-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+        }
+
+        .log-item:last-child {
+            border-bottom: none;
+        }
+
+        .log-error { color: #ef4444; }
+        .log-warn { color: #f59e0b; }
+        .log-info { color: #3b82f6; }
+
+        .log-time {
+            color: var(--text-secondary);
+            margin-right: 0.5rem;
+        }
+
+        /* 分配信息 */
+        .assignee-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: rgba(99, 102, 241, 0.1);
+            border-radius: 8px;
+        }
+
+        .avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .assignee-details h4 {
+            margin-bottom: 0.25rem;
+        }
+
+        .assignee-details p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--border-color);
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 标签 */
+        .tag {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            background: rgba(99, 102, 241, 0.2);
+            color: var(--primary-color);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <nav class="navbar">
+        <div class="nav-content">
+            <a href="/" class="logo">🚀 AI 工单系统</a>
+            <a href="/" class="back-btn">← 返回列表</a>
+        </div>
+    </nav>
+
+    <!-- 主容器 -->
+    <div class="container">
+        <!-- 页面头部 -->
+        <div class="page-header">
+            <div class="ticket-number" id="ticket-number">加载中...</div>
+            <h1 class="ticket-title" id="ticket-title">加载中...</h1>
+            <div class="ticket-meta" id="ticket-meta">
+                <!-- 动态填充 -->
+            </div>
+        </div>
+
+        <!-- 主要内容网格 -->
+        <div class="grid">
+            <!-- 左侧：详情和工作流 -->
+            <div>
+                <!-- 工作流进度 -->
+                <div class="card" style="margin-bottom: 1.5rem;">
+                    <div class="card-header">
+                        <h2 class="card-title">🔄 AI 工作流进度</h2>
+                    </div>
+                    <div class="timeline" id="workflow-timeline">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bug 描述 -->
+                <div class="card" style="margin-bottom: 1.5rem;">
+                    <div class="card-header">
+                        <h2 class="card-title">📝 Bug 描述</h2>
+                    </div>
+                    <div id="ticket-description" style="line-height: 1.8;">
+                        加载中...
+                    </div>
+                    <div style="margin-top: 1rem;" id="ticket-tags">
+                        <!-- 标签 -->
+                    </div>
+                </div>
+
+                <!-- RCA 分析报告 -->
+                <div class="card" style="margin-bottom: 1.5rem;">
+                    <div class="card-header">
+                        <h2 class="card-title">🔍 根因分析 (RCA)</h2>
+                    </div>
+                    <div id="rca-report" class="rca-section">
+                        <p style="color: var(--text-secondary);">暂无分析报告</p>
+                    </div>
+                </div>
+
+                <!-- 解决方案 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">💡 推荐解决方案</h2>
+                    </div>
+                    <div id="solution-plan">
+                        <p style="color: var(--text-secondary);">暂无解决方案</p>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-success" onclick="approveSolution()">✅ 批准方案</button>
+                        <button class="btn btn-warning" onclick="reviseSolution()">✏️ 修改方案</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：信息和日志 -->
+            <div>
+                <!-- 负责人信息 -->
+                <div class="card" style="margin-bottom: 1.5rem;">
+                    <div class="card-header">
+                        <h2 class="card-title">👤 负责人</h2>
+                    </div>
+                    <div id="assignee-info">
+                        <p style="color: var(--text-secondary);">尚未分配</p>
+                    </div>
+                </div>
+
+                <!-- 环境信息 -->
+                <div class="card" style="margin-bottom: 1.5rem;">
+                    <div class="card-header">
+                        <h2 class="card-title">🖥️ 环境信息</h2>
+                    </div>
+                    <div id="environment-info" style="font-size: 0.9rem; line-height: 1.8;">
+                        无环境信息
+                    </div>
+                </div>
+
+                <!-- 操作日志 -->
+                <div class="card" style="margin-bottom: 1.5rem;">
+                    <div class="card-header">
+                        <h2 class="card-title">📜 操作日志</h2>
+                    </div>
+                    <div class="log-list" id="operation-logs">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 错误日志 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">⚠️ 相关错误日志</h2>
+                    </div>
+                    <div class="log-list" id="error-logs">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/v1';
+        const ticketId = new URLSearchParams(window.location.search).get('id');
+
+        // WebSocket 连接
+        let ws = null;
+
+        function initWebSocket() {
+            const wsUrl = `ws://localhost:8000/api/v1/ws/connect?user_id=1&subscriptions=${ticketId}`;
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onclose = () => {
+                setTimeout(initWebSocket, 3000);
+            };
+        }
+
+        function handleWebSocketMessage(data) {
+            console.log('WS Message:', data);
+
+            if (data.type === 'ticket_status_update' || data.type === 'ticket_updated') {
+                loadTicketDetails();
+            } else if (data.type === 'workflow_progress') {
+                updateWorkflowTimeline(data);
+            }
+        }
+
+        async function loadTicketDetails() {
+            try {
+                const response = await fetch(`${API_BASE}/tickets/${ticketId}`);
+                const ticket = await response.json();
+                renderTicketInfo(ticket);
+            } catch (error) {
+                console.error('Failed to load ticket:', error);
+            }
+
+            try {
+                const logsResponse = await fetch(`${API_BASE}/tickets/${ticketId}/logs`);
+                const logsData = await logsResponse.json();
+                renderOperationLogs(logsData.logs);
+            } catch (error) {
+                console.error('Failed to load logs:', error);
+            }
+        }
+
+        function renderTicketInfo(ticket) {
+            document.getElementById('ticket-number').textContent = ticket.ticket_number;
+            document.getElementById('ticket-title').textContent = ticket.title;
+
+            // 渲染元数据
+            const metaHtml = `
+                <span class="status-badge status-${ticket.status.toLowerCase()}">${ticket.status}</span>
+                <span class="priority-badge priority-${ticket.priority?.toLowerCase()}">${ticket.priority || 'N/A'}</span>
+                ${ticket.bug_category ? `<span class="tag">${ticket.bug_category}</span>` : ''}
+                ${ticket.region ? `<span class="tag">${ticket.region}</span>` : ''}
+            `;
+            document.getElementById('ticket-meta').innerHTML = metaHtml;
+
+            // 渲染描述
+            document.getElementById('ticket-description').textContent = 
+                ticket.description || '无详细描述';
+
+            // 渲染标签
+            if (ticket.tags && ticket.tags.length > 0) {
+                document.getElementById('ticket-tags').innerHTML = 
+                    ticket.tags.map(tag => `<span class="tag">${tag}</span>`).join('');
+            }
+
+            // 渲染环境信息
+            if (ticket.environment) {
+                document.getElementById('environment-info').textContent = 
+                    JSON.stringify(ticket.environment, null, 2);
+            }
+
+            // 渲染负责人
+            if (ticket.assignee) {
+                const initials = ticket.assignee.full_name?.split(' ').map(n => n[0]).join('') || '?';
+                document.getElementById('assignee-info').innerHTML = `
+                    <div class="assignee-info">
+                        <div class="avatar">${initials}</div>
+                        <div class="assignee-details">
+                            <h4>${ticket.assignee.full_name || 'Unknown'}</h4>
+                            <p>${ticket.assignee.team_name || '未分配团队'}</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 更新工作流时间线
+            updateWorkflowTimeline({ current_step: ticket.current_step || ticket.status });
+
+            // 渲染 RCA 报告
+            if (ticket.rca_report) {
+                renderRCAReport(ticket.rca_report);
+            }
+
+            // 渲染解决方案
+            if (ticket.solution_plan) {
+                renderSolutionPlan(ticket.solution_plan);
+            }
+        }
+
+        function updateWorkflowTimeline(data) {
+            const steps = [
+                { key: 'RECEIVED', title: '反馈提交', icon: '📝' },
+                { key: 'CLASSIFIED', title: '自动分类', icon: '🏷️' },
+                { key: 'ANALYZING', title: '根因分析', icon: '🔍' },
+                { key: 'SOLUTION_GENERATED', title: '方案生成', icon: '💡' },
+                { key: 'ASSIGNED', title: '任务分发', icon: '👤' },
+                { key: 'RESOLVED', title: '人工验证', icon: '✅' }
+            ];
+
+            const currentStep = data.current_step || data.node || 'RECEIVED';
+            const currentIndex = steps.findIndex(s => s.key === currentStep);
+
+            const timelineHtml = steps.map((step, index) => {
+                let dotClass = '';
+                if (index < currentIndex) dotClass = 'completed';
+                else if (index === currentIndex) dotClass = 'current';
+
+                return `
+                    <div class="timeline-item">
+                        <div class="timeline-dot ${dotClass}"></div>
+                        <div class="timeline-content">
+                            <div class="timeline-title">${step.icon} ${step.title}</div>
+                            <div class="timeline-time">${index <= currentIndex ? new Date().toLocaleString() : '等待中...'}</div>
+                            <div class="timeline-description">
+                                ${index <= currentIndex ? '已完成' : '等待前序步骤完成'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('workflow-timeline').innerHTML = timelineHtml;
+        }
+
+        function renderRCAReport(report) {
+            if (!report.root_causes || report.root_causes.length === 0) {
+                document.getElementById('rca-report').innerHTML = '<p style="color: var(--text-secondary);">暂无根因分析结果</p>';
+                return;
+            }
+
+            const html = report.root_causes.map((cause, index) => `
+                <div class="rca-item">
+                    <div class="rca-cause">${index + 1}. ${cause.cause}</div>
+                    <div class="rca-evidence">证据：${cause.evidence?.join(', ') || '无'}</div>
+                    <div class="confidence-bar">
+                        <div class="confidence-fill" style="width: ${(cause.confidence || 0) * 100}%"></div>
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                        置信度：${((cause.confidence || 0) * 100).toFixed(0)}%
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('rca-report').innerHTML = html;
+        }
+
+        function renderSolutionPlan(plan) {
+            if (!plan.implementation_steps || plan.implementation_steps.length === 0) {
+                document.getElementById('solution-plan').innerHTML = '<p style="color: var(--text-secondary);">暂无解决方案</p>';
+                return;
+            }
+
+            const stepsHtml = plan.implementation_steps.map(step => `
+                <li class="solution-step">
+                    <div class="step-action">${step.action}</div>
+                    <div class="step-details">
+                        ${step.command ? `<div class="code-block">${step.command}</div>` : ''}
+                        预计耗时：${step.estimated_time || 'N/A'} | 风险等级：${step.risk_level || 'N/A'}
+                    </div>
+                </li>
+            `).join('');
+
+            document.getElementById('solution-plan').innerHTML = `
+                <ul class="solution-steps">
+                    ${stepsHtml}
+                </ul>
+                ${plan.code_changes?.length > 0 ? `
+                    <div style="margin-top: 1rem;">
+                        <h4 style="margin-bottom: 0.5rem;">代码变更:</h4>
+                        ${plan.code_changes.map(change => `
+                            <div class="code-block">${change.diff}</div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        function renderOperationLogs(logs) {
+            if (!logs || logs.length === 0) {
+                document.getElementById('operation-logs').innerHTML = '<p style="color: var(--text-secondary);">暂无操作日志</p>';
+                return;
+            }
+
+            const html = logs.map(log => `
+                <div class="log-item">
+                    <span class="log-time">${new Date(log.created_at).toLocaleString()}</span>
+                    <span>[${log.actor_type}]</span>
+                    <span>${log.action}</span>
+                    ${log.details ? `<span style="color: var(--text-secondary);"> - ${JSON.stringify(log.details)}</span>` : ''}
+                </div>
+            `).join('');
+
+            document.getElementById('operation-logs').innerHTML = html;
+        }
+
+        function approveSolution() {
+            alert('方案已批准！将进入实施阶段。');
+            // TODO: 调用 API 更新状态
+        }
+
+        function reviseSolution() {
+            const feedback = prompt('请输入修改意见：');
+            if (feedback) {
+                alert('修改意见已提交，AI 将重新生成方案。');
+                // TODO: 调用 API 提交反馈
+            }
+        }
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!ticketId) {
+                alert('缺少工单 ID 参数');
+                window.location.href = '/';
+                return;
+            }
+            loadTicketDetails();
+            initWebSocket();
+        });
+    </script>
+</body>
+</html>

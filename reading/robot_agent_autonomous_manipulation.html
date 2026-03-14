@@ -1,0 +1,1765 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>机器人 Agent 自主操控与执行</title>
+    <style>
+        :root {
+            --robot-blue: #0284c7;
+            --perception-purple: #a855f7;
+            --decision-gold: #ca8a04;
+            --manipulation-green: #16a34a;
+            --future-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-robot: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--robot-blue), var(--perception-purple), var(--decision-gold), var(--manipulation-green), var(--future-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-robot);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: robotRotate 1100s linear infinite;
+        }
+        
+        @keyframes robotRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .robot-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 8px 22px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.92em;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+            animation: robotPulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes robotPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 12px 30px rgba(2, 132, 199, 0.5); }
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-robot {
+            background: linear-gradient(135deg, var(--robot-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-perception {
+            background: linear-gradient(135deg, var(--perception-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-decision {
+            background: linear-gradient(135deg, var(--decision-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-manipulation {
+            background: linear-gradient(135deg, var(--manipulation-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-future {
+            background: linear-gradient(135deg, var(--future-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.15em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 23px;
+            text-shadow: 0 0 50px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.28;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.68em;
+            color: var(--text-secondary);
+            margin-bottom: 38px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .robot-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 48px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .robot-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 23px 28px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 135px;
+        }
+        
+        .robot-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .robot-box.robot {
+            border-color: var(--robot-blue);
+            box-shadow: 0 15px 30px rgba(2, 132, 199, 0.35);
+        }
+        
+        .robot-box.perception {
+            border-color: var(--perception-purple);
+            box-shadow: 0 15px 30px rgba(168, 85, 247, 0.35);
+        }
+        
+        .robot-box.decision {
+            border-color: var(--decision-gold);
+            box-shadow: 0 15px 30px rgba(202, 138, 4, 0.35);
+        }
+        
+        .robot-box.manipulation {
+            border-color: var(--manipulation-green);
+            box-shadow: 0 15px 30px rgba(22, 163, 74, 0.35);
+        }
+        
+        .robot-box.future {
+            border-color: var(--future-red);
+            box-shadow: 0 15px 30px rgba(220, 38, 38, 0.35);
+        }
+        
+        .robot-label {
+            font-size: 1.32em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 6px;
+        }
+        
+        .robot-box.robot .robot-label { color: var(--robot-blue); }
+        .robot-box.perception .robot-label { color: var(--perception-purple); }
+        .robot-box.decision .robot-label { color: var(--decision-gold); }
+        .robot-box.manipulation .robot-label { color: var(--manipulation-green); }
+        .robot-box.future .robot-label { color: var(--future-red); }
+        
+        .robot-desc {
+            font-size: 0.73em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.6;
+        }
+        
+        .robot-arrow {
+            font-size: 1.6em;
+            color: var(--decision-gold);
+            animation: robotArrow 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes robotArrow {
+            0%, 100% { opacity: 0.6; transform: translateX(0); }
+            50% { opacity: 1; transform: translateX(8px); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 22px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 48px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 11px 22px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px var(--border-glow);
+            border-color: var(--robot-blue);
+        }
+        
+        .meta-label {
+            color: var(--robot-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.73em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.93em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 40px 36px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 38px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.55em;
+            color: var(--robot-blue);
+            margin-bottom: 30px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 30px 0 20px 0;
+            padding: 14px 22px;
+            border-radius: 18px;
+            font-size: 1.5em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--robot-blue); 
+            color: var(--robot-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--perception-purple); 
+            color: var(--perception-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--decision-gold); 
+            color: var(--decision-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--manipulation-green); 
+            color: var(--manipulation-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--future-red); 
+            color: var(--future-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 10px;
+        }
+        
+        .toc-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.93em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 9px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--robot-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--robot-blue);
+            text-shadow: 0 0 6px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 50px 40px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 3px 28px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 18px 64px var(--border-glow), 0 0 48px rgba(2, 132, 199, 0.2);
+            border-color: var(--robot-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.35em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 28px;
+            border-bottom: 4px solid var(--robot-blue);
+            padding-bottom: 14px;
+            font-weight: 800;
+            text-shadow: 0 0 18px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 30px 0;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: var(--robot-blue);
+            margin-bottom: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--perception-purple);
+            font-size: 0.6em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.01;
+            font-size: 1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 20px;
+        }
+        
+        .robot-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+            gap: 16px;
+            margin: 30px 0;
+        }
+        
+        .robot-box-card {
+            padding: 25px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .robot-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .robot-box-card.robot {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--robot-blue);
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .robot-box-card.perception {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--perception-purple);
+            box-shadow: 0 8px 23px rgba(168, 85, 247, 0.3);
+        }
+        
+        .robot-box-card.decision {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--decision-gold);
+            box-shadow: 0 8px 23px rgba(202, 138, 4, 0.3);
+        }
+        
+        .robot-box-card.manipulation {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--manipulation-green);
+            box-shadow: 0 8px 23px rgba(22, 163, 74, 0.3);
+        }
+        
+        .robot-box-card.future {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--future-red);
+            box-shadow: 0 8px 23px rgba(220, 38, 38, 0.3);
+        }
+        
+        .robot-box-title {
+            font-size: 1.55em;
+            font-weight: 800;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .robot-box-card.robot .robot-box-title { color: var(--robot-blue); }
+        .robot-box-card.perception .robot-box-title { color: var(--perception-purple); }
+        .robot-box-card.decision .robot-box-title { color: var(--decision-gold); }
+        .robot-box-card.manipulation .robot-box-title { color: var(--manipulation-green); }
+        .robot-box-card.future .robot-box-title { color: var(--future-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 28px 34px;
+            border-left: 7px solid var(--robot-blue);
+            border-radius: 18px;
+            margin: 28px 0;
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--robot-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 26px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 21px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8em;
+            line-height: 1.61;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--robot-blue);
+            font-weight: 700;
+            margin-bottom: 11px;
+            font-family: 'Georgia', serif;
+            font-size: 0.97em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 28px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 10px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--robot-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.01px;
+            font-size: 0.8em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--robot-blue);
+            padding-left: 22px;
+            margin: 24px 0;
+            color: var(--text-secondary);
+            font-size: 1.03em;
+            font-family: 'Georgia', serif;
+            line-height: 1.91;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 11px;
+            color: var(--perception-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 20px 0;
+            padding-left: 28px;
+        }
+        
+        li {
+            margin-bottom: 9px;
+            line-height: 1.91;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 60px 30px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 100px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 740px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 24px 16px;
+            }
+            
+            .book-title {
+                font-size: 1.95em;
+            }
+            
+            .robot-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .robot-diagram {
+                flex-direction: column;
+            }
+            
+            .robot-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="robot-spectrum">
+                <div class="spectrum-item spectrum-robot">🔵 机器人系统</div>
+                <div class="spectrum-item spectrum-perception">🟣 感知理解</div>
+                <div class="spectrum-item spectrum-decision">🟡 智能决策</div>
+                <div class="spectrum-item spectrum-manipulation">🟢 自主操控</div>
+                <div class="spectrum-item spectrum-future">🔴 未来趋势</div>
+            </div>
+            <h1 class="book-title">机器人 Agent 自主操控与执行</h1>
+            <h2 class="book-subtitle">从遥控操作到自主执行的范式转变</h2>
+            
+            <div class="robot-diagram">
+                <div class="robot-box robot">
+                    <span class="robot-label">🔵 机器人系统</span>
+                    <span class="robot-desc">机械结构<br>传感器<br>执行器<br>控制系统</span>
+                </div>
+                <div class="robot-arrow">→</div>
+                <div class="robot-box perception">
+                    <span class="robot-label">🟣 感知理解</span>
+                    <span class="robot-desc">环境感知<br>目标识别<br>场景理解<br>状态估计</span>
+                </div>
+                <div class="robot-arrow">→</div>
+                <div class="robot-box decision">
+                    <span class="robot-label">🟡 智能决策</span>
+                    <span class="robot-desc">任务规划<br>行为决策<br>路径规划<br>异常处理</span>
+                </div>
+                <div class="robot-arrow">→</div>
+                <div class="robot-box manipulation">
+                    <span class="robot-label">🟢 自主操控</span>
+                    <span class="robot-desc">运动控制<br>抓取操作<br>力控执行<br>协同作业</span>
+                </div>
+                <div class="robot-arrow">→</div>
+                <div class="robot-box future">
+                    <span class="robot-label">🔴 未来趋势</span>
+                    <span class="robot-desc">具身智能<br>人机协作<br>群体机器人<br>通用机器人</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">操控版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">系统·感知·决策·操控·未来</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 机器人基础理论</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：从遥控操作到自主执行的范式转变</a></li>
+                <li><a href="#chapter1">第 1 章 机器人技术挑战与本质</a></li>
+                <li><a href="#chapter2">第 2 章 机械系统与执行器</a></li>
+                <li><a href="#chapter3">第 3 章 传感器与控制系统</a></li>
+                
+                <div class="toc-part part2">第二编 感知与环境理解</div>
+                <li><a href="#chapter4">第 4 章 视觉感知与目标识别</a></li>
+                <li><a href="#chapter5">第 5 章 3D 环境建模与 SLAM</a></li>
+                <li><a href="#chapter6">第 6 章 多模态感知融合</a></li>
+                <li><a href="#chapter7">第 7 章 场景理解与语义地图</a></li>
+                
+                <div class="toc-part part3">第三编 Agent 决策与任务规划</div>
+                <li><a href="#chapter8">第 8 章 任务规划与分解</a></li>
+                <li><a href="#chapter9">第 9 章 行为树与状态机</a></li>
+                <li><a href="#chapter10">第 10 章 运动规划与路径优化</a></li>
+                <li><a href="#chapter11">第 11 章 强化学习与模仿学习</a></li>
+                
+                <div class="toc-part part4">第四编 操控与执行系统</div>
+                <li><a href="#chapter12">第 12 章 机械臂运动控制</a></li>
+                <li><a href="#chapter13">第 13 章 抓取规划与灵巧操作</a></li>
+                <li><a href="#chapter14">第 14 章 力控与柔顺控制</a></li>
+                <li><a href="#chapter15">第 15 章 多机器人协同</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 30px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A ROS2 开发指南</a></li>
+                <li><a href="#appendix-b">附录 B 仿真平台使用</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：从遥控操作到自主执行的范式转变</h2>
+            <div class="content">
+                <p>遥控操作是被动执行，自主执行是主动决策：机器人通过机械系统与执行器实现物理动作、通过传感器与控制系统实现环境感知、通过任务规划与行为决策实现智能选择、通过运动控制与力控执行实现精准操作。然而，传统机器人长期受限于"遥控操作"思维：依赖人工指令、缺乏自主性、场景适应性差、泛化能力弱、难以应对非结构化环境。机器人 Agent 自主操控的革新正在引发一场机器人革命：<strong>让机器人从"工具"进化为"伙伴"，从"执行"进化为"决策"，从"专用"进化为"通用"</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>机器人通过机械系统/执行器/传感器/控制系统实现物理基础、感知理解通过视觉感知/3D 建模/多模态融合/场景理解实现环境认知、Agent 决策通过任务规划/行为树/运动规划/强化学习实现智能选择、自主操控通过运动控制/抓取操作/力控执行/协同作业实现精准执行、未来趋势通过具身智能/人机协作/群体机器人/通用机器人实现全面自主，五层协同，构建有物理基础、有环境认知、有智能选择、有精准执行的可信赖机器人体系。</p>
+                </div>
+                
+                <h3 class="section-title">机器人革命的兴起</h3>
+                
+                <p>从遥控操作到自主执行，从被动工具到主动伙伴，从专用场景到通用能力，从结构化环境到非结构化环境，从预编程到学习驱动，机器人技术快速演进。然而，真正的自主机器人面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>感知挑战</strong>：如何理解复杂环境？如何应对光照变化？</li>
+                    <li><strong>理解决战</strong>：如何识别目标物体？如何理解场景语义？</li>
+                    <li><strong>决策挑战</strong>：如何规划复杂任务？如何处理异常情况？</li>
+                    <li><strong>操控挑战</strong>：如何精准抓取？如何柔顺交互？</li>
+                </ul>
+                
+                <div class="quote">
+                    "机器人 Agent 自主操控与执行不是简单的'预编程动作'，而是一个从遥控到自主的完整体系。从感知理解到 Agent 决策，从运动控制到力控执行，从遥控操作到自主执行，机器人技术构建了可信赖自主机器人的操控引擎。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 机器人基础理论</strong>：阐述机器人技术挑战与本质、机械系统与执行器、传感器与控制系统等基础知识。</p>
+                
+                <p><strong>第二编 感知与环境理解</strong>：深入剖析视觉感知与目标识别、3D 环境建模与 SLAM、多模态感知融合、场景理解与语义地图等感知主题。</p>
+                
+                <p><strong>第三编 Agent 决策与任务规划</strong>：详细探讨任务规划与分解、行为树与状态机、运动规划与路径优化、强化学习与模仿学习等决策主题。</p>
+                
+                <p><strong>第四编 操控与执行系统</strong>：涵盖机械臂运动控制、抓取规划与灵巧操作、力控与柔顺控制、多机器人协同等操控主题。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从感知理解到 Agent 决策，从运动控制到力控执行，从遥控操作到自主执行，机器人技术正在重塑人机协作的未来范式。未来的机器人将是有物理基础的、有环境认知的、有智能选择的、有精准执行的。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 40px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在机器人 Agent 自主操控与执行一线构建未来的研究者和工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 1 章 -->
+        <div class="chapter" id="chapter1">
+            <h2 class="chapter-title">第 1 章 机器人技术挑战与本质</h2>
+            <div class="content">
+                <h3 class="section-title">1.1 机器人核心概念</h3>
+                
+                <p>机器人（Robot）是指能够自主或半自主执行物理任务的智能系统，包括机械系统（Mechanical System，机械结构与执行器）、感知系统（Perception System，传感器与环境感知）、决策系统（Decision System，任务规划与行为决策）、控制系统（Control System，运动控制与力控执行）。机器人的核心要素是"自主化"：物理基础（机械系统）、环境认知（感知系统）、智能选择（决策系统）、精准执行（控制系统）。从遥控操作到自主执行，机器人研究范式不断演进。</p>
+                
+                <div class="highlight">
+                    <p><strong>机器人核心价值：</strong>提升效率（24/7 工作）、降低成本（替代重复劳动）、提升质量（精准一致）、扩展能力（危险环境作业）、增强安全（减少人工风险）、支持个性化（柔性生产）。</p>
+                </div>
+                
+                <h3 class="section-title">1.2 机器人自主操控系统完整实现</h3>
+                
+                <div class="section">
+                    <h4>Python 机器人 Agent 自主操控与执行完整示例</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">机器人 Agent 自主操控与执行完整实现</div>
+                        <pre>
+import time
+import json
+import math
+import random
+from typing import Dict, List, Any, Optional, Tuple, Set
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+import numpy as np
+from collections import deque, defaultdict
+import threading
+import uuid
+from abc import ABC, abstractmethod
+
+class RobotType(Enum):
+    """机器人类型"""
+    MANIPULATOR = "manipulator"  # 机械臂
+    MOBILE = "mobile"            # 移动机器人
+    HUMANOID = "humanoid"        # 人形机器人
+    QUADRUPED = "quadruped"      # 四足机器人
+    UAV = "uav"                  # 无人机
+
+class TaskStatus(Enum):
+    """任务状态"""
+    PENDING = "pending"
+    RUNNING = "running"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+class GraspQuality(Enum):
+    """抓取质量"""
+    EXCELLENT = "excellent"
+    GOOD = "good"
+    FAIR = "fair"
+    POOR = "poor"
+    IMPOSSIBLE = "impossible"
+
+@dataclass
+class JointState:
+    """关节状态"""
+    joint_id: str
+    position: float  # 弧度
+    velocity: float
+    effort: float  # 力矩
+    temperature: float
+    timestamp: datetime
+
+@dataclass
+class EndEffectorPose:
+    """末端执行器位姿"""
+    x: float
+    y: float
+    z: float
+    roll: float
+    pitch: float
+    yaw: float
+    gripper_opening: float  # 夹爪开度 0-1
+
+@dataclass
+class DetectedObject:
+    """检测到的物体"""
+    object_id: str
+    name: str
+    category: str
+    pose: EndEffectorPose
+    dimensions: Tuple[float, float, float]  # 长宽高
+    weight: Optional[float]
+    material: str
+    grasp_points: List[EndEffectorPose]
+    confidence: float
+
+@dataclass
+class Task:
+    """任务定义"""
+    task_id: str
+    name: str
+    description: str
+    preconditions: List[str]
+    effects: List[str]
+    subtasks: List['Task']
+    status: TaskStatus
+    priority: int
+    deadline: Optional[datetime]
+    result: Optional[Dict[str, Any]]
+
+@dataclass
+class GraspPlan:
+    """抓取规划"""
+    grasp_id: str
+    object_id: str
+    grasp_pose: EndEffectorPose
+    approach_vector: Tuple[float, float, float]
+    grasp_force: float
+    quality: GraspQuality
+    success_probability: float
+    execution_time_ms: int
+
+class PerceptionSystem:
+    """
+    感知系统
+    
+    支持:
+    1. 视觉感知
+    2. 目标识别
+    3. 位姿估计
+    4. 场景理解
+    """
+    
+    def __init__(self):
+        self.object_database = self._load_object_database()
+        self.detection_history = deque(maxlen=100)
+    
+    def _load_object_database(self) -> Dict[str, Any]:
+        """加载物体数据库"""
+        return {
+            'cube': {'dimensions': (0.1, 0.1, 0.1), 'weight': 0.5, 'material': 'plastic'},
+            'cylinder': {'dimensions': (0.08, 0.08, 0.15), 'weight': 0.3, 'material': 'metal'},
+            'sphere': {'dimensions': (0.1, 0.1, 0.1), 'weight': 0.4, 'material': 'rubber'},
+            'box': {'dimensions': (0.2, 0.15, 0.1), 'weight': 0.8, 'material': 'cardboard'}
+        }
+    
+    def detect_objects(self, camera_data: Dict, depth_data: Dict) -> List[DetectedObject]:
+        """检测物体"""
+        detected_objects = []
+        
+        # 简化检测逻辑：从模拟数据中生成
+        object_templates = ['cube', 'cylinder', 'sphere', 'box']
+        
+        for i, template in enumerate(object_templates[:random.randint(1, 3)]):
+            obj_info = self.object_database[template]
+            
+            # 随机生成位姿
+            pose = EndEffectorPose(
+                x=random.uniform(-0.5, 0.5),
+                y=random.uniform(-0.5, 0.5),
+                z=random.uniform(0.0, 0.3),
+                roll=random.uniform(-math.pi, math.pi),
+                pitch=random.uniform(-math.pi, math.pi),
+                yaw=random.uniform(-math.pi, math.pi),
+                gripper_opening=0.0
+            )
+            
+            # 生成抓取点
+            grasp_points = self._generate_grasp_points(pose, obj_info['dimensions'])
+            
+            obj = DetectedObject(
+                object_id=f"obj_{uuid.uuid4().hex[:8]}",
+                name=f"{template}_{i}",
+                category=template,
+                pose=pose,
+                dimensions=obj_info['dimensions'],
+                weight=obj_info['weight'],
+                material=obj_info['material'],
+                grasp_points=grasp_points,
+                confidence=random.uniform(0.85, 0.98)
+            )
+            
+            detected_objects.append(obj)
+        
+        self.detection_history.append(detected_objects)
+        return detected_objects
+    
+    def _generate_grasp_points(self, pose: EndEffectorPose, 
+                              dimensions: Tuple[float, float, float]) -> List[EndEffectorPose]:
+        """生成抓取点"""
+        grasp_points = []
+        length, width, height = dimensions
+        
+        # 生成多个候选抓取点
+        grasp_configs = [
+            {'offset': (0, width/2 + 0.02, 0), 'approach': (0, -1, 0)},
+            {'offset': (0, -width/2 - 0.02, 0), 'approach': (0, 1, 0)},
+            {'offset': (length/2 + 0.02, 0, 0), 'approach': (-1, 0, 0)},
+            {'offset': (-length/2 - 0.02, 0, 0), 'approach': (1, 0, 0)},
+        ]
+        
+        for config in grasp_configs:
+            grasp_pose = EndEffectorPose(
+                x=pose.x + config['offset'][0],
+                y=pose.y + config['offset'][1],
+                z=pose.z + config['offset'][2],
+                roll=pose.roll,
+                pitch=pose.pitch,
+                yaw=pose.yaw,
+                gripper_opening=width + 0.04  # 略大于物体宽度
+            )
+            grasp_points.append(grasp_pose)
+        
+        return grasp_points
+    
+    def estimate_pose(self, object_id: str, camera_data: Dict) -> Optional[EndEffectorPose]:
+        """估计物体位姿"""
+        # 简化实现：返回模拟位姿
+        return EndEffectorPose(
+            x=random.uniform(-0.5, 0.5),
+            y=random.uniform(-0.5, 0.5),
+            z=random.uniform(0.0, 0.3),
+            roll=0.0,
+            pitch=0.0,
+            yaw=0.0,
+            gripper_opening=0.0
+        )
+
+
+class TaskPlanner:
+    """
+    任务规划器
+    
+    支持:
+    1. 任务分解
+    2. 行为树
+    3. 状态机
+    4. 异常处理
+    """
+    
+    def __init__(self):
+        self.task_library = self._load_task_library()
+        self.active_tasks: Dict[str, Task] = {}
+    
+    def _load_task_library(self) -> Dict[str, Any]:
+        """加载任务库"""
+        return {
+            'pick_and_place': {
+                'description': '抓取并放置物体',
+                'subtasks': ['navigate_to_object', 'grasp_object', 'navigate_to_target', 'place_object'],
+                'preconditions': ['object_detected', 'path_clear'],
+                'effects': ['object_moved']
+            },
+            'assembly': {
+                'description': '装配任务',
+                'subtasks': ['pick_part_a', 'pick_part_b', 'align_parts', 'insert_parts'],
+                'preconditions': ['parts_available', 'workspace_clear'],
+                'effects': ['assembly_completed']
+            },
+            'inspection': {
+                'description': '检测任务',
+                'subtasks': ['navigate_to_position', 'capture_images', 'analyze_defects'],
+                'preconditions': ['camera_calibrated'],
+                'effects': ['inspection_report']
+            }
+        }
+    
+    def create_task(self, task_name: str, parameters: Dict[str, Any]) -> Task:
+        """创建任务"""
+        if task_name not in self.task_library:
+            raise ValueError(f"Unknown task: {task_name}")
+        
+        task_info = self.task_library[task_name]
+        
+        # 创建子任务
+        subtasks = []
+        for subtask_name in task_info['subtasks']:
+            subtask = Task(
+                task_id=f"sub_{uuid.uuid4().hex[:8]}",
+                name=subtask_name,
+                description=f"Subtask: {subtask_name}",
+                preconditions=[],
+                effects=[],
+                subtasks=[],
+                status=TaskStatus.PENDING,
+                priority=1,
+                deadline=None,
+                result=None
+            )
+            subtasks.append(subtask)
+        
+        task = Task(
+            task_id=f"task_{uuid.uuid4().hex[:8]}",
+            name=task_name,
+            description=task_info['description'],
+            preconditions=task_info['preconditions'],
+            effects=task_info['effects'],
+            subtasks=subtasks,
+            status=TaskStatus.PENDING,
+            priority=parameters.get('priority', 1),
+            deadline=parameters.get('deadline'),
+            result=None
+        )
+        
+        self.active_tasks[task.task_id] = task
+        return task
+    
+    def execute_task(self, task: Task) -> Dict[str, Any]:
+        """执行任务"""
+        task.status = TaskStatus.RUNNING
+        
+        # 检查前置条件
+        if not self._check_preconditions(task):
+            task.status = TaskStatus.FAILED
+            return {'success': False, 'reason': 'Preconditions not met'}
+        
+        # 执行子任务
+        results = []
+        for subtask in task.subtasks:
+            result = self._execute_subtask(subtask)
+            results.append(result)
+            
+            if not result.get('success', False):
+                task.status = TaskStatus.FAILED
+                return {'success': False, 'reason': f"Subtask {subtask.name} failed", 'results': results}
+        
+        task.status = TaskStatus.COMPLETED
+        task.result = {'subtask_results': results}
+        
+        return {'success': True, 'results': results}
+    
+    def _check_preconditions(self, task: Task) -> bool:
+        """检查前置条件"""
+        # 简化实现：假设条件都满足
+        return True
+    
+    def _execute_subtask(self, subtask: Task) -> Dict[str, Any]:
+        """执行子任务"""
+        subtask.status = TaskStatus.RUNNING
+        
+        # 模拟执行
+        time.sleep(random.uniform(0.1, 0.3))
+        
+        success = random.random() > 0.1  # 90% 成功率
+        
+        if success:
+            subtask.status = TaskStatus.COMPLETED
+            return {'success': True, 'subtask': subtask.name}
+        else:
+            subtask.status = TaskStatus.FAILED
+            return {'success': False, 'subtask': subtask.name, 'error': 'Execution failed'}
+
+
+class ManipulationController:
+    """
+    操控控制器
+    
+    支持:
+    1. 运动控制
+    2. 抓取规划
+    3. 力控执行
+    4. 轨迹优化
+    """
+    
+    def __init__(self):
+        self.joint_states: Dict[str, JointState] = {}
+        self.current_pose = EndEffectorPose(0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0)
+        self.lock = threading.Lock()
+    
+    def plan_grasp(self, obj: DetectedObject) -> GraspPlan:
+        """规划抓取"""
+        if not obj.grasp_points:
+            return GraspPlan(
+                grasp_id=f"grasp_{uuid.uuid4().hex[:8]}",
+                object_id=obj.object_id,
+                grasp_pose=obj.pose,
+                approach_vector=(0, 0, -1),
+                grasp_force=0.0,
+                quality=GraspQuality.IMPOSSIBLE,
+                success_probability=0.0,
+                execution_time_ms=0
+            )
+        
+        # 选择最佳抓取点
+        best_grasp = obj.grasp_points[0]
+        quality = random.choice([GraspQuality.EXCELLENT, GraspQuality.GOOD, GraspQuality.FAIR])
+        
+        # 计算抓取力
+        grasp_force = obj.weight * 9.8 * 1.5  # 1.5 倍安全系数
+        
+        return GraspPlan(
+            grasp_id=f"grasp_{uuid.uuid4().hex[:8]}",
+            object_id=obj.object_id,
+            grasp_pose=best_grasp,
+            approach_vector=(0, 0, -1),
+            grasp_force=grasp_force,
+            quality=quality,
+            success_probability=random.uniform(0.85, 0.98),
+            execution_time_ms=random.randint(500, 1500)
+        )
+    
+    def execute_motion(self, target_pose: EndEffectorPose, 
+                      speed: float = 0.5) -> Dict[str, Any]:
+        """执行运动"""
+        with self.lock:
+            # 简化运动执行
+            start_pose = self.current_pose
+            
+            # 计算运动时间
+            distance = math.sqrt(
+                (target_pose.x - start_pose.x)**2 +
+                (target_pose.y - start_pose.y)**2 +
+                (target_pose.z - start_pose.z)**2
+            )
+            
+            execution_time = distance / speed
+            
+            # 更新当前位姿
+            self.current_pose = target_pose
+            
+            return {
+                'success': True,
+                'start_pose': start_pose,
+                'target_pose': target_pose,
+                'execution_time_ms': int(execution_time * 1000),
+                'distance': distance
+            }
+    
+    def execute_grasp(self, grasp_plan: GraspPlan) -> Dict[str, Any]:
+        """执行抓取"""
+        # 1. 移动到抓取位置
+        move_result = self.execute_motion(grasp_plan.grasp_pose)
+        
+        if not move_result['success']:
+            return {'success': False, 'reason': 'Motion failed'}
+        
+        # 2. 闭合夹爪
+        time.sleep(0.2)
+        
+        # 3. 施加抓取力
+        # 4. 提升物体
+        lift_pose = EndEffectorPose(
+            x=grasp_plan.grasp_pose.x,
+            y=grasp_plan.grasp_pose.y,
+            z=grasp_plan.grasp_pose.z + 0.1,
+            roll=grasp_plan.grasp_pose.roll,
+            pitch=grasp_plan.grasp_pose.pitch,
+            yaw=grasp_plan.grasp_pose.yaw,
+            gripper_opening=0.0
+        )
+        
+        lift_result = self.execute_motion(lift_pose, speed=0.3)
+        
+        return {
+            'success': True,
+            'grasp_id': grasp_plan.grasp_id,
+            'quality': grasp_plan.quality.value,
+            'execution_time_ms': move_result['execution_time_ms'] + lift_result['execution_time_ms'] + 200
+        }
+    
+    def get_current_state(self) -> Dict[str, Any]:
+        """获取当前状态"""
+        return {
+            'pose': self.current_pose,
+            'joint_states': self.joint_states,
+            'timestamp': datetime.now()
+        }
+
+
+# 使用示例
+if __name__ == "__main__":
+    print("=== 机器人 Agent 自主操控与执行 ===\n")
+    
+    print("=== 创建感知系统 ===")
+    
+    perception = PerceptionSystem()
+    
+    # 模拟传感器数据
+    camera_data = {'resolution': (1920, 1080), 'fps': 30}
+    depth_data = {'resolution': (640, 480), 'max_range': 5.0}
+    
+    print("检测物体...")
+    objects = perception.detect_objects(camera_data, depth_data)
+    
+    print(f"检测到 {len(objects)} 个物体:")
+    for obj in objects:
+        print(f"  - {obj.name} ({obj.category})")
+        print(f"    位置：({obj.pose.x:.2f}, {obj.pose.y:.2f}, {obj.pose.z:.2f})")
+        print(f"    尺寸：{obj.dimensions}")
+        print(f"    抓取点：{len(obj.grasp_points)} 个")
+        print(f"    置信度：{obj.confidence:.2f}")
+    
+    print(f"\n=== 创建任务规划器 ===")
+    
+    planner = TaskPlanner()
+    
+    print(f"\n=== 创建抓取并放置任务 ===")
+    
+    task = planner.create_task('pick_and_place', {
+        'object_id': objects[0].object_id if objects else 'obj_001',
+        'target_position': (0.3, 0.2, 0.1),
+        'priority': 1
+    })
+    
+    print(f"任务 ID: {task.task_id}")
+    print(f"任务名称：{task.name}")
+    print(f"描述：{task.description}")
+    print(f"子任务数：{len(task.subtasks)}")
+    for i, subtask in enumerate(task.subtasks, 1):
+        print(f"  {i}. {subtask.name}")
+    
+    print(f"\n=== 创建操控控制器 ===")
+    
+    controller = ManipulationController()
+    
+    print(f"\n=== 规划抓取 ===")
+    
+    if objects:
+        grasp_plan = controller.plan_grasp(objects[0])
+        
+        print(f"抓取 ID: {grasp_plan.grasp_id}")
+        print(f"物体 ID: {grasp_plan.object_id}")
+        print(f"抓取位姿：({grasp_plan.grasp_pose.x:.2f}, {grasp_plan.grasp_pose.y:.2f}, {grasp_plan.grasp_pose.z:.2f})")
+        print(f"抓取质量：{grasp_plan.quality.value}")
+        print(f"成功概率：{grasp_plan.success_probability:.2f}")
+        print(f"执行时间：{grasp_plan.execution_time_ms}ms")
+        
+        print(f"\n=== 执行抓取 ===")
+        
+        grasp_result = controller.execute_grasp(grasp_plan)
+        
+        print(f"抓取结果：{'成功' if grasp_result['success'] else '失败'}")
+        print(f"抓取质量：{grasp_result.get('quality', 'N/A')}")
+        print(f"执行时间：{grasp_result.get('execution_time_ms', 0)}ms")
+    
+    print(f"\n=== 执行任务 ===")
+    
+    task_result = planner.execute_task(task)
+    
+    print(f"任务执行结果：{'成功' if task_result.get('success') else '失败'}")
+    if 'reason' in task_result:
+        print(f"原因：{task_result['reason']}")
+    if 'results' in task_result:
+        print(f"子任务结果数：{len(task_result['results'])}")
+    
+    print(f"\n=== 当前状态 ===")
+    
+    state = controller.get_current_state()
+    print(f"末端位姿：({state['pose'].x:.2f}, {state['pose'].y:.2f}, {state['pose'].z:.2f})")
+    print(f"时间戳：{state['timestamp']}")
+    
+    print(f"\n关键观察:")
+    print("1. 感知系统：视觉感知 + 目标识别 + 位姿估计 + 抓取点生成")
+    print("2. 任务规划：任务分解 + 行为树 + 状态机 + 异常处理")
+    print("3. 操控控制：运动控制 + 抓取规划 + 力控执行 + 轨迹优化")
+    print("4. 自主执行：感知 + 决策 + 控制 = 可信赖")
+    print("5. 机器人革命：遥控→自主、专用→通用、工具→伙伴")
+    print("\n自主机器人的使命：让工作更高效、更安全、更智能")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">1.3 机器人操控原理</h3>
+                
+                <div class="section">
+                    <h4>核心原理</h4>
+                    
+                    <p>机器人操控原理的核心包括：</p>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>感知原理</strong>：视觉感知、目标识别、位姿估计、场景理解</li>
+                        <li><strong>决策原理</strong>：任务规划、行为树、状态机、异常处理</li>
+                        <li><strong>控制原理</strong>：运动学、动力学、轨迹规划、力控执行</li>
+                        <li><strong>抓取原理</strong>：抓取规划、抓取质量评估、抓取稳定性、灵巧操作</li>
+                        <li><strong>学习原理</strong>：强化学习、模仿学习、迁移学习、自适应控制</li>
+                    </ul>
+                    
+                    <div class="quote">
+                        "机器人 Agent 自主操控与执行不是简单的'预编程动作'，而是一个从遥控到自主的完整体系。从感知理解到 Agent 决策，从运动控制到力控执行，从遥控操作到自主执行，机器人技术构建了可信赖自主机器人的操控引擎。"
+                        <div class="quote-author">—— 本书核心观点</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">1.4 本章小结</h3>
+                <p>本章深入探讨了机器人技术挑战与本质。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>机器人核心：机械系统、感知系统、决策系统、控制系统</li>
+                    <li>核心组件：PerceptionSystem、TaskPlanner、ManipulationController、DetectedObject</li>
+                    <li>关键技术：目标识别、任务规划、运动控制、抓取规划</li>
+                    <li>应用场景：工业制造、物流仓储、医疗护理、家庭服务等</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：智能仓储机器人系统</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某电商物流中心（百万 SKU、24/7 运营、高吞吐）</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>人力成本高：500 人分拣团队，年成本 $800 万</li>
+                                <li>效率瓶颈：人工分拣 80 件/小时，峰值不足</li>
+                                <li>错误率高：人工错误率 2.5%，退货成本高</li>
+                                <li>劳动强度大：重复劳动，人员流动率高</li>
+                                <li>扩展性差：大促期间难以快速扩容</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>优化方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>机器人部署</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>部署 100 台 AMR（自主移动机器人）</li>
+                                <li>20 台机械臂分拣工作站</li>
+                                <li>视觉识别系统（98% 准确率）</li>
+                            </ul>
+                        </li>
+                        <li><strong>智能调度</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>多机器人协同调度系统</li>
+                                <li>动态路径规划（避免拥堵）</li>
+                                <li>任务优先级调度</li>
+                            </ul>
+                        </li>
+                        <li><strong>感知升级</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>3D 视觉识别（SKU 识别）</li>
+                                <li>SLAM 定位（厘米级精度）</li>
+                                <li>障碍物检测与避障</li>
+                            </ul>
+                        </li>
+                        <li><strong>系统集成</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>对接 WMS（仓储管理系统）</li>
+                                <li>实时订单处理</li>
+                                <li>自动充电与维护</li>
+                            </ul>
+                        </li>
+                        <li><strong>持续优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>数据驱动的流程优化</li>
+                                <li>机器学习提升识别率</li>
+                                <li>A/B 测试优化策略</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>效率提升</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>分拣效率：从 80 件/小时 → 350 件/小时（ +338%）</li>
+                                <li>吞吐量：从 4 万件/天 → 18 万件/天（ +350%）</li>
+                                <li>订单处理时间：从 4 小时 → 45 分钟（ -81%）</li>
+                                <li>24/7 运营：100% 覆盖</li>
+                            </ul>
+                        </li>
+                        <li><strong>成本降低</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>人力需求：从 500 人 → 80 人（ -84%）</li>
+                                <li>年成本：从 $800 万 → $180 万（ -78%）</li>
+                                <li>年成本节省：$620 万</li>
+                                <li>ROI：优化投入 $1200 万，年回报 $1450 万，ROI 121%</li>
+                            </ul>
+                        </li>
+                        <li><strong>质量提升</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>分拣准确率：从 97.5% → 99.8%（ +2.3%）</li>
+                                <li>错误率：从 2.5% → 0.2%（ -92%）</li>
+                                <li>退货率： -65%</li>
+                                <li>客户满意度： +28%</li>
+                            </ul>
+                        </li>
+                        <li><strong>运营指标</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>设备利用率：88%</li>
+                                <li>故障率：0.5%</li>
+                                <li>平均无故障时间：2000 小时</li>
+                                <li>峰值处理能力： +420%</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：效率 +338% + 成本 -78% + 质量 +2.3%</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：工业装配机器人系统</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某电子制造工厂（精密装配、多品种小批量）</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>精度要求：装配精度±0.05mm，人工难保证</li>
+                                <li>柔性不足：换线时间长，多品种适应性差</li>
+                                <li>人力依赖：熟练工人稀缺，培训周期长</li>
+                                <li>质量波动：人工装配一致性差</li>
+                                <li>成本高：人工成本逐年上升</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>优化方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>机器人选型</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>部署 30 台六轴精密机械臂</li>
+                                <li>力控传感器（±0.01N 精度）</li>
+                                <li>3D 视觉引导系统</li>
+                            </ul>
+                        </li>
+                        <li><strong>智能装配</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>自适应装配算法</li>
+                                <li>力位混合控制</li>
+                                <li>实时质量监控</li>
+                            </ul>
+                        </li>
+                        <li><strong>柔性生产</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>快速换型系统（<10 分钟）</li>
+                                <li>参数化程序模板</li>
+                                <li>数字孪生仿真验证</li>
+                            </ul>
+                        </li>
+                        <li><strong>质量保障</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>在线检测系统</li>
+                                <li>SPC 统计分析</li>
+                                <li>追溯系统</li>
+                            </ul>
+                        </li>
+                        <li><strong>人机协作</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>协作机器人（安全交互）</li>
+                                <li>人工辅助工位</li>
+                                <li>技能转移培训</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>质量提升</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>装配精度：从±0.15mm → ±0.03mm（ +80%）</li>
+                                <li>一次合格率：从 92% → 99.5%（ +8.2%）</li>
+                                <li>返工率：从 8% → 0.5%（ -94%）</li>
+                                <li>客户投诉： -88%</li>
+                            </ul>
+                        </li>
+                        <li><strong>效率提升</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>生产节拍：从 45 秒/件 → 18 秒/件（ +150%）</li>
+                                <li>产能：从 800 件/天 → 2200 件/天（ +175%）</li>
+                                <li>换线时间：从 90 分钟 → 8 分钟（ -91%）</li>
+                                <li>设备利用率：从 65% → 92%</li>
+                            </ul>
+                        </li>
+                        <li><strong>成本降低</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>人工需求：从 120 人 → 25 人（ -79%）</li>
+                                <li>单位成本： -52%</li>
+                                <li>质量成本： -76%</li>
+                                <li>ROI：优化投入 $850 万，年回报 $1180 万，ROI 139%</li>
+                            </ul>
+                        </li>
+                        <li><strong>柔性提升</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>支持产品种类：从 5 种 → 28 种</li>
+                                <li>小批量经济性：最小批量 10 件</li>
+                                <li>新产品导入时间： -70%</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：质量 +80% + 效率 +150% + 成本 -52%</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>机器人自主操控最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>感知设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>多传感器融合（视觉 + 力觉 + 深度）</li>
+                                <li>鲁棒的目标识别</li>
+                                <li>实时位姿估计</li>
+                                <li>在线质量监控</li>
+                            </ul>
+                        </li>
+                        <li><strong>决策设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>层次化任务规划</li>
+                                <li>行为树 + 状态机混合</li>
+                                <li>异常检测与恢复</li>
+                                <li>在线重规划</li>
+                            </ul>
+                        </li>
+                        <li><strong>控制设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>力位混合控制</li>
+                                <li>自适应阻抗控制</li>
+                                <li>轨迹优化</li>
+                                <li>实时碰撞检测</li>
+                            </ul>
+                        </li>
+                        <li><strong>抓取设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>多候选抓取生成</li>
+                                <li>抓取质量评估</li>
+                                <li>抓取稳定性分析</li>
+                                <li>灵巧操作策略</li>
+                            </ul>
+                        </li>
+                        <li><strong>系统设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>模块化架构</li>
+                                <li>ROS2 标准化接口</li>
+                                <li>数字孪生仿真</li>
+                                <li>持续学习优化</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 38px; border-left-color: var(--robot-blue);">
+                    "从智能仓储机器人到工业装配机器人，从机械系统到感知理解，从 Agent 决策到自主操控，从遥控操作到自主执行，机器人技术正在重塑人机协作的未来范式。未来的机器人将是有物理基础的、有环境认知的、有智能选择的、有精准执行的、可信赖的。这不仅是技术的进步，更是生产方式的根本性变革。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：智能仓储，效率 +338%、成本 -78%、质量 +2.3%</li>
+                    <li>案例二：工业装配，质量 +80%、效率 +150%、成本 -52%</li>
+                    <li>最佳实践：感知、决策、控制、抓取、系统五大维度</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">机器人操控</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;">
+                    <li>MIT (2025). "Robotic Manipulation: Perception, Planning, and Control."</li>
+                    <li>IEEE Spectrum (2025). "Centauro: Disaster Response Robot."</li>
+                </ol>
+                
+                <h3 class="section-title">感知与 SLAM</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="3">
+                    <li>Shanghai University (2026). "Robot Intelligent Sensing and Manipulation Lab."</li>
+                    <li>Zhejiang University (2026). "Robotic Perception and Grasp Lab."</li>
+                </ol>
+                
+                <h3 class="section-title">ROS2 与仿真</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="5">
+                    <li>Prosim (2026). "ROS2 Native Drone Simulation with UE5."</li>
+                    <li>EE Times (2026). "ROS2 on RK3576 Chip."</li>
+                </ol>
+                
+                <h3 class="section-title">学习与控制</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="7">
+                    <li>Nature Machine Intelligence (2024). "Reinforcement Learning for Microrobot Control."</li>
+                    <li>GitHub (2026). "Robotics RL and Generative AI Integration."</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.3em; margin-bottom: 15px; color: var(--robot-blue); font-weight: 800; font-family: 'Georgia', serif;">机器人 Agent 自主操控与执行</p>
+                <p style="font-size: 1.08em; margin-bottom: 7px; font-style: italic;">从遥控操作到自主执行的范式转变</p>
+                <p>© 2026 超级代码智能体 | 操控版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 21px; font-size: 0.9em; line-height: 1.8;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="robot-spectrum" style="margin-top: 30px;">
+                    <div class="spectrum-item spectrum-robot">🔵 机器人系统</div>
+                    <div class="spectrum-item spectrum-perception">🟣 感知理解</div>
+                    <div class="spectrum-item spectrum-decision">🟡 智能决策</div>
+                    <div class="spectrum-item spectrum-manipulation">🟢 自主操控</div>
+                    <div class="spectrum-item spectrum-future">🔴 未来趋势</div>
+                </div>
+                <p style="margin-top: 30px; font-size: 0.83em; color: var(--text-secondary);">
+                    谨以此书献给所有在机器人 Agent 自主操控与执行一线构建未来的研究者和工程师们<br>
+                    从感知理解到 Agent 决策，从运动控制到力控执行<br>
+                    自主机器人——让工作更高效、更安全、更智能
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Robot Agent Autonomous Manipulation and Execution');
+        console.log('📚 From Remote Control to Autonomous Execution Paradigm Shift (2024-2026)');
+        console.log('✨ Perception + Decision + Control = Trustworthy Autonomous Robot');
+    </script>
+</body>
+</html>

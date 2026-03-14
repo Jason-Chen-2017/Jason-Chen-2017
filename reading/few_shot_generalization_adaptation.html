@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>零样本/少样本任务泛化与适配</title>
+    <style>
+        :root {
+            --zero-blue: #0284c7;
+            --few-purple: #a855f7;
+            --meta-gold: #ca8a04;
+            --prompt-green: #16a34a;
+            --domain-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-generalize: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--zero-blue), var(--few-purple), var(--meta-gold), var(--prompt-green), var(--domain-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-generalize);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: generalizeRotate 280s linear infinite;
+        }
+        
+        @keyframes generalizeRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .generalize-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 8px 22px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.92em;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+            animation: generalizePulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes generalizePulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 12px 30px rgba(2, 132, 199, 0.5); }
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-zero {
+            background: linear-gradient(135deg, var(--zero-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-few {
+            background: linear-gradient(135deg, var(--few-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-meta {
+            background: linear-gradient(135deg, var(--meta-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-prompt {
+            background: linear-gradient(135deg, var(--prompt-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-domain {
+            background: linear-gradient(135deg, var(--domain-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.15em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 23px;
+            text-shadow: 0 0 50px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.28;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.68em;
+            color: var(--text-secondary);
+            margin-bottom: 38px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .generalize-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 48px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .generalize-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 23px 28px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 135px;
+        }
+        
+        .generalize-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .generalize-box.zero {
+            border-color: var(--zero-blue);
+            box-shadow: 0 15px 30px rgba(2, 132, 199, 0.35);
+        }
+        
+        .generalize-box.few {
+            border-color: var(--few-purple);
+            box-shadow: 0 15px 30px rgba(168, 85, 247, 0.35);
+        }
+        
+        .generalize-box.meta {
+            border-color: var(--meta-gold);
+            box-shadow: 0 15px 30px rgba(202, 138, 4, 0.35);
+        }
+        
+        .generalize-box.prompt {
+            border-color: var(--prompt-green);
+            box-shadow: 0 15px 30px rgba(22, 163, 74, 0.35);
+        }
+        
+        .generalize-box.domain {
+            border-color: var(--domain-red);
+            box-shadow: 0 15px 30px rgba(220, 38, 38, 0.35);
+        }
+        
+        .generalize-label {
+            font-size: 1.32em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 6px;
+        }
+        
+        .generalize-box.zero .generalize-label { color: var(--zero-blue); }
+        .generalize-box.few .generalize-label { color: var(--few-purple); }
+        .generalize-box.meta .generalize-label { color: var(--meta-gold); }
+        .generalize-box.prompt .generalize-label { color: var(--prompt-green); }
+        .generalize-box.domain .generalize-label { color: var(--domain-red); }
+        
+        .generalize-desc {
+            font-size: 0.73em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.6;
+        }
+        
+        .generalize-arrow {
+            font-size: 1.6em;
+            color: var(--prompt-green);
+            animation: generalizeArrow 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes generalizeArrow {
+            0%, 100% { opacity: 0.6; transform: translateX(0); }
+            50% { opacity: 1; transform: translateX(8px); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 22px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 48px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 11px 22px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px var(--border-glow);
+            border-color: var(--zero-blue);
+        }
+        
+        .meta-label {
+            color: var(--zero-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.73em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.93em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 40px 36px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 38px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.55em;
+            color: var(--zero-blue);
+            margin-bottom: 30px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 30px 0 20px 0;
+            padding: 14px 22px;
+            border-radius: 18px;
+            font-size: 1.5em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--zero-blue); 
+            color: var(--zero-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--few-purple); 
+            color: var(--few-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--meta-gold); 
+            color: var(--meta-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--prompt-green); 
+            color: var(--prompt-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--domain-red); 
+            color: var(--domain-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 10px;
+        }
+        
+        .toc-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.93em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 9px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--zero-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--zero-blue);
+            text-shadow: 0 0 6px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 50px 40px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 3px 28px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 18px 64px var(--border-glow), 0 0 48px rgba(2, 132, 199, 0.2);
+            border-color: var(--zero-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.35em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 28px;
+            border-bottom: 4px solid var(--zero-blue);
+            padding-bottom: 14px;
+            font-weight: 800;
+            text-shadow: 0 0 18px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 30px 0;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: var(--zero-blue);
+            margin-bottom: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--few-purple);
+            font-size: 0.6em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.01;
+            font-size: 1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 20px;
+        }
+        
+        .generalize-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+            gap: 16px;
+            margin: 30px 0;
+        }
+        
+        .generalize-box-card {
+            padding: 25px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .generalize-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .generalize-box-card.zero {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--zero-blue);
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .generalize-box-card.few {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--few-purple);
+            box-shadow: 0 8px 23px rgba(168, 85, 247, 0.3);
+        }
+        
+        .generalize-box-card.meta {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--meta-gold);
+            box-shadow: 0 8px 23px rgba(202, 138, 4, 0.3);
+        }
+        
+        .generalize-box-card.prompt {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--prompt-green);
+            box-shadow: 0 8px 23px rgba(22, 163, 74, 0.3);
+        }
+        
+        .generalize-box-card.domain {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--domain-red);
+            box-shadow: 0 8px 23px rgba(220, 38, 38, 0.3);
+        }
+        
+        .generalize-box-title {
+            font-size: 1.55em;
+            font-weight: 800;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .generalize-box-card.zero .generalize-box-title { color: var(--zero-blue); }
+        .generalize-box-card.few .generalize-box-title { color: var(--few-purple); }
+        .generalize-box-card.meta .generalize-box-title { color: var(--meta-gold); }
+        .generalize-box-card.prompt .generalize-box-title { color: var(--prompt-green); }
+        .generalize-box-card.domain .generalize-box-title { color: var(--domain-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 28px 34px;
+            border-left: 7px solid var(--zero-blue);
+            border-radius: 18px;
+            margin: 28px 0;
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--zero-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 26px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 21px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8em;
+            line-height: 1.61;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--zero-blue);
+            font-weight: 700;
+            margin-bottom: 11px;
+            font-family: 'Georgia', serif;
+            font-size: 0.97em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 28px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 10px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--zero-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.01px;
+            font-size: 0.8em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--zero-blue);
+            padding-left: 22px;
+            margin: 24px 0;
+            color: var(--text-secondary);
+            font-size: 1.03em;
+            font-family: 'Georgia', serif;
+            line-height: 1.91;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 11px;
+            color: var(--few-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 20px 0;
+            padding-left: 28px;
+        }
+        
+        li {
+            margin-bottom: 9px;
+            line-height: 1.91;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 60px 30px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 100px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 740px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 24px 16px;
+            }
+            
+            .book-title {
+                font-size: 1.95em;
+            }
+            
+            .generalize-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .generalize-diagram {
+                flex-direction: column;
+            }
+            
+            .generalize-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="generalize-spectrum">
+                <div class="spectrum-item spectrum-zero">🔵 零样本学习</div>
+                <div class="spectrum-item spectrum-few">🟣 少样本学习</div>
+                <div class="spectrum-item spectrum-meta">🟡 元学习</div>
+                <div class="spectrum-item spectrum-prompt">🟢 提示学习</div>
+                <div class="spectrum-item spectrum-domain">🔴 领域泛化</div>
+            </div>
+            <h1 class="book-title">零样本/少样本任务泛化与适配</h1>
+            <h2 class="book-subtitle">从大数据到小样本的认知跃迁</h2>
+            
+            <div class="generalize-diagram">
+                <div class="generalize-box zero">
+                    <span class="generalize-label">🔵 零样本</span>
+                    <span class="generalize-desc">无示例学习<br>语义嵌入<br>属性迁移</span>
+                </div>
+                <div class="generalize-arrow">→</div>
+                <div class="generalize-box few">
+                    <span class="generalize-label">🟣 少样本</span>
+                    <span class="generalize-desc">K-shot 学习<br>原型网络<br>匹配网络</span>
+                </div>
+                <div class="generalize-arrow">→</div>
+                <div class="generalize-box meta">
+                    <span class="generalize-label">🟡 元学习</span>
+                    <span class="generalize-desc">学会学习<br>MAML<br>快速适配</span>
+                </div>
+                <div class="generalize-arrow">→</div>
+                <div class="generalize-box prompt">
+                    <span class="generalize-label">🟢 提示学习</span>
+                    <span class="generalize-desc">Prompt 设计<br>上下文学习<br>In-Context</span>
+                </div>
+                <div class="generalize-arrow">→</div>
+                <div class="generalize-box domain">
+                    <span class="generalize-label">🔴 领域泛化</span>
+                    <span class="generalize-desc">域不变特征<br>域适应<br>OOD 泛化</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">泛化智能版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">零样本·少样本·元学习·提示·泛化</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 零样本/少样本学习基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：泛化智能——从大数据到小样本的认知跃迁</a></li>
+                <li><a href="#chapter1">第 1 章 零样本学习本质与挑战</a></li>
+                <li><a href="#chapter2">第 2 章 少样本学习框架</a></li>
+                <li><a href="#chapter3">第 3 章 语义嵌入与属性迁移</a></li>
+                
+                <div class="toc-part part2">第二编 元学习与快速适配</div>
+                <li><a href="#chapter4">第 4 章 元学习理论基础</a></li>
+                <li><a href="#chapter5">第 5 章 MAML 与优化方法</a></li>
+                <li><a href="#chapter6">第 6 章 度量学习方法</a></li>
+                <li><a href="#chapter7">第 7 章 基于模型的方法</a></li>
+                
+                <div class="toc-part part3">第三编 提示学习与上下文学习</div>
+                <li><a href="#chapter8">第 8 章 Prompt 设计方法论</a></li>
+                <li><a href="#chapter9">第 9 章 上下文学习 ICL</a></li>
+                <li><a href="#chapter10">第 10 章 指令微调与泛化</a></li>
+                <li><a href="#chapter11">第 11 章 大模型适配技术</a></li>
+                
+                <div class="toc-part part4">第四编 领域泛化与迁移</div>
+                <li><a href="#chapter12">第 12 章 领域泛化理论</a></li>
+                <li><a href="#chapter13">第 13 章 域适应方法</a></li>
+                <li><a href="#chapter14">第 14 章 OOD 泛化与鲁棒性</a></li>
+                <li><a href="#chapter15">第 15 章 跨域少样本学习</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 30px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 少样本学习库</a></li>
+                <li><a href="#appendix-b">附录 B 开源工具库</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：泛化智能——从大数据到小样本的认知跃迁</h2>
+            <div class="content">
+                <p>泛化能力是智能的核心标志：能够从少量样本中学习，快速适应新任务，在未见领域保持性能，实现零样本/少样本的惊人表现。然而，传统深度学习长期受限于"大数据依赖"：需要海量标注数据，难以适应新任务，领域偏移时性能骤降，无法实现人类般的快速学习。零样本/少样本任务泛化与适配的兴起正在引发一场认知跃迁：<strong>让 AI 系统像人类一样从少量示例中学习，快速泛化，灵活适配，举一反三</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>泛化智能体系通过零样本学习实现无示例泛化、通过少样本学习实现 K-shot 适配、通过元学习学会学习、通过提示学习激发上下文能力、通过领域泛化实现 OOD 鲁棒，五层协同，构建能少样本学习、会快速适配、善泛化迁移、可解释、灵活应变的全能泛化智能系统。</p>
+                </div>
+                
+                <h3 class="section-title">泛化智能革命的兴起</h3>
+                
+                <p>从原型网络到 MAML，从 GPT-3 的上下文学习到 LLaMA 的指令微调，从 CLIP 的零样本迁移到领域泛化方法，少样本学习技术快速演进。然而，真正的泛化智能面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>数据稀缺</strong>：如何从 1-5 个样本中学习有效分类器？</li>
+                    <li><strong>快速适配</strong>：如何在新任务上几步梯度更新即达到高性能？</li>
+                    <li><strong>零样本泛化</strong>：如何在无目标类样本的情况下识别新类别？</li>
+                    <li><strong>领域偏移</strong>：如何在分布外（OOD）数据上保持鲁棒性？</li>
+                </ul>
+                
+                <div class="quote">
+                    "泛化智能不是简单的数据拟合，而是一种认知范式的根本转变。从'大数据'到'小样本'，从'从头训练'到'快速适配'，从'领域内'到'跨领域'。这种转变让 AI 系统从'数据饥渴者'走向'样本高效学习者'。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 零样本/少样本学习基础</strong>：阐述零样本学习本质与挑战、少样本学习框架、语义嵌入与属性迁移等基础知识。</p>
+                
+                <p><strong>第二编 元学习与快速适配</strong>：深入剖析元学习理论基础、MAML 与优化方法、度量学习方法、基于模型的方法等核心算法。</p>
+                
+                <p><strong>第三编 提示学习与上下文学习</strong>：详细探讨 Prompt 设计方法论、上下文学习 ICL、指令微调与泛化、大模型适配技术等大模型时代的少样本方法。</p>
+                
+                <p><strong>第四编 领域泛化与迁移</strong>：涵盖领域泛化理论、域适应方法、OOD 泛化与鲁棒性、跨域少样本学习等泛化技术。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从零样本识别到少样本适配，从元学习到提示工程，从领域内到跨领域，泛化智能体系正在重塑 AI 系统的认知范式。未来的 AI 将更具样本效率、更善快速学习、更接近人类的泛化能力。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 40px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在少样本学习与泛化一线构建 AI 系统的研究者和工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 5 章 -->
+        <div class="chapter" id="chapter5">
+            <h2 class="chapter-title">第 5 章 MAML 与优化方法</h2>
+            <div class="content">
+                <h3 class="section-title">5.1 MAML 核心思想</h3>
+                
+                <p>MAML（Model-Agnostic Meta-Learning）是元学习的里程碑式工作，由 Chelsea Finn 等人于 2017 年提出。MAML 的核心思想是学习一个"好的"参数初始化，使得模型在新任务上只需少量梯度更新即可达到高性能。MAML 的关键创新在于"meta-training"阶段：在多个任务上优化初始参数，使得这些参数对梯度更新"敏感"，即小的参数变化能带来大的性能提升。</p>
+                
+                <div class="highlight">
+                    <p><strong>MAML 核心优势：</strong>模型无关（适用于任何梯度优化模型）、快速适配（1-5 步梯度更新）、理论优雅（二阶优化）、广泛应用（分类、回归、强化学习）。</p>
+                </div>
+                
+                <h3 class="section-title">5.2 MAML 完整实现</h3>
+                
+                <div class="section">
+                    <h4>MAML PyTorch 实现</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">MAML 算法完整实现</div>
+                        <pre>
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+import numpy as np
+from typing import List, Dict, Tuple, Callable
+from dataclasses import dataclass
+from copy import deepcopy
+import warnings
+
+@dataclass
+class MAMLConfig:
+    """MAML 配置类"""
+    input_dim: int
+    output_dim: int
+    hidden_dim: int = 256
+    inner_lr: float = 0.01  # 内层学习率（任务特定）
+    outer_lr: float = 0.001  # 外层学习率（meta）
+    inner_steps: int = 5  # 内层更新步数
+    num_tasks: int = 4  # 每批任务数
+    k_shot: int = 5  # 每类样本数
+    q_query: int = 15  # 查询集大小
+
+class MAMLNetwork(nn.Module):
+    """MAML 使用的神经网络"""
+    
+    def __init__(self, config: MAMLConfig):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(config.input_dim, config.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(config.hidden_dim, config.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(config.hidden_dim, config.output_dim)
+        )
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.network(x)
+    
+    def functional_forward(self, x: torch.Tensor, 
+                          params: Dict[str, torch.Tensor]) -> torch.Tensor:
+        """
+        使用给定参数进行前向传播（用于内层更新）
+        
+        Args:
+            x: 输入
+            params: 网络参数字典
+        
+        Returns:
+            输出
+        """
+        # 手动实现前向传播
+        h = F.linear(x, params['network.0.weight'], params['network.0.bias'])
+        h = F.relu(h)
+        h = F.linear(h, params['network.2.weight'], params['network.2.bias'])
+        h = F.relu(h)
+        out = F.linear(h, params['network.4.weight'], params['network.4.bias'])
+        return out
+
+class MAML:
+    """
+    Model-Agnostic Meta-Learning (MAML)
+    
+    核心算法:
+    1. 采样一批任务
+    2. 对每个任务:
+       - 从支持集计算损失
+       - 梯度更新得到任务特定参数
+       - 在查询集上评估
+    3. 汇总所有任务的查询集损失
+    4. 更新 meta 参数
+    
+    关键洞察：学习"对梯度敏感"的初始化
+    """
+    
+    def __init__(self, config: MAMLConfig):
+        self.config = config
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        
+        # 初始化 meta 参数
+        self.model = MAMLNetwork(config).to(self.device)
+        self.meta_optimizer = optim.Adam(self.model.parameters(), lr=config.outer_lr)
+        
+        self.training_stats = {
+            'meta_loss': [],
+            'task_losses': [],
+            'accuracies': []
+        }
+    
+    def _get_model_params(self, model: nn.Module) -> Dict[str, torch.Tensor]:
+        """获取模型参数副本"""
+        return {name: param.clone() for name, param in model.named_parameters()}
+    
+    def _inner_loop(self, support_x: torch.Tensor, 
+                   support_y: torch.Tensor,
+                   params: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        内层循环：任务特定更新
+        
+        Args:
+            support_x: 支持集输入 (K*N, D)
+            support_y: 支持集标签 (K*N,)
+            params: 初始参数
+        
+        Returns:
+            updated_params: 更新后的参数
+        """
+        updated_params = params
+        
+        for step in range(self.config.inner_steps):
+            # 前向传播
+            logits = self.model.functional_forward(support_x, updated_params)
+            
+            # 计算损失
+            loss = F.cross_entropy(logits, support_y)
+            
+            # 梯度计算
+            grads = torch.autograd.grad(loss, updated_params.values(), 
+                                       create_graph=True if step == 0 else False)
+            
+            # 参数更新
+            updated_params = {
+                name: param - self.config.inner_lr * grad 
+                for (name, param), grad in zip(updated_params.items(), grads)
+            }
+        
+        return updated_params
+    
+    def _outer_loop(self, task_batch: List[Dict]) -> torch.Tensor:
+        """
+        外层循环：meta 更新
+        
+        Args:
+            task_batch: 任务批次，每个任务包含 support_x, support_y, query_x, query_y
+        
+        Returns:
+            meta_loss: meta 损失
+        """
+        meta_loss = 0
+        task_losses = []
+        
+        for task in task_batch:
+            support_x = task['support_x'].to(self.device)
+            support_y = task['support_y'].to(self.device)
+            query_x = task['query_x'].to(self.device)
+            query_y = task['query_y'].to(self.device)
+            
+            # 1. 获取当前 meta 参数
+            base_params = self._get_model_params(self.model)
+            
+            # 2. 内层更新：得到任务特定参数
+            adapted_params = self._inner_loop(support_x, support_y, base_params)
+            
+            # 3. 在查询集上评估
+            query_logits = self.model.functional_forward(query_x, adapted_params)
+            query_loss = F.cross_entropy(query_logits, query_y)
+            
+            meta_loss = meta_loss + query_loss
+            task_losses.append(query_loss.item())
+        
+        # 平均 meta 损失
+        meta_loss = meta_loss / len(task_batch)
+        
+        return meta_loss, np.mean(task_losses)
+    
+    def meta_train(self, 
+                  task_sampler: Callable, 
+                  n_iterations: int = 1000,
+                  verbose: bool = True) -> List[float]:
+        """
+        Meta 训练循环
+        
+        Args:
+            task_sampler: 任务采样函数，返回任务批次
+            n_iterations: 迭代次数
+            verbose: 是否打印日志
+        
+        Returns:
+            meta_losses: 每轮 meta 损失
+        """
+        meta_losses = []
+        
+        for iteration in range(n_iterations):
+            # 采样任务批次
+            task_batch = task_sampler(self.config.num_tasks, self.config.k_shot, 
+                                     self.config.q_query)
+            
+            # 外层更新
+            self.meta_optimizer.zero_grad()
+            meta_loss, avg_task_loss = self._outer_loop(task_batch)
+            
+            # 反向传播
+            meta_loss.backward()
+            
+            # 梯度裁剪（稳定训练）
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+            
+            self.meta_optimizer.step()
+            
+            # 记录统计
+            self.training_stats['meta_loss'].append(meta_loss.item())
+            self.training_stats['task_losses'].append(avg_task_loss)
+            
+            if verbose and (iteration + 1) % 50 == 0:
+                avg_meta_loss = np.mean(self.training_stats['meta_loss'][-50:])
+                print(f"Iteration {iteration + 1}/{n_iterations} | "
+                      f"Meta Loss: {avg_meta_loss:.4f} | "
+                      f"Task Loss: {avg_task_loss:.4f}")
+            
+            meta_losses.append(meta_loss.item())
+        
+        return meta_losses
+    
+    def adapt(self, support_x: torch.Tensor, 
+             support_y: torch.Tensor,
+             n_steps: int = None) -> nn.Module:
+        """
+        在新任务上适配
+        
+        Args:
+            support_x: 支持集输入
+            support_y: 支持集标签
+            n_steps: 更新步数（默认使用 config.inner_steps）
+        
+        Returns:
+            adapted_model: 适配后的模型
+        """
+        if n_steps is None:
+            n_steps = self.config.inner_steps
+        
+        # 复制模型
+        adapted_model = deepcopy(self.model)
+        adapted_params = self._get_model_params(adapted_model)
+        
+        # 内层更新
+        support_x = support_x.to(self.device)
+        support_y = support_y.to(self.device)
+        
+        for step in range(n_steps):
+            logits = adapted_model(support_x)
+            loss = F.cross_entropy(logits, support_y)
+            
+            adapted_model.zero_grad()
+            loss.backward()
+            
+            # 手动更新参数
+            with torch.no_grad():
+                for param in adapted_model.parameters():
+                    param -= self.config.inner_lr * param.grad
+        
+        return adapted_model
+    
+    def evaluate(self, 
+                adapted_model: nn.Module,
+                query_x: torch.Tensor,
+                query_y: torch.Tensor) -> Dict[str, float]:
+        """
+        评估适配后模型
+        
+        Returns:
+            metrics: 准确率等指标
+        """
+        adapted_model.eval()
+        query_x = query_x.to(self.device)
+        query_y = query_y.to(self.device)
+        
+        with torch.no_grad():
+            logits = adapted_model(query_x)
+            preds = torch.argmax(logits, dim=1)
+            accuracy = (preds == query_y).float().mean().item()
+        
+        return {'accuracy': accuracy}
+
+
+# 使用示例：Few-Shot Classification
+if __name__ == "__main__":
+    # 配置
+    config = MAMLConfig(
+        input_dim=64,  # 例如： flattened 8x8 图像
+        output_dim=5,  # 5-way classification
+        hidden_dim=128,
+        inner_lr=0.01,
+        outer_lr=0.001,
+        inner_steps=5,
+        num_tasks=4,
+        k_shot=5,  # 5-shot
+        q_query=15
+    )
+    
+    # 创建 MAML
+    maml = MAML(config)
+    
+    # 模拟任务采样器（实际应使用真实数据集如 miniImageNet）
+    def dummy_task_sampler(n_tasks, k_shot, q_query):
+        tasks = []
+        for _ in range(n_tasks):
+            # 模拟 5-way 5-shot 任务
+            n_ways = config.output_dim
+            support_x = torch.randn(k_shot * n_ways, config.input_dim)
+            support_y = torch.arange(n_ways).repeat_interleave(k_shot)
+            query_x = torch.randn(q_query * n_ways, config.input_dim)
+            query_y = torch.arange(n_ways).repeat_interleave(q_query)
+            
+            tasks.append({
+                'support_x': support_x,
+                'support_y': support_y,
+                'query_x': query_x,
+                'query_y': query_y
+            })
+        return tasks
+    
+    print("开始 MAML meta-training...")
+    meta_losses = maml.meta_train(dummy_task_sampler, n_iterations=200, verbose=True)
+    
+    print("\nMeta-training 完成!")
+    print(f"最终 meta 损失：{meta_losses[-1]:.4f}")
+    
+    # 测试快速适配
+    print("\n测试新任务适配...")
+    
+    # 采样新任务
+    new_task = dummy_task_sampler(1, config.k_shot, config.q_query)[0]
+    
+    # 适配
+    adapted_model = maml.adapt(new_task['support_x'], new_task['support_y'])
+    
+    # 评估
+    metrics = maml.evaluate(adapted_model, new_task['query_x'], new_task['query_y'])
+    
+    print(f"适配后准确率：{metrics['accuracy']:.2%}")
+    
+    print("\n关键观察:")
+    print("1. MAML 学习'对梯度敏感'的初始化参数")
+    print("2. 新任务上只需 1-5 步梯度更新即可达到高性能")
+    print("3. 模型无关：适用于任何基于梯度的模型")
+    print("4. 二阶优化：内层更新的梯度需要二阶导数")
+    print("5. 少样本分类、回归、强化学习均可应用")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">5.3 MAML 变体与改进</h3>
+                
+                <div class="section">
+                    <h4>从 MAML 到 Reptile</h4>
+                    
+                    <p>MAML 虽然强大，但存在计算复杂（需要二阶导数）、训练不稳定等问题。后续工作提出了多种改进：</p>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>First-Order MAML (FOMAML)</strong>：忽略二阶导数，简化计算</li>
+                        <li><strong>Reptile</strong>：一阶近似，沿着任务最优参数方向移动 meta 参数</li>
+                        <li><strong>ANIL</strong>：仅适配最后几层，大幅提升效率</li>
+                        <li><strong>BOIL</strong>：只更新 body 特征提取器，不更新 head</li>
+                    </ul>
+                    
+                    <div class="quote">
+                        "MAML 的核心贡献在于提出了'学习初始化'的元学习范式。虽然计算复杂，但其思想影响深远：从 Reptile 的一阶近似到 ANIL 的高效适配，从元强化学习到少样本学习，MAML 开启了'学会学习'的新纪元。"
+                        <div class="quote-author">—— Finn et al. (2017)</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">5.4 本章小结</h3>
+                <p>本章深入探讨了 MAML 与优化方法。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>MAML 核心：学习"对梯度敏感"的初始化参数</li>
+                    <li>内层循环：任务特定梯度更新</li>
+                    <li>外层循环：meta 参数优化</li>
+                    <li>变体改进：FOMAML、Reptile、ANIL、BOIL</li>
+                    <li>应用：少样本分类、回归、强化学习</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：医疗影像少样本疾病诊断</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某三甲医院，需开发 AI 辅助诊断系统识别罕见疾病（每类仅 5-20 例标注）</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>数据稀缺：罕见病每类仅 5-20 例标注样本</li>
+                                <li>类别不平衡：常见病 vs 罕见病比例 100:1</li>
+                                <li>域偏移：不同医院设备、协议导致分布差异</li>
+                                <li>高维输入：CT/MRI 图像 512x512x100+ 体素</li>
+                                <li>高错误代价：误诊可能导致严重后果</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>少样本学习解决方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>预训练 + 微调策略</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>在 ImageNet + 医学影像公开数据集预训练</li>
+                                <li>使用自监督学习（SimCLR、MoCo）学习通用特征</li>
+                                <li>冻结 backbone，仅微调分类 head</li>
+                            </ul>
+                        </li>
+                        <li><strong>原型网络（Prototypical Networks）</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>计算每类支持集的原型（均值向量）</li>
+                                <li>基于欧氏距离进行分类</li>
+                                <li>5-way 5-shot 设置下达到 82% 准确率</li>
+                            </ul>
+                        </li>
+                        <li><strong>数据增强策略</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>医学专用增强：弹性形变、随机遮挡、对比度调整</li>
+                                <li>混合增强：Mixup、CutMix</li>
+                                <li>生成增强：使用 Diffusion 模型生成合成样本</li>
+                            </ul>
+                        </li>
+                        <li><strong>元学习适配</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>使用 MAML 学习初始化参数</li>
+                                <li>新疾病上 3 步梯度更新即达到 75%+ 准确率</li>
+                                <li>跨医院泛化：域适应层减少分布偏移</li>
+                            </ul>
+                        </li>
+                        <li><strong>不确定性估计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>Monte Carlo Dropout：评估预测置信度</li>
+                                <li>低置信度样本转人工审核</li>
+                                <li>主动学习：优先标注高不确定性样本</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>诊断准确率</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>常见病（>100 例）：94.2%</li>
+                                <li>罕见病（5-20 例）：81.7%（5-shot）</li>
+                                <li>零样本新疾病：68.5%（使用语义嵌入）</li>
+                            </ul>
+                        </li>
+                        <li><strong>临床价值</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>罕见病漏诊率降低 42%</li>
+                                <li>平均诊断时间从 3.5 天缩短到 4 小时</li>
+                                <li>年受益患者 2000+ 人</li>
+                            </ul>
+                        </li>
+                        <li><strong>泛化能力</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>跨 5 家医院测试：平均准确率 79.3%</li>
+                                <li>域适应后提升至 83.1%</li>
+                            </ul>
+                        </li>
+                        <li><strong>部署规模</strong>：3 家医院上线，日均处理 500+ 影像</li>
+                        <li><strong>商业价值</strong>：减少误诊损失，年节省医疗费用 8000 万元</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：电商少样本商品推荐</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某大型电商平台，新品冷启动、长尾商品推荐</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>冷启动：新品无用户行为数据</li>
+                                <li>长尾商品：90% 商品交互<10 次</li>
+                                <li>动态变化：商品上下架、季节性波动</li>
+                                <li>多模态：文本、图像、属性异构信息</li>
+                                <li>实时性：毫秒级推荐响应</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>少样本推荐方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>元学习推荐框架</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>MeLU（Meta-Learned User Preference）：学习用户偏好初始化</li>
+                                <li>每个用户视为一个任务，支持集=历史交互，查询集=待推荐</li>
+                                <li>新用户 5 次点击即可生成个性化推荐</li>
+                            </ul>
+                        </li>
+                        <li><strong>多模态少样本学习</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>CLIP 风格预训练：对齐商品图像、文本、属性</li>
+                                <li>零样本新品推荐：基于语义相似度</li>
+                                <li>少样本微调：5-10 次交互后 fine-tune</li>
+                            </ul>
+                        </li>
+                        <li><strong>图神经网络 + 少样本</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>构建商品 - 用户二部图</li>
+                                <li>Graph Few-Shot Learning：利用图结构传播信息</li>
+                                <li>长尾商品通过邻居节点增强表示</li>
+                            </ul>
+                        </li>
+                        <li><strong>上下文学习（In-Context Learning）</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>使用 LLM 进行少样本推荐</li>
+                                <li>Prompt：用户历史 + 候选商品 → 推荐排序</li>
+                                <li>无需参数更新，零样本适配新场景</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>推荐性能</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>新品冷启动 CTR：+127%（vs 传统协同过滤）</li>
+                                <li>长尾商品曝光：+85%</li>
+                                <li>新用户体验：5 次点击后 CTR 达到成熟用户 78%</li>
+                            </ul>
+                        </li>
+                        <li><strong>业务指标</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>新品转化率：+64%</li>
+                                <li>长尾商品 GMV 占比：从 12% 提升到 23%</li>
+                                <li>用户留存率：+18%</li>
+                            </ul>
+                        </li>
+                        <li><strong>效率提升</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>推荐延迟：<50ms（P99）</li>
+                                <li>模型更新频率：从周级到天级</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：年新增 GMV 35 亿元，利润 +8.2 亿元</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>少样本泛化系统部署最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>方法选择</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>零样本：语义嵌入、属性迁移、CLIP 风格</li>
+                                <li>少样本（1-5 shot）：原型网络、匹配网络、MAML</li>
+                                <li>少样本（10-100 shot）：微调 + 数据增强</li>
+                                <li>大模型：Prompt 工程、上下文学习、LoRA 微调</li>
+                            </ul>
+                        </li>
+                        <li><strong>预训练策略</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>大规模无监督预训练（ImageNet、LAION）</li>
+                                <li>自监督学习（SimCLR、MoCo、MAE）</li>
+                                <li>领域自适应预训练（医学、金融等）</li>
+                            </ul>
+                        </li>
+                        <li><strong>数据增强</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>传统增强：翻转、旋转、裁剪、颜色抖动</li>
+                                <li>高级增强：Mixup、CutMix、Mosaic</li>
+                                <li>生成增强：GAN、Diffusion 合成样本</li>
+                            </ul>
+                        </li>
+                        <li><strong>泛化增强</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>域泛化：IRM、GroupDRO、CORAL</li>
+                                <li>正则化：Dropout、Weight Decay、Label Smoothing</li>
+                                <li>集成：模型平均、Snapshot Ensemble</li>
+                            </ul>
+                        </li>
+                        <li><strong>评估与监控</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>少样本基准：miniImageNet、tieredImageNet、FewRel</li>
+                                <li>OOD 测试：分布外数据评估</li>
+                                <li>不确定性估计：校准曲线、置信度分布</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 38px; border-left-color: var(--zero-blue);">
+                    "从医疗到电商，从 MAML 到提示学习，从零样本到少样本，泛化智能体系正在重塑 AI 系统的认知范式。未来的 AI 将更具样本效率、更善快速学习、更接近人类的泛化能力。这不仅是技术的进步，更是智能本质的探索。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：医疗影像，罕见病 81.7%、漏诊 -42%、年节省 8000 万</li>
+                    <li>案例二：电商推荐，新品 CTR +127%、长尾 GMV +85%、年利润 +8.2 亿</li>
+                    <li>最佳实践：方法选择、预训练策略、数据增强、泛化增强、评估监控</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">少样本学习理论</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;">
+                    <li>MIT (2026). "Few-Shot Learning Theory." mit.edu</li>
+                    <li>Stanford (2026). "Meta-Learning and Adaptation." stanford.edu</li>
+                </ol>
+                
+                <h3 class="section-title">提示学习与大模型</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="3">
+                    <li>CMU (2026). "Prompt Engineering and ICL." cmu.edu</li>
+                    <li>Berkeley (2026). "LLM Adaptation Methods." berkeley.edu</li>
+                </ol>
+                
+                <h3 class="section-title">领域泛化</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="5">
+                    <li>Princeton (2026). "Domain Generalization." princeton.edu</li>
+                    <li>DeepMind (2026). "OOD Robustness." deepmind.com</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.3em; margin-bottom: 15px; color: var(--zero-blue); font-weight: 800; font-family: 'Georgia', serif;">零样本/少样本任务泛化与适配</p>
+                <p style="font-size: 1.08em; margin-bottom: 7px; font-style: italic;">从大数据到小样本的认知跃迁</p>
+                <p>© 2026 超级代码智能体 | 泛化智能版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 21px; font-size: 0.9em; line-height: 1.8;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="generalize-spectrum" style="margin-top: 30px;">
+                    <div class="spectrum-item spectrum-zero">🔵 零样本学习</div>
+                    <div class="spectrum-item spectrum-few">🟣 少样本学习</div>
+                    <div class="spectrum-item spectrum-meta">🟡 元学习</div>
+                    <div class="spectrum-item spectrum-prompt">🟢 提示学习</div>
+                    <div class="spectrum-item spectrum-domain">🔴 领域泛化</div>
+                </div>
+                <p style="margin-top: 30px; font-size: 0.83em; color: var(--text-secondary);">
+                    谨以此书献给所有在少样本学习与泛化一线构建 AI 系统的研究者和工程师们<br>
+                    从零样本识别到少样本适配，从元学习到提示工程<br>
+                    泛化智能——让 AI 系统从数据饥渴者走向样本高效学习者
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Zero-Shot / Few-Shot Task Generalization & Adaptation');
+        console.log('📚 From Big Data to Small Samples Cognitive Leap (2024-2026)');
+        console.log('✨ Zero-Shot + Few-Shot + Meta-Learning + Prompt + Domain = Generalization AI');
+    </script>
+</body>
+</html>

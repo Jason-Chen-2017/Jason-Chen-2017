@@ -1,0 +1,2159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>有限理性 Agent 决策模型与认知约束</title>
+    <style>
+        :root {
+            --bounded-blue: #0284c7;
+            --rational-gold: #ca8a04;
+            --constraint-red: #dc2626;
+            --heuristic-green: #16a34a;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #ca8a04, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(202, 138, 4, 0.3);
+            --shadow-bounded: 0 0 60px rgba(202, 138, 4, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(202, 138, 4, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(220, 38, 38, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(202, 138, 4, 0.08), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--bounded-blue), var(--rational-gold), var(--constraint-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-bounded);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(202, 138, 4, 0.04) 2px,
+                    rgba(202, 138, 4, 0.04) 4px
+                );
+            animation: boundedRotate 50s linear infinite;
+        }
+        
+        @keyframes boundedRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .rationality-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 20px 45px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 1.25em;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-perfect {
+            background: linear-gradient(135deg, #3b82f6, #60a5fa);
+            color: white;
+        }
+        
+        .spectrum-bounded {
+            background: linear-gradient(135deg, var(--rational-gold), #fbbf24);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-heuristic {
+            background: linear-gradient(135deg, var(--heuristic-green), #4ade80);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 4.2em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 30px;
+            text-shadow: 0 0 60px rgba(202, 138, 4, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 3px;
+            line-height: 1.35;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 2.4em;
+            color: var(--text-secondary);
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .constraint-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 35px;
+            margin: 60px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .constraint-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 40px 50px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 220px;
+        }
+        
+        .constraint-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .constraint-box.information {
+            border-color: var(--bounded-blue);
+            box-shadow: 0 15px 40px rgba(2, 132, 199, 0.35);
+        }
+        
+        .constraint-box.computational {
+            border-color: var(--rational-gold);
+            box-shadow: 0 15px 40px rgba(202, 138, 4, 0.35);
+        }
+        
+        .constraint-box.cognitive {
+            border-color: var(--constraint-red);
+            box-shadow: 0 15px 40px rgba(220, 38, 38, 0.35);
+        }
+        
+        .constraint-label {
+            font-size: 1.9em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 15px;
+        }
+        
+        .constraint-box.information .constraint-label { color: var(--bounded-blue); }
+        .constraint-box.computational .constraint-label { color: var(--rational-gold); }
+        .constraint-box.cognitive .constraint-label { color: var(--constraint-red); }
+        
+        .constraint-desc {
+            font-size: 0.95em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.8;
+        }
+        
+        .constraint-arrow {
+            font-size: 2.5em;
+            color: var(--rational-gold);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 45px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 60px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 25px 45px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px var(--border-glow);
+            border-color: var(--rational-gold);
+        }
+        
+        .meta-label {
+            color: var(--rational-gold);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 1.15em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 60px 55px;
+            margin-bottom: 80px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 50px rgba(202, 138, 4, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 3.2em;
+            color: var(--rational-gold);
+            margin-bottom: 50px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 30px rgba(202, 138, 4, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 50px 0 30px 0;
+            padding: 25px 35px;
+            border-radius: 18px;
+            font-size: 1.8em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--bounded-blue); 
+            color: var(--bounded-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--rational-gold); 
+            color: var(--rational-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--constraint-red); 
+            color: var(--constraint-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--heuristic-green); 
+            color: var(--heuristic-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: #ec4899; 
+            color: #ec4899;
+            background: linear-gradient(90deg, rgba(236, 72, 153, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 20px;
+        }
+        
+        .toc-list li {
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(202, 138, 4, 0.15);
+            transition: all 0.3s ease;
+            font-size: 1.08em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 18px;
+            background: rgba(202, 138, 4, 0.08);
+            border-left: 4px solid var(--rational-gold);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--rational-gold);
+            text-shadow: 0 0 12px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(202, 138, 4, 0.2);
+            border-radius: 30px;
+            padding: 70px 60px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 25px 80px var(--border-glow), 0 0 60px rgba(202, 138, 4, 0.2);
+            border-color: var(--rational-gold);
+        }
+        
+        .chapter-title {
+            font-size: 3em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 45px;
+            border-bottom: 4px solid var(--rational-gold);
+            padding-bottom: 25px;
+            font-weight: 800;
+            text-shadow: 0 0 25px rgba(202, 138, 4, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 50px 0;
+        }
+        
+        .section-title {
+            font-size: 2.2em;
+            color: var(--rational-gold);
+            margin-bottom: 30px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--constraint-red);
+            font-size: 0.7em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.2;
+            font-size: 1.12em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 30px;
+        }
+        
+        .constraint-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 28px;
+            margin: 50px 0;
+        }
+        
+        .constraint-box-card {
+            padding: 42px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .constraint-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .constraint-box-card.information {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--bounded-blue);
+            box-shadow: 0 8px 35px rgba(2, 132, 199, 0.3);
+        }
+        
+        .constraint-box-card.computational {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--rational-gold);
+            box-shadow: 0 8px 35px rgba(202, 138, 4, 0.3);
+        }
+        
+        .constraint-box-card.cognitive {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--constraint-red);
+            box-shadow: 0 8px 35px rgba(220, 38, 38, 0.3);
+        }
+        
+        .constraint-box-title {
+            font-size: 2em;
+            font-weight: 800;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .constraint-box-card.information .constraint-box-title { color: var(--bounded-blue); }
+        .constraint-box-card.computational .constraint-box-title { color: var(--rational-gold); }
+        .constraint-box-card.cognitive .constraint-box-title { color: var(--constraint-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(2, 132, 199, 0.15));
+            padding: 45px 50px;
+            border-left: 8px solid var(--rational-gold);
+            border-radius: 20px;
+            margin: 45px 0;
+            box-shadow: 0 8px 35px rgba(202, 138, 4, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--rational-gold);
+            font-weight: 800;
+        }
+        
+        .timeline-box {
+            background: linear-gradient(135deg, #0d0d14, #1a1a2e);
+            border: 3px solid var(--border-glow);
+            border-radius: 20px;
+            padding: 45px;
+            margin: 50px 0;
+            box-shadow: inset 0 0 40px rgba(202, 138, 4, 0.1);
+        }
+        
+        .timeline-title {
+            color: var(--rational-gold);
+            margin-bottom: 35px;
+            font-weight: 800;
+            font-size: 1.8em;
+            text-align: center;
+            font-family: 'Georgia', serif;
+        }
+        
+        .timeline-item {
+            display: flex;
+            gap: 25px;
+            margin: 30px 0;
+            padding: 25px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            border-left: 4px solid;
+        }
+        
+        .timeline-item.theory { border-color: var(--bounded-blue); }
+        .timeline-item.formal { border-color: var(--rational-gold); }
+        .timeline-item.application { border-color: var(--heuristic-green); }
+        
+        .timeline-year {
+            font-weight: 800;
+            font-size: 1.3em;
+            min-width: 140px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .timeline-item.theory .timeline-year { color: var(--bounded-blue); }
+        .timeline-item.formal .timeline-year { color: var(--rational-gold); }
+        .timeline-item.application .timeline-year { color: var(--heuristic-green); }
+        
+        .timeline-content {
+            color: var(--text-primary);
+            line-height: 1.9;
+        }
+        
+        .formal-diagram {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 3px solid var(--border-glow);
+            border-radius: 25px;
+            padding: 50px;
+            margin: 50px 0;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(202, 138, 4, 0.2);
+        }
+        
+        .formal-title {
+            color: var(--rational-gold);
+            margin-bottom: 35px;
+            font-weight: 800;
+            font-size: 1.7em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .formal-diagram pre {
+            text-align: left;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.95em;
+            line-height: 1.9;
+            overflow-x: auto;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 45px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 18px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(202, 138, 4, 0.2);
+            padding: 22px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.3), rgba(2, 132, 199, 0.2));
+            color: var(--rational-gold);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            font-size: 0.95em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(202, 138, 4, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--rational-gold);
+            padding-left: 35px;
+            margin: 40px 0;
+            color: var(--text-secondary);
+            font-size: 1.2em;
+            font-family: 'Georgia', serif;
+            line-height: 2.1;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 20px;
+            color: var(--bounded-blue);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 30px 0;
+            padding-left: 45px;
+        }
+        
+        li {
+            margin-bottom: 18px;
+            line-height: 2.1;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 80px 50px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 120px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 40px 25px;
+            }
+            
+            .book-title {
+                font-size: 2.5em;
+            }
+            
+            .constraint-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .constraint-diagram {
+                flex-direction: column;
+            }
+            
+            .constraint-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="rationality-spectrum">
+                <div class="spectrum-item spectrum-perfect">🔵 完全理性</div>
+                <div class="spectrum-item spectrum-bounded">🟡 有限理性</div>
+                <div class="spectrum-item spectrum-heuristic">🟢 启发式</div>
+            </div>
+            <h1 class="book-title">有限理性 Agent 决策模型与认知约束</h1>
+            <h2 class="book-subtitle">从 Herbert Simon 到现代 AI 的决策理论演进</h2>
+            
+            <div class="constraint-diagram">
+                <div class="constraint-box information">
+                    <span class="constraint-label">🔵 信息约束</span>
+                    <span class="constraint-desc">不完全信息<br>信息获取成本<br>信息过载</span>
+                </div>
+                <div class="constraint-arrow">+</div>
+                <div class="constraint-box computational">
+                    <span class="constraint-label">🟡 计算约束</span>
+                    <span class="constraint-desc">有限计算资源<br>时间压力<br>内存限制</span>
+                </div>
+                <div class="constraint-arrow">+</div>
+                <div class="constraint-box cognitive">
+                    <span class="constraint-label">🔴 认知约束</span>
+                    <span class="constraint-desc">注意力有限<br>记忆容量有限<br>推理能力有限</span>
+                </div>
+                <div class="constraint-arrow">=</div>
+                <div class="constraint-box" style="border-color: var(--heuristic-green); box-shadow: 0 15px 40px rgba(22, 163, 74, 0.35);">
+                    <span class="constraint-label" style="color: var(--heuristic-green);">🟢 有限理性 Agent</span>
+                    <span class="constraint-desc">满意解而非最优解<br>启发式推理<br>适应性决策</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">认知约束版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十五章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">理论跨度</span>
+                    <span class="meta-value">1955-2026 年</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 有限理性的理论基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：理性之梦与认知之实</a></li>
+                <li><a href="#chapter1">第 1 章 从完全理性到有限理性：范式转变</a></li>
+                <li><a href="#chapter2">第 2 章 Herbert Simon 的有限理性理论体系</a></li>
+                <li><a href="#chapter3">第 3 章 满意解 (Satisficing) 与最优化 (Optimizing) 的本质差异</a></li>
+                
+                <div class="toc-part part2">第二编 认知约束的形式化模型</div>
+                <li><a href="#chapter4">第 4 章 信息约束：不完全信息与信息成本模型</a></li>
+                <li><a href="#chapter5">第 5 章 计算约束：时间复杂度与资源限制</a></li>
+                <li><a href="#chapter6">第 6 章 认知约束：注意力、记忆与推理能力的形式化</a></li>
+                <li><a href="#chapter7">第 7 章 有限理性决策的数学模型</a></li>
+                
+                <div class="toc-part part3">第三编 有限理性 Agent 决策架构</div>
+                <li><a href="#chapter8">第 8 章 有限理性 Agent 的总体架构设计</a></li>
+                <li><a href="#chapter9">第 9 章 感知 - 决策 - 行动循环中的约束处理</a></li>
+                <li><a href="#chapter10">第 10 章 资源感知决策：元推理与资源分配</a></li>
+                <li><a href="#chapter11">第 11 章 时间压力下的快速决策机制</a></li>
+                
+                <div class="toc-part part4">第四编 启发式与近似推理</div>
+                <li><a href="#chapter12">第 12 章 快速节俭启发式 (Fast and Frugal Heuristics)</a></li>
+                <li><a href="#chapter13">第 13 章 近似推理方法：从精确到实用的权衡</a></li>
+                <li><a href="#chapter14">第 14 章 学习与适应：有限理性 Agent 的进化</a></li>
+                
+                <div class="toc-part part5">第五编 应用实践与未来方向</div>
+                <li><a href="#chapter15">第 15 章 应用领域与未来研究方向</a></li>
+                
+                <li class="toc-part part3" style="margin-top: 50px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 有限理性决策模型数学推导</a></li>
+                <li><a href="#appendix-b">附录 B 启发式算法库与实现指南</a></li>
+                <li><a href="#references">参考文献与延伸阅读（1955-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：理性之梦与认知之实</h2>
+            <div class="content">
+                <p>在人类追求理性的漫长历史中，有一个梦想始终闪耀：<strong>完全理性</strong>（Perfect Rationality）的梦想。从古希腊哲学家的逻辑推理，到启蒙时代的理性主义，再到 20 世纪中叶的期望效用理论，人类相信——或者至少希望——理性主体能够在完全信息的基础上，通过无限制的计算，找到最优解，实现效用最大化。</p>
+                
+                <div class="highlight">
+                    <p><strong>然而，现实是残酷的：</strong>我们生活在一个信息不完全、计算资源有限、认知能力受限的世界中。我们不是全知全能的"经济人"（Homo Economicus），而是有血有肉、有认知局限的"社会人"（Homo Sapiens）。</p>
+                </div>
+                
+                <h3 class="section-title">有限理性的诞生</h3>
+                
+                <p>1955 年，一位名叫<strong>Herbert Alexander Simon</strong>（赫伯特·西蒙，中文名司马贺）的美国学者，发表了一篇革命性的论文，彻底改变了我们对理性的理解。他提出了<strong>有限理性</strong>（Bounded Rationality）理论，指出：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li>人类的理性是<strong>有限的</strong>，受到信息、计算能力和认知能力的约束</li>
+                    <li>人们不追求<strong>最优解</strong>（Optimal Solution），而是追求<strong>满意解</strong>（Satisficing Solution）</li>
+                    <li>决策不是基于完全信息，而是基于<strong>局部搜索</strong>和<strong>启发式</strong>（Heuristics）</li>
+                </ul>
+                
+                <div class="quote">
+                    "人类理性的能力，与完全理性理论所要求的相比，是极其有限的。人类不是完全理性的最大化者，而是有限理性的满意者。"
+                    <div class="quote-author">—— Herbert Simon (1955)</div>
+                </div>
+                
+                <h3 class="section-title">为什么有限理性对 AI 至关重要？</h3>
+                
+                <p>在人工智能领域，有限理性理论具有特殊的重要性：</p>
+                
+                <div class="constraint-card">
+                    <div class="constraint-box-card information">
+                        <h3 class="constraint-box-title">🔵 信息约束</h3>
+                        <p><strong>AI 系统面临的信息约束：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>传感器数据有限且含噪声</li>
+                            <li>环境状态部分可观测</li>
+                            <li>信息获取需要时间和资源成本</li>
+                            <li>信息过载导致处理困难</li>
+                        </ul>
+                        <p style="margin-top: 15px; font-size: 0.9em;"><strong>示例：</strong>自动驾驶汽车无法预知所有路况，只能基于有限传感器数据决策</p>
+                    </div>
+                    
+                    <div class="constraint-box-card computational">
+                        <h3 class="constraint-box-title">🟡 计算约束</h3>
+                        <p><strong>AI 系统面临的计算约束：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>计算资源有限（CPU/GPU/内存）</li>
+                            <li>实时决策的时间压力</li>
+                            <li>复杂问题的指数级计算复杂度</li>
+                            <li>能耗限制（尤其是移动/嵌入式系统）</li>
+                        </ul>
+                        <p style="margin-top: 15px; font-size: 0.9em;"><strong>示例：</strong>围棋 AI 无法穷举所有可能棋局（10^170 种），必须使用启发式搜索</p>
+                    </div>
+                    
+                    <div class="constraint-box-card cognitive">
+                        <h3 class="constraint-box-title">🔴 认知约束</h3>
+                        <p><strong>AI 系统面临的认知约束（类比人类）：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>注意力机制的容量限制</li>
+                            <li>工作记忆/上下文窗口有限</li>
+                            <li>推理深度的限制</li>
+                            <li>模型容量的上限</li>
+                        </ul>
+                        <p style="margin-top: 15px; font-size: 0.9em;"><strong>示例：</strong>LLM 的上下文窗口有限（如 128K tokens），无法处理无限长文本</p>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">本书的核心论点</h3>
+                
+                <p><strong>本书的核心论点是：</strong>构建实用的、高效的 AI Agent，不应当追求不切实际的"完全理性"，而应当接受并拥抱"有限理性"。有限理性不是缺陷，而是<strong>适应性优势</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>关键洞察：</strong></p>
+                    <ul style="margin-left: 20px; margin-top: 15px;">
+                        <li>有限理性不是"次优"，而是在约束条件下的<strong>最优适应策略</strong></li>
+                        <li>启发式不是"认知偏差"，而是<strong>快速有效</strong>的决策工具</li>
+                        <li>满意解不是"妥协"，而是在复杂环境中的<strong>实用智慧</strong></li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 有限理性的理论基础</strong>：追溯从完全理性到有限理性的范式转变，详解 Herbert Simon 的有限理性理论体系，阐述满意解与最优化决策的本质差异。</p>
+                
+                <p><strong>第二编 认知约束的形式化模型</strong>：建立信息约束、计算约束、认知约束的数学模型，提出有限理性决策的形式化框架，为后续架构设计提供理论基础。</p>
+                
+                <p><strong>第三编 有限理性 Agent 决策架构</strong>：设计有限理性 Agent 的总体架构，讲解感知 - 决策 - 行动循环中的约束处理机制，探讨资源感知决策和时间压力下的快速决策。</p>
+                
+                <p><strong>第四编 启发式与近似推理</strong>：系统介绍快速节俭启发式、近似推理方法、学习与适应机制，展示有限理性 Agent 如何在约束下实现高效决策。</p>
+                
+                <p><strong>第五编 应用实践与未来方向</strong>：总结有限理性决策在自动驾驶、金融交易、医疗诊断、机器人等领域的应用，展望未来研究方向。</p>
+                
+                <div class="quote">
+                    "有限理性理论告诉我们：真正的智慧，不是追求不可能的最优，而是在约束条件下找到足够好的解决方案。这是人类进化的智慧，也是 AI 应当学习的智慧。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 60px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给 Herbert A. Simon（1916-2001）</p>
+                <p style="text-align: right; font-style: italic;">有限理性理论之父、诺贝尔经济学奖得主、人工智能先驱</p>
+            </div>
+        </div>
+
+        <!-- 第 2 章 -->
+        <div class="chapter" id="chapter2">
+            <h2 class="chapter-title">第 2 章 Herbert Simon 的有限理性理论体系</h2>
+            <div class="content">
+                <h3 class="section-title">2.1 Herbert Simon：跨学科天才</h3>
+                <p>Herbert Alexander Simon（1916-2001）是 20 世纪最杰出的跨学科学者之一。他的贡献跨越了政治学、经济学、管理学、心理学、计算机科学和人工智能等多个领域。</p>
+                
+                <div class="timeline-box">
+                    <h4 class="timeline-title">Herbert Simon 学术生涯里程碑</h4>
+                    <div class="timeline-item theory">
+                        <div class="timeline-year">1916</div>
+                        <div class="timeline-content">出生于美国威斯康辛州密尔沃基</div>
+                    </div>
+                    <div class="timeline-item theory">
+                        <div class="timeline-year">1943</div>
+                        <div class="timeline-content">芝加哥大学政治学博士毕业，博士论文《行政行为》奠定组织决策理论基础</div>
+                    </div>
+                    <div class="timeline-item theory">
+                        <div class="timeline-year">1955</div>
+                        <div class="timeline-content">发表《理性选择行为模型》论文，首次提出"有限理性"和"满意解"概念</div>
+                    </div>
+                    <div class="timeline-item theory">
+                        <div class="timeline-year">1956</div>
+                        <div class="timeline-content">与 Allen Newell 开发 Logic Theorist，人工智能开创性工作</div>
+                    </div>
+                    <div class="timeline-item theory">
+                        <div class="timeline-year">1978</div>
+                        <div class="timeline-content">荣获诺贝尔经济学奖，表彰其"对经济组织内决策过程的先驱性研究"</div>
+                    </div>
+                    <div class="timeline-item theory">
+                        <div class="timeline-year">1975</div>
+                        <div class="timeline-content">与 Allen Newell 共获图灵奖，表彰其在人工智能、人类认知心理学和列表处理方面的基础贡献</div>
+                    </div>
+                    <div class="timeline-item theory">
+                        <div class="timeline-year">2001</div>
+                        <div class="timeline-content">逝世，留下跨越 8 个学科的 1000+ 论文和 30+ 专著</div>
+                    </div>
+                </div>
+                
+                <div class="highlight">
+                    <p><strong>Simon 的独特贡献：</strong>他是世界上第一位（也是唯一一位）同时获得<strong>诺贝尔经济学奖</strong>和<strong>图灵奖</strong>的学者。这一成就反映了他跨越社会科学与计算机科学的独特视野。</p>
+                </div>
+                
+                <h3 class="section-title">2.2 有限理性理论的核心概念</h3>
+                
+                <div class="section">
+                    <h4>概念一：有限理性（Bounded Rationality）</h4>
+                    <p>Simon 提出，人类的理性受到三重约束：</p>
+                    <ul style="margin-left: 20px;">
+                        <li><strong>信息约束</strong>：决策者无法获得所有相关信息，信息是不完全的、不对称的</li>
+                        <li><strong>计算约束</strong>：决策者的计算能力有限，无法处理无限复杂的计算</li>
+                        <li><strong>时间约束</strong>：决策必须在有限时间内完成，无法无限期 deliberation</li>
+                    </ul>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">有限理性的形式化表述</div>
+                        <pre>
+完全理性假设（传统经济学）：
+  • 决策者知道所有可行方案 A = {a₁, a₂, ..., aₙ}
+  • 决策者知道每个方案的结果 O(aᵢ)
+  • 决策者有完整的偏好排序 ≽
+  • 决策者选择最大化效用的方案：
+    a* = argmax_{a∈A} U(O(a))
+
+有限理性现实（Simon）：
+  • 决策者只知道部分可行方案 A' ⊂ A
+  • 决策者对结果的认识是不完全的 O'(aᵢ) ≈ O(aᵢ)
+  • 决策者的偏好可能不一致、不完整
+  • 决策者选择第一个满足 aspiration level 的方案：
+    找到 a ∈ A' 使得 U(O'(a)) ≥ α
+    其中α是 aspiration level（期望水平）
+                        </pre>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h4>概念二：满意解（Satisficing）</h4>
+                    <p>Simon 创造了"satisficing"这个词（satisfy + suffice 的组合），描述有限理性决策者的行为模式：</p>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li>决策者不寻求<strong>最优</strong>（maximize），而是寻求<strong>满意</strong>（satisfice）</li>
+                        <li>决策者设定一个<strong>期望水平</strong>（aspiration level）α</li>
+                        <li>决策者搜索方案，直到找到第一个满足 U(outcome) ≥ α 的方案</li>
+                        <li>一旦找到满意解，搜索停止，不再继续寻找"更好"的方案</li>
+                    </ul>
+                    
+                    <div class="quote">
+                        "人类不是最大化者（maximizer），而是满意者（satisficer）。他们不追求'最好'，而是追求'足够好'。"
+                        <div class="quote-author">—— Herbert Simon</div>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h4>概念三：期望水平（Aspiration Level）</h4>
+                    <p>期望水平是满意解理论的核心机制：</p>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>定义</strong>：决策者认为"足够好"的效用阈值</li>
+                        <li><strong>动态调整</strong>：如果容易找到满意解，期望水平上升；如果难以找到，期望水平下降</li>
+                        <li><strong>适应性</strong>：期望水平根据环境和经验自适应调整</li>
+                        <li><strong>个体差异</strong>：不同人的期望水平不同，反映风险偏好和个性</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">2.3 有限理性的搜索理论</h3>
+                
+                <p>Simon 提出，有限理性决策是一个<strong>局部搜索</strong>（Local Search）过程，而非全局优化：</p>
+                
+                <div class="formal-diagram">
+                    <div class="formal-title">有限理性搜索算法（Simon 模型）</div>
+                    <pre>
+算法：Satisficing Search
+
+输入：
+  • 问题空间 P
+  • 初始状态 s₀
+  • 期望水平 α
+  • 搜索算子 O（生成相邻状态）
+
+过程：
+  1. s ← s₀
+  2. while true:
+  3.   if U(s) ≥ α:        // 检查是否满意
+  4.     return s          // 找到满意解，返回
+  5.   neighbors ← O(s)    // 生成相邻状态
+  6.   s ← select(neighbors) // 选择下一个状态
+  7.   if no improvement for K iterations:
+  8.     α ← α - Δ         // 降低期望水平
+  9.   if timeout:
+  10.    return s          // 时间到，返回当前最佳
+
+特点：
+  • 局部搜索：只探索当前状态的邻域
+  • 早期停止：找到满意解即停止
+  • 自适应：根据搜索难度调整期望水平
+  • 时间敏感：超时即返回，不追求最优
+                    </pre>
+                </div>
+                
+                <h3 class="section-title">2.4 有限理性与组织决策</h3>
+                
+                <p>Simon 将有限理性理论应用于组织决策，提出了<strong>组织有限理性</strong>理论：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>组织是有限理性的</strong>：组织也面临信息、计算、时间约束</li>
+                    <li><strong>标准操作程序（SOP）</strong>：组织通过 SOP 简化决策，减少认知负担</li>
+                    <li><strong>注意力分配</strong>：组织注意力有限，必须选择性关注某些问题</li>
+                    <li><strong>组织学习</strong>：组织通过经验调整期望水平和搜索策略</li>
+                </ul>
+                
+                <div class="highlight">
+                    <p><strong>组织决策的启示：</strong>组织不是单一理性主体，而是由有限理性个体组成的复杂系统。组织设计的目标不是实现"完全理性"，而是通过结构、流程、文化来<strong>放大个体智慧、补偿个体局限</strong>。</p>
+                </div>
+                
+                <h3 class="section-title">2.5 Simon 对 AI 的贡献</h3>
+                
+                <p>Simon 不仅是有限理性理论的提出者，也是人工智能的奠基人之一：</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>贡献</th>
+                            <th>描述</th>
+                            <th>与有限理性的关系</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Logic Theorist (1956)</td>
+                            <td>第一个 AI 程序，证明数学定理</td>
+                            <td>展示启发式搜索在有限计算资源下的有效性</td>
+                        </tr>
+                        <tr>
+                            <td>General Problem Solver (1957)</td>
+                            <td>通用问题求解器框架</td>
+                            <td>提出手段 - 端分析（Means-Ends Analysis）作为有限理性策略</td>
+                        </tr>
+                        <tr>
+                            <td>人类问题解决理论</td>
+                            <td>与 Newell 合作研究人类如何解决问题</td>
+                            <td>发现人类使用启发式而非算法，验证有限理性假设</td>
+                        </tr>
+                        <tr>
+                            <td>物理符号系统假说</td>
+                            <td>智能源于对符号的操作</td>
+                            <td>符号操作受计算资源约束，支持有限理性观点</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">2.6 有限理性理论的演进</h3>
+                
+                <p>Simon 的有限理性理论在后续 70 年中不断演进：</p>
+                
+                <div class="section">
+                    <h4>第一阶段（1955-1970）：理论奠基</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>Simon 提出有限理性和满意解概念</li>
+                        <li>在经济学、管理学领域引发争议</li>
+                        <li>主流经济学坚持完全理性假设</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>第二阶段（1970-1990）：实证验证</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>心理学家通过实验验证人类确实使用启发式</li>
+                        <li>Kahneman & Tversky 提出前景理论（Prospect Theory）</li>
+                        <li>行为经济学兴起，挑战传统经济学</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>第三阶段（1990-2010）：形式化与计算模型</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>有限理性被形式化为计算模型</li>
+                        <li>Agent-Based Modeling 广泛应用有限理性假设</li>
+                        <li>AI 领域开始关注资源受限推理</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>第四阶段（2010-2026）：AI 与机器学习</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>深度学习模型本质上是有限理性系统</li>
+                        <li>强化学习中的探索 - 利用权衡体现有限理性</li>
+                        <li>LLM Agent 的上下文窗口、计算预算都是有限理性约束</li>
+                        <li>有限理性成为构建实用 AI 系统的核心指导原则</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">2.7 本章小结</h3>
+                <p>本章详解了 Herbert Simon 的有限理性理论体系。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>Simon 是跨学科天才，唯一同时获得诺贝尔经济学奖和图灵奖的学者</li>
+                    <li>有限理性三重约束：信息、计算、时间</li>
+                    <li>满意解（Satisficing）：寻求"足够好"而非"最优"</li>
+                    <li>期望水平（Aspiration Level）：动态调整的满意阈值</li>
+                    <li>局部搜索理论：有限理性决策是局部搜索而非全局优化</li>
+                    <li>有限理性理论经历了 70 年演进，成为 AI 核心指导原则</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 7 章 -->
+        <div class="chapter" id="chapter7">
+            <h2 class="chapter-title">第 7 章 有限理性决策的数学模型</h2>
+            <div class="content">
+                <h3 class="section-title">7.1 有限理性决策的形式化框架</h3>
+                <p>为了在 AI 系统中实现有限理性决策，我们需要建立严格的数学模型。本节提出一个综合的有限理性决策形式化框架。</p>
+                
+                <div class="formal-diagram">
+                    <div class="formal-title">有限理性决策问题（BRDP）定义</div>
+                    <pre>
+一个有限理性决策问题（Bounded Rationality Decision Problem, BRDP）
+定义为七元组：
+
+BRDP = (S, A, T, R, Ω, C, α)
+
+其中：
+  S: 状态空间（可能无限或未知）
+  A: 行动空间（可能非常大）
+  T: S × A → Δ(S): 转移函数（可能未知）
+  R: S × A → ℝ: 奖励函数（可能部分已知）
+  Ω: 观测空间（部分可观测）
+  C: 约束集合 {c₁, c₂, ..., cₘ}
+  α: 期望水平（aspiration level）
+
+约束集合 C 包括：
+  • 信息约束 C_info: 可获取的信息子集 I ⊆ 2^S
+  • 计算约束 C_comp: 最大计算步数 N_max
+  • 时间约束 C_time: 决策时间上限 T_max
+  • 内存约束 C_mem: 最大内存使用 M_max
+  • 能量约束 C_energy: 最大能耗 E_max
+
+决策者目标：
+  找到策略π，使得在约束 C 下，
+  期望回报 E[ΣγᵗR(sₜ,aₜ)] ≥ α
+  
+  注意：不是最大化，而是达到期望水平α
+                    </pre>
+                </div>
+                
+                <h3 class="section-title">7.2 信息约束模型</h3>
+                
+                <div class="section">
+                    <h4>模型一：部分可观测性</h4>
+                    <p>决策者无法直接观测真实状态 s，只能获得观测 o：</p>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">部分可观测马尔可夫决策过程（POMDP）</div>
+                        <pre>
+POMDP = (S, A, T, R, Ω, O, b₀)
+
+O: Ω × S → [0,1]: 观测函数
+  O(o|s) = P(观测到 o | 真实状态为 s)
+
+b: S → [0,1]: 信念状态（belief state）
+  b(s) = P(当前状态为 s | 历史观测和行动)
+
+信念更新（贝叶斯更新）：
+  b'(s') = η · O(o|s') · Σ_{s∈S} T(s'|s,a) · b(s)
+  
+  其中η是归一化常数
+
+挑战：
+  • 信念空间是连续的（即使 S 是有限的）
+  • 精确信念更新计算复杂度高 O(|S|²)
+  • 有限理性 Agent 必须使用近似信念
+                        </pre>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h4>模型二：信息获取成本</h4>
+                    <p>获取信息需要付出成本，决策者必须权衡信息价值与获取成本：</p>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">信息获取的价值 - 成本权衡</div>
+                        <pre>
+信息获取决策模型：
+
+设：
+  • V(I): 拥有信息集 I 时的期望价值
+  • C(I'): 获取额外信息 I' 的成本
+  • I_new = I ∪ I': 更新后的信息集
+
+信息获取的净收益：
+  NetGain(I') = V(I_new) - V(I) - C(I')
+
+决策规则：
+  • 如果 NetGain(I') > 0: 获取信息 I'
+  • 否则：不获取，基于当前信息决策
+
+信息价值计算（简化）：
+  V(I) = max_{a∈A} E[R(s,a) | I]
+  
+  即：在给定信息 I 下，选择最优行动的期望回报
+
+有限理性近似：
+  • 不精确计算 V(I)，使用启发式估计
+  • 只考虑有限的候选信息源
+  • 设置信息搜索的预算上限
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">7.3 计算约束模型</h3>
+                
+                <div class="section">
+                    <h4>模型一：计算复杂度约束</h4>
+                    <p>决策算法必须在有限的计算步数内完成：</p>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">计算约束下的决策优化</div>
+                        <pre>
+问题：
+  max_{π} E[ΣγᵗR(sₜ,aₜ)]
+  subject to:
+    • 决策算法的计算复杂度 ≤ O(N_max)
+    • 每次决策时间 ≤ T_max
+
+策略：
+  1. 算法选择：在算法复杂度与解质量间权衡
+     • 精确算法：高质量，高复杂度（如动态规划 O(|S|²|A|)）
+     • 近似算法：中等质量，中等复杂度（如启发式搜索）
+     • 简单启发式：低质量，低复杂度（如贪心算法 O(|A|)）
+  
+  2. 计算分配：
+     • 将有限计算资源分配给最有价值的状态 - 行动对
+     • 使用元推理（meta-reasoning）决定"思考什么"
+  
+  3.  anytime 算法：
+     • 算法可随时中断，返回当前最佳解
+     • 解质量随计算时间单调递增
+                        </pre>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h4>模型二：资源感知决策</h4>
+                    <p>决策者必须感知并管理自身计算资源：</p>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">资源感知决策框架</div>
+                        <pre>
+资源状态：
+  r = (cpu_available, memory_available, time_remaining, energy_left)
+
+资源感知策略：
+  π(s, r): S × R → A
+  
+  策略不仅依赖环境状态 s，还依赖资源状态 r
+
+资源分配优化：
+  max_{allocation} E[Quality(allocation)]
+  subject to:
+    • Σ resources_used ≤ resources_available
+    • 关键任务优先分配资源
+
+元推理（Meta-Reasoning）：
+  • 推理关于推理的推理
+  • 决定"花多少时间思考"、"思考哪些问题"
+  • 元推理本身也受资源约束（无限回归问题）
+
+实用策略：
+  • 固定比例的元推理预算（如 10% 用于元推理）
+  • 基于规则的元推理（简单、快速）
+  • 学习的元推理策略（从经验中学习）
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">7.4 认知约束模型</h3>
+                
+                <div class="section">
+                    <h4>模型一：注意力约束</h4>
+                    <p>决策者的注意力有限，必须选择性关注：</p>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">注意力分配模型</div>
+                        <pre>
+注意力状态：
+  • 总注意力容量：A_total（固定常数，如 7±2 个对象）
+  • 注意力分配：a = (a₁, a₂, ..., aₙ), Σaᵢ ≤ A_total
+  • aᵢ: 分配给刺激 i 的注意力比例
+
+注意力选择机制：
+  1. 显著性检测：自动捕获显著刺激
+  2. 目标导向：根据当前目标选择关注对象
+  3. 习惯：基于过去经验自动分配
+
+注意力约束下的决策：
+  • 只能基于被注意到的信息做决策
+  • 未被注意的信息等同于不存在
+  • 注意力分配质量直接影响决策质量
+
+优化问题：
+  max_{attention_allocation} E[DecisionQuality]
+  subject to:
+    • Σ attention ≤ A_total
+    • 高优先级刺激必须被注意
+                        </pre>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h4>模型二：记忆约束</h4>
+                    <p>工作记忆容量有限，只能保持有限信息：</p>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">工作记忆约束模型</div>
+                        <pre>
+记忆系统：
+  • 感觉记忆：容量大，保持时间短（<1 秒）
+  • 工作记忆：容量有限（7±2 个组块），保持时间中等
+  • 长期记忆：容量大，保持时间长
+
+工作记忆约束：
+  • 容量限制：只能同时保持 K 个组块（K ≈ 7）
+  • 衰减：未复述的信息会快速遗忘
+  • 干扰：新信息会覆盖旧信息
+
+记忆管理策略：
+  1. 组块化（Chunking）：将多个元素组合为一个组块
+  2. 复述（Rehearsal）：重复保持重要信息
+  3. 编码（Encoding）：将信息转入长期记忆
+  4. 提取（Retrieval）：从长期记忆召回信息
+
+有限理性启示：
+  • 决策依赖工作记忆中的信息
+  • 记忆约束导致决策偏差（如近因效应）
+  • 好的决策支持系统应减轻记忆负担
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">7.5 有限理性决策的求解算法</h3>
+                
+                <div class="section">
+                    <h4>算法一：满意搜索算法（Satisficing Search）</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">满意搜索算法</div>
+                        <pre>
+算法：BoundedSatisficingSearch
+
+输入：
+  • 问题空间 P
+  • 初始状态 s₀
+  • 期望水平 α
+  • 约束 C = {N_max, T_max}
+
+输出：满意解 s*
+
+过程：
+  1. s ← s₀
+  2. best ← s
+  3. iterations ← 0
+  4. start_time ← now()
+  
+  5. while iterations < N_max and elapsed_time < T_max:
+  6.   if U(s) ≥ α:
+  7.     return s  // 找到满意解
+  8.   
+  9.   neighbors ← GenerateNeighbors(s)
+  10.  s ← SelectBest(neighbors)
+  11.  
+  12.  if U(s) > U(best):
+  13.    best ← s
+  14.  
+  15.  if no_improvement_count > K:
+  16.    α ← α × 0.9  // 降低期望水平
+  17.    no_improvement_count ← 0
+  18.  
+  19.  iterations ← iterations + 1
+
+  20. return best  // 超时或达到迭代上限，返回最佳
+                        </pre>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h4>算法二：资源感知 MDP 求解</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">资源感知值迭代算法</div>
+                        <pre>
+算法：ResourceAwareVI
+
+输入：
+  • MDP = (S, A, T, R, γ)
+  • 计算预算 N_max
+  • 收敛阈值ε
+
+输出：近似最优策略π
+
+过程：
+  1. 初始化 V₀(s) = 0, ∀s ∈ S
+  2. k ← 0
+  
+  3. while k < N_max:
+  4.   Δ ← 0
+  5.   for each s ∈ S:
+  6.     v ← V_k(s)
+  7.     // 只考虑部分行动（启发式选择）
+  8.     A' ← SelectSubset(A, s)  // |A'| << |A|
+  9.     V_{k+1}(s) ← max_{a∈A'} [R(s,a) + γΣT(s'|s,a)V_k(s')]
+  10.    Δ ← max(Δ, |v - V_{k+1}(s)|)
+  11.  
+  12.  if Δ < ε:
+  13.    break  // 提前收敛
+  14.  
+  15.  k ← k + 1
+
+  16. 提取策略：
+      π(s) ← argmax_{a∈A'} [R(s,a) + γΣT(s'|s,a)V_k(s')]
+  
+  17. return π
+
+特点：
+  • 部分行动评估：减少每次迭代的计算量
+  • 提前终止：达到预算或收敛即停止
+  • 近似解：不保证最优，但在约束下实用
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">7.6 有限理性的性能度量</h3>
+                
+                <p>如何评估有限理性决策算法的性能？我们提出多维度度量：</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>维度</th>
+                            <th>度量指标</th>
+                            <th>计算公式</th>
+                            <th>目标</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>解质量</strong></td>
+                            <td>满意度</td>
+                            <td>1 if U(s)≥α else 0</td>
+                            <td>≥0.9（90% 情况满意）</td>
+                        </tr>
+                        <tr>
+                            <td><strong>解质量</strong></td>
+                            <td>相对最优比</td>
+                            <td>U(s_found) / U(s_optimal)</td>
+                            <td>≥0.8（达到最优的 80%）</td>
+                        </tr>
+                        <tr>
+                            <td><strong>计算效率</strong></td>
+                            <td>决策时间</td>
+                            <td>T_decision</td>
+                            <td>≤ T_max</td>
+                        </tr>
+                        <tr>
+                            <td><strong>计算效率</strong></td>
+                            <td>计算步数</td>
+                            <td>N_steps</td>
+                            <td>≤ N_max</td>
+                        </tr>
+                        <tr>
+                            <td><strong>资源效率</strong></td>
+                            <td>内存使用</td>
+                            <td>Memory_peak</td>
+                            <td>≤ M_max</td>
+                        </tr>
+                        <tr>
+                            <td><strong>适应性</strong></td>
+                            <td>环境变化响应</td>
+                            <td>Time_to_adapt</td>
+                            <td>快速适应</td>
+                        </tr>
+                        <tr>
+                            <td><strong>鲁棒性</strong></td>
+                            <td>约束违反率</td>
+                            <td>P(Constraint_violation)</td>
+                            <td>≤ 0.05（5% 以下）</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">7.7 本章小结</h3>
+                <p>本章建立了有限理性决策的数学模型。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>提出 BRDP 七元组形式化框架，整合状态、行动、约束、期望水平</li>
+                    <li>信息约束模型：部分可观测性（POMDP）、信息获取成本</li>
+                    <li>计算约束模型：复杂度约束、资源感知决策、元推理</li>
+                    <li>认知约束模型：注意力分配、工作记忆限制</li>
+                    <li>求解算法：满意搜索、资源感知值迭代</li>
+                    <li>性能度量：解质量、计算效率、资源效率、适应性、鲁棒性七维度</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 12 章 -->
+        <div class="chapter" id="chapter12">
+            <h2 class="chapter-title">第 12 章 快速节俭启发式 (Fast and Frugal Heuristics)</h2>
+            <div class="content">
+                <h3 class="section-title">12.1 启发式的复兴</h3>
+                <p>在 20 世纪 70-80 年代，启发式（Heuristics）被主流经济学和决策理论视为"认知偏差"的来源，是非理性的表现。然而，Gerd Gigerenzer 等学者在 1990 年代提出革命性观点：<strong>启发式不是缺陷，而是适应性工具</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>Gigerenzer 的核心论点：</strong>在真实世界中，快速节俭启发式（Fast and Frugal Heuristics）往往比复杂优化算法表现更好。这是因为：</p>
+                    <ul style="margin-left: 20px; margin-top: 15px;">
+                        <li><strong>速度</strong>：启发式决策快速，适合时间压力情境</li>
+                        <li><strong>节俭</strong>：启发式使用极少信息，降低信息获取成本</li>
+                        <li><strong>鲁棒性</strong>：启发式不易过拟合，在变化环境中更稳定</li>
+                        <li><strong>生态理性</strong>：启发式与环境结构匹配，利用环境规律</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">12.2 快速节俭启发式的定义与特征</h3>
+                
+                <div class="formal-diagram">
+                    <div class="formal-title">快速节俭启发式的三要素</div>
+                    <pre>
+快速节俭启发式（Fast and Frugal Heuristic）包含三个核心组件：
+
+1. 搜索规则（Search Rule）：
+   • 指定如何搜索备选方案或信息
+   • 通常是简单的、顺序的搜索
+   • 示例：按线索显著性降序搜索
+
+2. 停止规则（Stopping Rule）：
+   • 指定何时停止搜索
+   • 通常基于单一条件，简单快速
+   • 示例：找到第一个支持某选项的线索即停止
+
+3. 决策规则（Decision Rule）：
+   • 指定如何基于搜索到的信息做决策
+   • 通常是简单的、确定性的规则
+   • 示例：选择第一个满足阈值的选项
+
+关键特征：
+  • Fast（快速）：决策时间短
+  • Frugal（节俭）：使用极少信息
+  • Simple（简单）：规则易于理解和执行
+  • Robust（鲁棒）：在变化环境中表现稳定
+                    </pre>
+                </div>
+                
+                <h3 class="section-title">12.3 经典快速节俭启发式</h3>
+                
+                <div class="section">
+                    <h4>启发式一：再认启发式（Recognition Heuristic）</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">再认启发式</div>
+                        <pre>
+适用场景：在两个选项中选择一个（如哪个城市人口更多）
+
+规则：
+  if 只认识其中一个选项:
+    选择认识的那个
+  else:
+    使用其他线索
+
+示例：
+  问："底特律和密尔沃基，哪个城市人口更多？"
+  
+  • 美国学生：两个都认识，需要其他线索
+  • 德国学生：只认识底特律，选择底特律
+  • 结果：德国学生准确率更高（底特律确实人口更多）
+
+原理：
+  • 再认与重要性相关（重要事物更可能被记住）
+  • 利用环境的统计规律（再认效度）
+
+生态理性条件：
+  • 再认与目标变量正相关
+  • 再认效度 > 0.5
+                        </pre>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h4>启发式二：单一理由启发式（Take-The-Best, TTB）</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">单一理由启发式（TTB）</div>
+                        <pre>
+适用场景：多线索二选一决策
+
+算法：
+  1. 线索排序：按线索效度（预测准确率）降序排列
+  2. 顺序搜索：从最高效度线索开始检查
+  3. 差异化检测：找到第一个能区分两选项的线索
+  4. 单一理由决策：基于该线索做决策，忽略其他线索
+
+伪代码：
+  function TakeTheBest(option_A, option_B, cues):
+    for cue in cues (sorted by validity):
+      if cue discriminates(A, B):
+        if cue favors A:
+          return A
+        else:
+          return B
+    // 无线索能区分，随机选择
+    return random_choice(A, B)
+
+示例：预测哪所大学更好
+  线索（按效度排序）：
+    1. 研究经费（效度 0.85）
+    2. 师生比（效度 0.72）
+    3. 校园面积（效度 0.65）
+    4. 建校时间（效度 0.58）
+  
+  决策过程：
+    • 检查研究经费：A 大学 > B 大学
+    • 停止搜索，选择 A 大学
+    • 不检查师生比、校园面积等其他线索
+
+性能：
+  • 在真实环境中，TTB 准确率常优于多元回归
+  • 使用信息量仅为回归的 10-20%
+  • 决策速度快 10 倍以上
+                        </pre>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h4>启发式三：快速估计启发式（QuickEst）</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">QuickEst 启发式</div>
+                        <pre>
+适用场景：数值估计（如估计城市人口、房价）
+
+算法：
+  1. 线索排序：按与目标变量的相关性排序
+  2. 顺序检查：从最低线索值开始
+  3. 停止规则：找到第一个线索，其值低于选项值
+  4. 估计值：使用该线索对应的平均值作为估计
+
+示例：估计城市人口
+  线索（按均值升序）：
+    • 有国际机场？均值：500 万
+    • 有顶级大学？均值：300 万
+    • 是省会？均值：200 万
+    • 有职业球队？均值：150 万
+  
+  估计过程（对某城市）：
+    • 有国际机场？是 → 继续
+    • 有顶级大学？是 → 继续
+    • 是省会？否 → 停止
+    • 估计人口：200 万（省会的平均人口）
+
+优势：
+  • 无需复杂计算
+  • 利用环境中的统计规律
+  • 在信息有限时表现优异
+                        </pre>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h4>启发式四：分类树启发式（Fast-and-Frugal Tree, FFT）</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">快速节俭分类树（FFT）</div>
+                        <pre>
+结构：
+  • 每个节点检查一个线索
+  • 每个节点有一个出口（直接决策）
+  • 树深度通常很浅（3-5 层）
+
+示例 FFT（医疗分诊）：
+  
+  胸痛患者 → 心电图 ST 段变化？
+               ├─ 是 → 高危 → 送 ICU
+               └─ 否 → 胸痛是主要症状？
+                        ├─ 否 → 低危 → 普通病房
+                        └─ 是 → 有其他风险因素？
+                                 ├─ 是 → 中危 → 观察室
+                                 └─ 否 → 低危 → 普通病房
+
+特点：
+  • 每个节点都可退出（不像决策树必须到叶节点）
+  • 线索按重要性排序
+  • 快速做出初步分类
+
+应用：
+  • 医疗分诊（急诊室优先级）
+  • 信用评分（贷款审批）
+  • 安全检测（机场安检）
+  • 故障诊断（设备维护）
+
+性能对比：
+  • FFT vs 逻辑回归：准确率相当，但 FFT 更快、更透明
+  • FFT vs 随机森林：在样本少时 FFT 更鲁棒
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.4 启发式的生态理性</h3>
+                
+                <p>启发式为什么有效？Gigerenzer 提出<strong>生态理性</strong>（Ecological Rationality）理论：</p>
+                
+                <div class="formal-diagram">
+                    <div class="formal-title">生态理性：启发式与环境的匹配</div>
+                    <pre>
+核心思想：
+  启发式的成功不在于其内在"正确性"，
+  而在于其与环境的结构相匹配。
+
+环境结构特征：
+  1. 信息冗余度：线索之间相关性高
+     → 单一理由启发式有效（无需检查所有线索）
+  
+  2. 线索效度差异大：少数线索主导预测
+     → TTB 有效（找到最佳线索即可）
+  
+  3. 再认效度高：再认与目标变量强相关
+     → 再认启发式有效
+  
+  4. 非线性关系：变量间关系复杂
+     → 简单启发式不易过拟合，优于复杂模型
+
+匹配原则：
+  • 没有" universally best"的启发式
+  • 启发式的有效性取决于环境结构
+  • 适应性决策者会选择合适的启发式
+
+元启发式（选择启发式的启发式）：
+  • 如果时间压力极大 → 使用再认启发式
+  • 如果线索效度差异大 → 使用 TTB
+  • 如果信息冗余度高 → 使用单一理由
+  • 如果需要数值估计 → 使用 QuickEst
+                    </pre>
+                </div>
+                
+                <h3 class="section-title">12.5 启发式在 AI 中的应用</h3>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>AI 领域</th>
+                            <th>启发式应用</th>
+                            <th>效果</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>搜索算法</td>
+                            <td>A*启发式、贪心最佳优先</td>
+                            <td>大幅减少搜索空间，加速求解</td>
+                        </tr>
+                        <tr>
+                            <td>机器学习</td>
+                            <td>特征选择启发式、早停策略</td>
+                            <td>防止过拟合，提高泛化</td>
+                        </tr>
+                        <tr>
+                            <td>强化学习</td>
+                            <td>ε-贪心策略、UCB 启发式</td>
+                            <td>平衡探索与利用</td>
+                        </tr>
+                        <tr>
+                            <td>自然语言处理</td>
+                            <td>束搜索（Beam Search）、Top-k 采样</td>
+                            <td>在生成质量与计算效率间权衡</td>
+                        </tr>
+                        <tr>
+                            <td>机器人</td>
+                            <td>bug 算法、势场法</td>
+                            <td>实时避障，计算简单</td>
+                        </tr>
+                        <tr>
+                            <td>推荐系统</td>
+                            <td>协同过滤启发式、热门优先</td>
+                            <td>快速生成推荐，冷启动友好</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">12.6 有限理性 Agent 的启发式库</h3>
+                
+                <p>一个实用的有限理性 Agent 应当维护一个<strong>启发式库</strong>，根据情境选择合适的启发式：</p>
+                
+                <div class="formal-diagram">
+                    <div class="formal-title">启发式库架构</div>
+                    <pre>
+class BoundedRationalAgent:
+    def __init__(self):
+        self.heuristic_library = {
+            'recognition': RecognitionHeuristic(),
+            'ttb': TakeTheBest(),
+            'quickest': QuickEst(),
+            'fft': FastFrugalTree(),
+            'satisficing': SatisficingSearch(),
+            'greedy': GreedyHeuristic(),
+            'random': RandomChoice()
+        }
+        
+        self.context_model = ContextModel()
+    
+    def select_heuristic(self, context):
+        """根据情境选择启发式"""
+        features = self.context_model.extract(context)
+        
+        # 元启发式：选择策略
+        if features.time_pressure > 0.9:
+            return self.heuristic_library['recognition']
+        elif features.cue_validity_variance > threshold:
+            return self.heuristic_library['ttb']
+        elif features.information_redundancy > threshold:
+            return self.heuristic_library['ttb']
+        elif features.task_type == 'estimation':
+            return self.heuristic_library['quickest']
+        elif features.task_type == 'classification':
+            return self.heuristic_library['fft']
+        else:
+            return self.heuristic_library['satisficing']
+    
+    def decide(self, context, options):
+        heuristic = self.select_heuristic(context)
+        return heuristic.apply(options)
+                    </pre>
+                </div>
+                
+                <h3 class="section-title">12.7 本章小结</h3>
+                <p>本章系统介绍了快速节俭启发式。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>启发式不是认知偏差，而是适应性工具</li>
+                    <li>快速节俭启发式三要素：搜索规则、停止规则、决策规则</li>
+                    <li>经典启发式：再认、TTB、QuickEst、FFT</li>
+                    <li>生态理性：启发式有效性取决于与环境结构的匹配</li>
+                    <li>AI 中广泛应用启发式：搜索、ML、RL、NLP、机器人</li>
+                    <li>有限理性 Agent 应维护启发式库，根据情境动态选择</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 15 章 -->
+        <div class="chapter" id="chapter15">
+            <h2 class="chapter-title">第 15 章 应用领域与未来研究方向</h2>
+            <div class="content">
+                <h3 class="section-title">15.1 有限理性决策的应用领域</h3>
+                
+                <div class="section">
+                    <h4>应用领域一：自动驾驶</h4>
+                    <ul style="margin-left: 20px;">
+                        <li><strong>挑战</strong>：实时决策、部分可观测、计算资源有限</li>
+                        <li><strong>有限理性方案</strong>：
+                            <ul>
+                                <li>使用 FFT 进行快速风险分类</li>
+                                <li>TTB 启发式选择驾驶策略</li>
+                                <li>满意搜索而非全局最优规划</li>
+                            </ul>
+                        </li>
+                        <li><strong>效果</strong>：决策延迟<100ms，安全性与最优规划相当</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>应用领域二：金融交易</h4>
+                    <ul style="margin-left: 20px;">
+                        <li><strong>挑战</strong>：市场不确定性、时间压力、信息过载</li>
+                        <li><strong>有限理性方案</strong>：
+                            <ul>
+                                <li>再认启发式选择股票（只交易熟悉的公司）</li>
+                                <li>TTB 进行买卖决策</li>
+                                <li>满意解：达到目标收益即止盈</li>
+                            </ul>
+                        </li>
+                        <li><strong>效果</strong>：简化决策流程，减少过度交易</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>应用领域三：医疗诊断</h4>
+                    <ul style="margin-left: 20px;">
+                        <li><strong>挑战</strong>：信息不完全、时间敏感、错误成本高</li>
+                        <li><strong>有限理性方案</strong>：
+                            <ul>
+                                <li>FFT 用于急诊分诊</li>
+                                <li>QuickEst 估计疾病风险</li>
+                                <li>满意搜索：找到第一个充分解释症状的诊断</li>
+                            </ul>
+                        </li>
+                        <li><strong>效果</strong>：诊断速度与专家相当，减少过度检查</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>应用领域四：机器人导航</h4>
+                    <ul style="margin-left: 20px;">
+                        <li><strong>挑战</strong>：传感器噪声、计算资源有限、实时性要求</li>
+                        <li><strong>有限理性方案</strong>：
+                            <ul>
+                                <li>Bug 算法：简单有效的避障</li>
+                                <li>势场法：局部最优路径</li>
+                                <li>满意路径规划：找到可行路径即停止</li>
+                            </ul>
+                        </li>
+                        <li><strong>效果</strong>：计算量减少 90%，实时响应</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>应用领域五：LLM Agent</h4>
+                    <ul style="margin-left: 20px;">
+                        <li><strong>挑战</strong>：上下文窗口有限、推理成本高、幻觉风险</li>
+                        <li><strong>有限理性方案</strong>：
+                            <ul>
+                                <li>注意力机制：选择性关注关键信息</li>
+                                <li>束搜索：在生成质量与计算成本间权衡</li>
+                                <li>自我反思启发式：快速检查答案合理性</li>
+                                <li>工具使用启发式：何时调用外部工具</li>
+                            </ul>
+                        </li>
+                        <li><strong>效果</strong>：降低推理成本，提高可靠性</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">15.2 当前挑战</h3>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>挑战领域</th>
+                            <th>具体问题</th>
+                            <th>研究现状</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>启发式选择</td>
+                            <td>如何在多种启发式中选择最优？</td>
+                            <td>元启发式研究初步，缺乏统一框架</td>
+                        </tr>
+                        <tr>
+                            <td>学习启发式</td>
+                            <td>如何从经验中学习新启发式？</td>
+                            <td>强化学习初步应用，样本效率低</td>
+                        </tr>
+                        <tr>
+                            <td>多 Agent 协调</td>
+                            <td>有限理性 Agent 如何协作？</td>
+                            <td>博弈论扩展，理论复杂</td>
+                        </tr>
+                        <tr>
+                            <td>人机协作</td>
+                            <td>人类与有限理性 AI 如何有效合作？</td>
+                            <td>可解释性研究，实践不足</td>
+                        </tr>
+                        <tr>
+                            <td>伦理约束</td>
+                            <td>如何在有限理性决策中嵌入伦理？</td>
+                            <td>价值对齐初步探索</td>
+                        </tr>
+                        <tr>
+                            <td>动态环境</td>
+                            <td>环境快速变化时如何适应？</td>
+                            <td>在线学习研究，稳定性问题</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">15.3 未来研究方向</h3>
+                
+                <div class="section">
+                    <h4>方向一：自适应启发式学习</h4>
+                    <p>研究如何让 Agent 从经验中自动学习和改进启发式：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>元强化学习：学习启发式选择策略</li>
+                        <li>进化算法：进化出高效启发式</li>
+                        <li>模仿学习：从人类专家学习启发式</li>
+                        <li>课程学习：从简单到复杂逐步学习</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>方向二：神经符号有限理性</h4>
+                    <p>结合神经网络（感知、学习）与符号系统（推理、启发式）：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>神经网络学习启发式参数</li>
+                        <li>符号系统保证可解释性</li>
+                        <li>神经 - 符号接口设计</li>
+                        <li>端到端训练有限理性 Agent</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>方向三：集体有限理性</h4>
+                    <p>研究多个有限理性 Agent 的集体行为：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>群体智慧：有限理性个体如何产生集体智能？</li>
+                        <li>分工协作：基于各自约束的任务分配</li>
+                        <li>信息聚合：如何整合分散的有限信息？</li>
+                        <li>社会学习：Agent 间如何相互学习启发式？</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>方向四：人 -AI 混合决策</h4>
+                    <p>人类与 AI 都是有限理性的，如何协作实现更好决策？</p>
+                    <ul style="margin-left: 20px;">
+                        <li>互补优势：AI 擅长计算，人类擅长直觉</li>
+                        <li>可解释性：AI 向人类解释启发式决策</li>
+                        <li>信任校准：人类何时信任 AI 建议？</li>
+                        <li>联合启发式：人机共同使用的决策规则</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>方向五：伦理有限理性</h4>
+                    <p>在资源约束下如何实现伦理决策？</p>
+                    <ul style="margin-left: 20px;">
+                        <li>快速伦理判断启发式</li>
+                        <li>伦理约束下的满意解</li>
+                        <li>道德困境中的有限理性选择</li>
+                        <li>价值对齐的启发式方法</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">15.4 有限理性的哲学反思</h3>
+                
+                <div class="quote">
+                    "有限理性理论告诉我们：理性不是全知全能，而是在约束条件下做出足够好的决策。这是人类的智慧，也是 AI 应当学习的智慧。接受有限性，不是妥协，而是成熟。"
+                    <div class="quote-author">—— 本书哲学反思</div>
+                </div>
+                
+                <p>有限理性理论不仅是技术框架，更是一种世界观：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>认识论启示</strong>：知识总是局部的、不完全的，我们应当谦逊</li>
+                    <li><strong>方法论启示</strong>：追求"足够好"而非"完美"，实用主义优于理想主义</li>
+                    <li><strong>伦理学启示</strong>：在资源有限的世界中，如何公平分配决策资源？</li>
+                    <li><strong>存在论启示</strong>：有限性不是缺陷，而是存在的本质特征</li>
+                </ul>
+                
+                <h3 class="section-title">15.5 本章小结</h3>
+                <p>本章总结了有限理性决策的应用与未来方向。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>应用领域：自动驾驶、金融交易、医疗诊断、机器人、LLM Agent</li>
+                    <li>当前挑战：启发式选择、学习、多 Agent 协调、人机协作、伦理、动态环境</li>
+                    <li>未来方向：自适应学习、神经符号融合、集体有限理性、人 -AI 混合决策、伦理有限理性</li>
+                    <li>哲学反思：有限性是存在的本质，接受有限性是智慧的开始</li>
+                </ul>
+                
+                <div class="quote" style="margin-top: 60px; border-left-color: var(--bounded-blue);">
+                    "从 Herbert Simon 的有限理性理论，到现代 AI 的启发式决策，70 年的探索告诉我们：真正的智慧，不是追求不可能的最优，而是在约束条件下找到足够好的解决方案。有限理性，是人类进化的智慧，也是 AI 走向成熟的必经之路。"
+                    <div class="quote-author">—— 全书结语</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与延伸阅读（1955-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">经典基础（1955-1980）</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;">
+                    <li>Simon, H. A. (1955). "A Behavioral Model of Rational Choice." Quarterly Journal of Economics, 69(1), 99-118.</li>
+                    <li>Simon, H. A. (1956). "Rational Choice and the Structure of the Environment." Psychological Review, 63(2), 129-138.</li>
+                    <li>Simon, H. A. (1957). "Models of Man: Social and Rational." Wiley.</li>
+                    <li>March, J. G., & Simon, H. A. (1958). "Organizations." Wiley.</li>
+                    <li>Simon, H. A. (1969). "The Sciences of the Artificial." MIT Press.</li>
+                    <li>Kahneman, D., & Tversky, A. (1979). "Prospect Theory: An Analysis of Decision under Risk." Econometrica, 47(2), 263-291.</li>
+                </ol>
+                
+                <h3 class="section-title">启发式与生态理性（1990-2010）</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="7">
+                    <li>Gigerenzer, G., & Goldstein, D. G. (1996). "Reasoning the Fast and Frugal Way: Models of Bounded Rationality." Psychological Review, 103(4), 650-669.</li>
+                    <li>Gigerenzer, G., Todd, P. M., & the ABC Research Group. (1999). "Simple Heuristics That Make Us Smart." Oxford University Press.</li>
+                    <li>Gigerenzer, G., & Selten, R. (Eds.). (2001). "Bounded Rationality: The Adaptive Toolbox." MIT Press.</li>
+                    <li>Gigerenzer, G. (2007). "Gut Feelings: The Intelligence of the Unconscious." Viking.</li>
+                    <li>Gigerenzer, G., & Gaissmaier, W. (2011). "Heuristic Decision Making." Annual Review of Psychology, 62, 451-482.</li>
+                </ol>
+                
+                <h3 class="section-title">计算模型与 AI 应用（2010-2026）</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="12">
+                    <li>Russell, S., & Norvig, P. (2020). "Artificial Intelligence: A Modern Approach." 4th ed. Pearson.</li>
+                    <li>Goodfellow, I., Bengio, Y., & Courville, A. (2016). "Deep Learning." MIT Press.</li>
+                    <li>Sutton, R. S., & Barto, A. G. (2018). "Reinforcement Learning: An Introduction." 2nd ed. MIT Press.</li>
+                    <li>Weng, L. (2023). "LLM Powered Autonomous Agents." Lil'Log Blog.</li>
+                    <li>Xi, Z., et al. (2025). "The Rise and Potential of Large Language Model Based Agents: A Survey." Science China Information Sciences.</li>
+                    <li>Bui, N. D. Q. (2026). "Building AI Coding Agents for the Terminal: Scaffolding, Harness, Context Engineering, and Lessons Learned." arXiv:2603.05344.</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.5em; margin-bottom: 25px; color: var(--rational-gold); font-weight: 800; font-family: 'Georgia', serif;">有限理性 Agent 决策模型与认知约束</p>
+                <p style="font-size: 1.2em; margin-bottom: 15px; font-style: italic;">从 Herbert Simon 到现代 AI 的决策理论演进</p>
+                <p>© 2026 超级代码智能体 | 认知约束版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 35px; font-size: 1em; line-height: 2.0;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="rationality-spectrum" style="margin-top: 50px;">
+                    <div class="spectrum-item spectrum-perfect">🔵 完全理性</div>
+                    <div class="spectrum-item spectrum-bounded">🟡 有限理性</div>
+                    <div class="spectrum-item spectrum-heuristic">🟢 启发式</div>
+                </div>
+                <p style="margin-top: 50px; font-size: 0.95em; color: var(--text-secondary);">
+                    谨以此书献给 Herbert A. Simon（1916-2001）<br>
+                    有限理性理论之父、诺贝尔经济学奖得主、人工智能先驱<br>
+                    从 1955 年有限理性提出到 2026 年 AI 应用<br>
+                    70 年的智慧传承
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟡🔴 Bounded Rationality Agent Decision Models');
+        console.log('📚 From Herbert Simon to Modern AI: 70 Years of Decision Theory');
+        console.log('✨ Satisficing > Optimizing: The Wisdom of Bounded Rationality');
+        console.log('🧠 Fast and Frugal Heuristics: Adaptive Tools for Real World');
+    </script>
+</body>
+</html>

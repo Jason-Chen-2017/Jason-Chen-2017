@@ -1,0 +1,1663 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>插件化 Agent 可扩展架构设计</title>
+    <style>
+        :root {
+            --plugin-blue: #0284c7;
+            --extension-purple: #a855f7;
+            --marketplace-gold: #ca8a04;
+            --security-green: #16a34a;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-plugin: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--plugin-blue), var(--extension-purple), var(--marketplace-gold), var(--security-green)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-plugin);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: pluginRotate 90s linear infinite;
+        }
+        
+        @keyframes pluginRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .plugin-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 18px 40px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 1.15em;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-core {
+            background: linear-gradient(135deg, var(--plugin-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-plugin {
+            background: linear-gradient(135deg, var(--extension-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-marketplace {
+            background: linear-gradient(135deg, var(--marketplace-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-ecosystem {
+            background: linear-gradient(135deg, var(--security-green), #4ade80);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.8em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 30px;
+            text-shadow: 0 0 60px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 3px;
+            line-height: 1.35;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 2em;
+            color: var(--text-secondary);
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .plugin-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 25px;
+            margin: 60px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .plugin-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 35px 45px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 200px;
+        }
+        
+        .plugin-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .plugin-box.core {
+            border-color: var(--plugin-blue);
+            box-shadow: 0 15px 40px rgba(2, 132, 199, 0.35);
+        }
+        
+        .plugin-box.plugin {
+            border-color: var(--extension-purple);
+            box-shadow: 0 15px 40px rgba(168, 85, 247, 0.35);
+        }
+        
+        .plugin-box.marketplace {
+            border-color: var(--marketplace-gold);
+            box-shadow: 0 15px 40px rgba(202, 138, 4, 0.35);
+        }
+        
+        .plugin-box.ecosystem {
+            border-color: var(--security-green);
+            box-shadow: 0 15px 40px rgba(22, 163, 74, 0.35);
+        }
+        
+        .plugin-label {
+            font-size: 1.8em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 12px;
+        }
+        
+        .plugin-box.core .plugin-label { color: var(--plugin-blue); }
+        .plugin-box.plugin .plugin-label { color: var(--extension-purple); }
+        .plugin-box.marketplace .plugin-label { color: var(--marketplace-gold); }
+        .plugin-box.ecosystem .plugin-label { color: var(--security-green); }
+        
+        .plugin-desc {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.7;
+        }
+        
+        .plugin-arrow {
+            font-size: 2em;
+            color: var(--marketplace-gold);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 35px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 60px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px 35px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px var(--border-glow);
+            border-color: var(--plugin-blue);
+        }
+        
+        .meta-label {
+            color: var(--plugin-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 10px;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 1.05em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 60px 55px;
+            margin-bottom: 80px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 50px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 3em;
+            color: var(--plugin-blue);
+            margin-bottom: 50px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 30px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 50px 0 30px 0;
+            padding: 25px 35px;
+            border-radius: 18px;
+            font-size: 1.7em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--plugin-blue); 
+            color: var(--plugin-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--extension-purple); 
+            color: var(--extension-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--marketplace-gold); 
+            color: var(--marketplace-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--security-green); 
+            color: var(--security-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: #ec4899; 
+            color: #ec4899;
+            background: linear-gradient(90deg, rgba(236, 72, 153, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 20px;
+        }
+        
+        .toc-list li {
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 1.05em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 18px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--plugin-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--plugin-blue);
+            text-shadow: 0 0 12px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 70px 60px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 25px 80px var(--border-glow), 0 0 60px rgba(2, 132, 199, 0.2);
+            border-color: var(--plugin-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.8em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 45px;
+            border-bottom: 4px solid var(--plugin-blue);
+            padding-bottom: 25px;
+            font-weight: 800;
+            text-shadow: 0 0 25px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 50px 0;
+        }
+        
+        .section-title {
+            font-size: 2em;
+            color: var(--plugin-blue);
+            margin-bottom: 30px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--extension-purple);
+            font-size: 0.7em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.2;
+            font-size: 1.1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 30px;
+        }
+        
+        .plugin-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin: 50px 0;
+        }
+        
+        .plugin-box-card {
+            padding: 38px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .plugin-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .plugin-box-card.core {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--plugin-blue);
+            box-shadow: 0 8px 35px rgba(2, 132, 199, 0.3);
+        }
+        
+        .plugin-box-card.plugin {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--extension-purple);
+            box-shadow: 0 8px 35px rgba(168, 85, 247, 0.3);
+        }
+        
+        .plugin-box-card.marketplace {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--marketplace-gold);
+            box-shadow: 0 8px 35px rgba(202, 138, 4, 0.3);
+        }
+        
+        .plugin-box-card.ecosystem {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--security-green);
+            box-shadow: 0 8px 35px rgba(22, 163, 74, 0.3);
+        }
+        
+        .plugin-box-title {
+            font-size: 1.75em;
+            font-weight: 800;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .plugin-box-card.core .plugin-box-title { color: var(--plugin-blue); }
+        .plugin-box-card.plugin .plugin-box-title { color: var(--extension-purple); }
+        .plugin-box-card.marketplace .plugin-box-title { color: var(--marketplace-gold); }
+        .plugin-box-card.ecosystem .plugin-box-title { color: var(--security-green); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 45px 50px;
+            border-left: 8px solid var(--plugin-blue);
+            border-radius: 20px;
+            margin: 45px 0;
+            box-shadow: 0 8px 35px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--plugin-blue);
+            font-weight: 800;
+        }
+        
+        .timeline-box {
+            background: linear-gradient(135deg, #0d0d14, #1a1a2e);
+            border: 3px solid var(--border-glow);
+            border-radius: 20px;
+            padding: 45px;
+            margin: 50px 0;
+            box-shadow: inset 0 0 40px rgba(2, 132, 199, 0.1);
+        }
+        
+        .timeline-title {
+            color: var(--plugin-blue);
+            margin-bottom: 35px;
+            font-weight: 800;
+            font-size: 1.7em;
+            text-align: center;
+            font-family: 'Georgia', serif;
+        }
+        
+        .timeline-item {
+            display: flex;
+            gap: 25px;
+            margin: 30px 0;
+            padding: 25px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            border-left: 4px solid;
+        }
+        
+        .timeline-item.early { border-color: var(--plugin-blue); }
+        .timeline-item.mature { border-color: var(--extension-purple); }
+        .timeline-item.modern { border-color: var(--marketplace-gold); }
+        
+        .timeline-year {
+            font-weight: 800;
+            font-size: 1.25em;
+            min-width: 120px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .timeline-item.early .timeline-year { color: var(--plugin-blue); }
+        .timeline-item.mature .timeline-year { color: var(--extension-purple); }
+        .timeline-item.modern .timeline-year { color: var(--marketplace-gold); }
+        
+        .timeline-content {
+            color: var(--text-primary);
+            line-height: 1.9;
+        }
+        
+        .formal-diagram {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 3px solid var(--border-glow);
+            border-radius: 25px;
+            padding: 45px;
+            margin: 50px 0;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(2, 132, 199, 0.2);
+        }
+        
+        .formal-title {
+            color: var(--plugin-blue);
+            margin-bottom: 35px;
+            font-weight: 800;
+            font-size: 1.6em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .formal-diagram pre {
+            text-align: left;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.9em;
+            line-height: 1.8;
+            overflow-x: auto;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 45px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 18px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 18px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--plugin-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            font-size: 0.9em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--plugin-blue);
+            padding-left: 35px;
+            margin: 40px 0;
+            color: var(--text-secondary);
+            font-size: 1.15em;
+            font-family: 'Georgia', serif;
+            line-height: 2.1;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 20px;
+            color: var(--extension-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 30px 0;
+            padding-left: 45px;
+        }
+        
+        li {
+            margin-bottom: 18px;
+            line-height: 2.1;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 80px 50px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 120px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 40px 25px;
+            }
+            
+            .book-title {
+                font-size: 2.3em;
+            }
+            
+            .plugin-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .plugin-diagram {
+                flex-direction: column;
+            }
+            
+            .plugin-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="plugin-spectrum">
+                <div class="spectrum-item spectrum-core">🔵 核心</div>
+                <div class="spectrum-item spectrum-plugin">🟣 插件</div>
+                <div class="spectrum-item spectrum-marketplace">🟡 市场</div>
+                <div class="spectrum-item spectrum-ecosystem">🟢 生态</div>
+            </div>
+            <h1 class="book-title">插件化 Agent 可扩展架构设计</h1>
+            <h2 class="book-subtitle">从微内核到生态系统的完整指南</h2>
+            
+            <div class="plugin-diagram">
+                <div class="plugin-box core">
+                    <span class="plugin-label">🔵 核心层</span>
+                    <span class="plugin-desc">微内核<br>扩展点<br>生命周期</span>
+                </div>
+                <div class="plugin-arrow">→</div>
+                <div class="plugin-box plugin">
+                    <span class="plugin-label">🟣 插件层</span>
+                    <span class="plugin-desc">工具插件<br>能力插件<br>UI 插件</span>
+                </div>
+                <div class="plugin-arrow">→</div>
+                <div class="plugin-box marketplace">
+                    <span class="plugin-label">🟡 市场层</span>
+                    <span class="plugin-desc">发现<br>分发<br>版本管理</span>
+                </div>
+                <div class="plugin-arrow">→</div>
+                <div class="plugin-box ecosystem">
+                    <span class="plugin-label">🟢 生态层</span>
+                    <span class="plugin-desc">开发者社区<br>标准规范<br>治理机制</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">插件化架构版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">软件架构·插件系统·生态设计·治理</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 插件化理论基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：插件化范式——Agent 可扩展之路</a></li>
+                <li><a href="#chapter1">第 1 章 插件化架构演进</a></li>
+                <li><a href="#chapter2">第 2 章 微内核设计模式</a></li>
+                <li><a href="#chapter3">第 3 章 扩展点与扩展机制</a></li>
+                
+                <div class="toc-part part2">第二编 核心架构与组件</div>
+                <li><a href="#chapter4">第 4 章 核心层架构设计</a></li>
+                <li><a href="#chapter5">第 5 章 插件加载器与生命周期</a></li>
+                <li><a href="#chapter6">第 6 章 插件注册与发现</a></li>
+                <li><a href="#chapter7">第 7 章 插件通信机制</a></li>
+                
+                <div class="toc-part part3">第三编 插件开发与规范</div>
+                <li><a href="#chapter8">第 8 章 插件开发框架</a></li>
+                <li><a href="#chapter9">第 9 章 插件描述符与元数据</a></li>
+                <li><a href="#chapter10">第 10 章 插件 API 设计规范</a></li>
+                <li><a href="#chapter11">第 11 章 插件测试与调试</a></li>
+                
+                <div class="toc-part part4">第四编 工程化实践</div>
+                <li><a href="#chapter12">第 12 章 插件安全与隔离</a></li>
+                <li><a href="#chapter13">第 13 章 版本管理与兼容性</a></li>
+                <li><a href="#chapter14">第 14 章 依赖管理与冲突解决</a></li>
+                <li><a href="#chapter15">第 15 章 性能优化与监控</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 生态系统与未来趋势</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 50px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 插件模板与示例</a></li>
+                <li><a href="#appendix-b">附录 B 检查清单与最佳实践</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：插件化范式——Agent 可扩展之路</h2>
+            <div class="content">
+                <p>随着 AI Agent 系统从单一功能向多能力融合演进，一个根本性挑战日益凸显：<strong>如何构建一个既能保持核心稳定，又能快速扩展新能力的架构？</strong>传统的单体架构难以应对快速变化的需求，而微服务架构又过于重量级。插件化架构应运而生，成为 Agent 系统可扩展的最佳选择。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>插件化架构通过微内核 + 插件的分层设计，实现了核心稳定与快速扩展的完美平衡。核心层提供稳定的扩展点和生命周期管理，插件层提供灵活的能力扩展，市场层提供发现和分发机制，生态层提供治理和标准。四层协同，构建可持续发展的 Agent 生态系统。</p>
+                </div>
+                
+                <h3 class="section-title">插件化架构的兴起</h3>
+                
+                <div class="timeline-box">
+                    <h4 class="timeline-title">插件化技术演进历程</h4>
+                    <div class="timeline-item early">
+                        <div class="timeline-year">2024</div>
+                        <div class="timeline-content"><strong>早期探索</strong>：MCP（Model Context Protocol）协议提出，标准化 Agent 工具调用接口</div>
+                    </div>
+                    <div class="timeline-item mature">
+                        <div class="timeline-year">2025</div>
+                        <div class="timeline-content"><strong>架构成熟</strong>：Spring AI Alibaba、Coze 等平台推出插件化框架，支持热插拔</div>
+                    </div>
+                    <div class="timeline-item modern">
+                        <div class="timeline-year">2026</div>
+                        <div class="timeline-content"><strong>生态繁荣</strong>：插件市场、开发者社区、治理机制完善，形成完整生态系统</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">插件化四层架构</h3>
+                
+                <div class="plugin-card">
+                    <div class="plugin-box-card core">
+                        <h3 class="plugin-box-title">🔵 核心层 (Core Layer)</h3>
+                        <p><strong>定义：</strong>提供微内核、扩展点、生命周期管理的稳定核心。</p>
+                        <p style="margin-top: 15px;"><strong>核心职责：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>微内核：最小化核心功能，提供扩展点</li>
+                            <li>扩展点：定义插件可插入的位置和接口</li>
+                            <li>生命周期：管理插件的加载、激活、停用、卸载</li>
+                            <li>注册中心：插件注册、发现、查询</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="plugin-box-card plugin">
+                        <h3 class="plugin-box-title">🟣 插件层 (Plugin Layer)</h3>
+                        <p><strong>定义：</strong>实现具体能力的可扩展插件单元。</p>
+                        <p style="margin-top: 15px;"><strong>核心职责：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>工具插件：搜索、计算、代码执行等工具</li>
+                            <li>能力插件：RAG、多模态、工作流等能力</li>
+                            <li>UI 插件：界面组件、可视化、交互</li>
+                            <li>集成插件：第三方系统集成</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="plugin-box-card marketplace">
+                        <h3 class="plugin-box-title">🟡 市场层 (Marketplace Layer)</h3>
+                        <p><strong>定义：</strong>提供插件发现、分发、版本管理的平台。</p>
+                        <p style="margin-top: 15px;"><strong>核心职责：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>插件发现：搜索、分类、推荐</li>
+                            <li>分发机制：下载、安装、更新</li>
+                            <li>版本管理：语义化版本、兼容性检查</li>
+                            <li>评分评价：用户反馈、质量评估</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="plugin-box-card ecosystem">
+                        <h3 class="plugin-box-title">🟢 生态层 (Ecosystem Layer)</h3>
+                        <p><strong>定义：</strong>构建开发者社区、标准规范、治理机制的生态系统。</p>
+                        <p style="margin-top: 15px;"><strong>核心职责：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>开发者社区：文档、教程、论坛</li>
+                            <li>标准规范：API 规范、安全标准、测试标准</li>
+                            <li>治理机制：审核、认证、违规处理</li>
+                            <li>激励机制：奖励、分成、推广</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="quote">
+                    "插件化架构不是简单的模块化，而是一种生态思维。核心层提供稳定的土壤，插件层提供多样化的能力，市场层提供流通的渠道，生态层提供可持续发展的环境。四层协同，才能构建真正繁荣的 Agent 生态系统。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 插件化理论基础</strong>：阐述插件化架构演进、微内核设计模式、扩展点与扩展机制等基础知识。</p>
+                
+                <p><strong>第二编 核心架构与组件</strong>：深入剖析核心层架构、插件加载器、注册发现、通信机制等核心组件的设计与实现。</p>
+                
+                <p><strong>第三编 插件开发与规范</strong>：探讨插件开发框架、描述符设计、API 规范、测试调试等开发实践。</p>
+                
+                <p><strong>第四编 工程化实践</strong>：涵盖安全隔离、版本管理、依赖管理、性能优化等生产环境实践。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望生态系统与未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从 MCP 协议的标准化，到 Spring AI Alibaba 的插件化框架，从单一工具插件到完整生态系统，插件化架构正在重塑 Agent 系统的设计范式。这不仅是技术的进步，更是生态思维的演进。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 60px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在插件化架构前沿探索的工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 4 章 -->
+        <div class="chapter" id="chapter4">
+            <h2 class="chapter-title">第 4 章 核心层架构设计</h2>
+            <div class="content">
+                <h3 class="section-title">4.1 核心层概述</h3>
+                
+                <p>核心层（Core Layer）是插件化 Agent 架构的基石，提供微内核、扩展点、生命周期管理等核心功能。核心层的设计目标是<strong>最小化、稳定化、可扩展</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>核心层设计原则：</strong>最小内核、明确扩展点、统一生命周期、松耦合。</p>
+                </div>
+                
+                <h3 class="section-title">4.2 微内核设计</h3>
+                
+                <div class="section">
+                    <h4>微内核架构模式</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>组件</th>
+                                <th>职责</th>
+                                <th>示例</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>内核核心</strong></td>
+                                <td>提供最基础的运行环境</td>
+                                <td>消息总线、事件系统</td>
+                            </tr>
+                            <tr>
+                                <td><strong>扩展点注册表</strong></td>
+                                <td>管理所有扩展点的注册信息</td>
+                                <td>ExtensionPointRegistry</td>
+                            </tr>
+                            <tr>
+                                <td><strong>插件管理器</strong></td>
+                                <td>管理插件的生命周期</td>
+                                <td>PluginManager</td>
+                            </tr>
+                            <tr>
+                                <td><strong>服务定位器</strong></td>
+                                <td>提供插件间服务发现</td>
+                                <td>ServiceLocator</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="section">
+                    <h4>微内核实现示例</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">微内核架构实现</div>
+                        <pre>
+from abc import ABC, abstractmethod
+from typing import Dict, List, Type, Any
+from enum import Enum
+
+class PluginState(Enum):
+    INSTALLED = "installed"
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    ERROR = "error"
+
+class IPlugin(ABC):
+    """插件接口"""
+    
+    @property
+    @abstractmethod
+    def id(self) -> str:
+        pass
+    
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+    
+    @property
+    @abstractmethod
+    def version(self) -> str:
+        pass
+    
+    @abstractmethod
+    def activate(self):
+        """激活插件"""
+        pass
+    
+    @abstractmethod
+    def deactivate(self):
+        """停用插件"""
+        pass
+
+class ExtensionPoint(ABC):
+    """扩展点基类"""
+    
+    def __init__(self, name: str):
+        self.name = name
+        self.extensions: List[Any] = []
+    
+    def register(self, extension: Any):
+        """注册扩展"""
+        self.extensions.append(extension)
+    
+    def unregister(self, extension: Any):
+        """注销扩展"""
+        self.extensions.remove(extension)
+    
+    def get_extensions(self) -> List[Any]:
+        """获取所有扩展"""
+        return self.extensions.copy()
+
+class MicroKernel:
+    """微内核实现"""
+    
+    def __init__(self):
+        self.extension_points: Dict[str, ExtensionPoint] = {}
+        self.plugins: Dict[str, IPlugin] = {}
+        self.services: Dict[str, Any] = {}
+    
+    def register_extension_point(self, point: ExtensionPoint):
+        """注册扩展点"""
+        self.extension_points[point.name] = point
+    
+    def get_extension_point(self, name: str) -> ExtensionPoint:
+        """获取扩展点"""
+        if name not in self.extension_points:
+            raise ValueError(f"Extension point {name} not found")
+        return self.extension_points[name]
+    
+    def register_plugin(self, plugin: IPlugin):
+        """注册插件"""
+        self.plugins[plugin.id] = plugin
+    
+    def activate_plugin(self, plugin_id: str):
+        """激活插件"""
+        plugin = self.plugins.get(plugin_id)
+        if not plugin:
+            raise ValueError(f"Plugin {plugin_id} not found")
+        plugin.activate()
+    
+    def deactivate_plugin(self, plugin_id: str):
+        """停用插件"""
+        plugin = self.plugins.get(plugin_id)
+        if not plugin:
+            raise ValueError(f"Plugin {plugin_id} not found")
+        plugin.deactivate()
+    
+    def register_service(self, name: str, service: Any):
+        """注册服务"""
+        self.services[name] = service
+    
+    def get_service(self, name: str) -> Any:
+        """获取服务"""
+        return self.services.get(name)
+
+# 使用示例
+kernel = MicroKernel()
+
+# 注册扩展点
+tool_extension_point = ExtensionPoint("tools")
+kernel.register_extension_point(tool_extension_point)
+
+# 注册插件
+class SearchPlugin(IPlugin):
+    @property
+    def id(self): return "search-plugin"
+    @property
+    def name(self): return "Search Plugin"
+    @property
+    def version(self): return "1.0.0"
+    
+    def activate(self):
+        print("Search plugin activated")
+    
+    def deactivate(self):
+        print("Search plugin deactivated")
+
+plugin = SearchPlugin()
+kernel.register_plugin(plugin)
+kernel.activate_plugin("search-plugin")
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.3 扩展点设计</h3>
+                
+                <div class="section">
+                    <h4>扩展点类型</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>工具扩展点</strong>：用于注册工具插件（搜索、计算、代码执行等）</li>
+                        <li><strong>能力扩展点</strong>：用于注册能力插件（RAG、多模态、工作流等）</li>
+                        <li><strong>UI 扩展点</strong>：用于注册 UI 插件（界面组件、可视化等）</li>
+                        <li><strong>事件扩展点</strong>：用于注册事件监听器</li>
+                        <li><strong>服务扩展点</strong>：用于注册服务提供者</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">4.4 生命周期管理</h3>
+                
+                <div class="section">
+                    <h4>插件生命周期状态</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">插件生命周期状态机</div>
+                        <pre>
+┌─────────────────────────────────────────────────────────────┐
+│                  插件生命周期状态机                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────┐                                              │
+│  │  CREATED │ (创建)                                       │
+│  └────┬─────┘                                              │
+│       │ install()                                          │
+│       ↓                                                    │
+│  ┌──────────┐                                              │
+│  │INSTALLED │ (已安装)                                     │
+│  └────┬─────┘                                              │
+│       │ activate()                                         │
+│       ↓                                                    │
+│  ┌──────────┐    deactivate()    ┌──────────┐             │
+│  │  ACTIVE  │ ────────────────→  │ INACTIVE │             │
+│  │ (已激活) │                    │ (已停用) │             │
+│  └────┬─────┘ ←────────────────  └────┬─────┘             │
+│       │ activate()                    │                    │
+│       │                               │ uninstall()        │
+│       │                               ↓                    │
+│       │                        ┌──────────┐                │
+│       │                        │  ERROR   │                │
+│       │                        │  (错误)  │                │
+│       │                        └──────────┘                │
+│       │                                                    │
+│       ↓ uninstall()                                        │
+│  ┌──────────┐                                              │
+│  │UNINSTALLED│ (已卸载)                                    │
+│  └──────────┘                                              │
+│                                                             │
+│  状态转换：                                                 │
+│    CREATED → INSTALLED: install()                          │
+│    INSTALLED → ACTIVE: activate()                          │
+│    ACTIVE → INACTIVE: deactivate()                         │
+│    INACTIVE → ACTIVE: activate()                           │
+│    ANY → ERROR: 发生异常                                    │
+│    ANY → UNINSTALLED: uninstall()                          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.5 服务定位器</h3>
+                
+                <div class="section">
+                    <h4>服务发现机制</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>服务注册</strong>：插件向内核注册提供的服务</li>
+                        <li><strong>服务发现</strong>：插件通过服务名查找所需服务</li>
+                        <li><strong>依赖注入</strong>：内核自动注入插件依赖的服务</li>
+                        <li><strong>服务代理</strong>：提供服务调用的代理和拦截</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">4.6 本章小结</h3>
+                <p>本章深入探讨了核心层架构设计。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>核心层原则：最小内核、明确扩展点、统一生命周期、松耦合</li>
+                    <li>微内核组件：内核核心、扩展点注册表、插件管理器、服务定位器</li>
+                    <li>扩展点类型：工具、能力、UI、事件、服务五类扩展点</li>
+                    <li>生命周期状态：CREATED → INSTALLED → ACTIVE ↔ INACTIVE → UNINSTALLED</li>
+                    <li>服务定位器：服务注册、服务发现、依赖注入、服务代理</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 8 章 -->
+        <div class="chapter" id="chapter8">
+            <h2 class="chapter-title">第 8 章 插件开发框架</h2>
+            <div class="content">
+                <h3 class="section-title">8.1 开发框架概述</h3>
+                
+                <p>插件开发框架为插件开发者提供标准化的开发模板、工具链和最佳实践，降低开发门槛，提高开发效率。</p>
+                
+                <div class="highlight">
+                    <p><strong>开发框架核心要素：</strong>项目模板、开发工具、调试支持、测试框架、打包工具。</p>
+                </div>
+                
+                <h3 class="section-title">8.2 项目模板</h3>
+                
+                <div class="section">
+                    <h4>标准项目结构</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">插件项目标准结构</div>
+                        <pre>
+my-plugin/
+├── plugin.json              # 插件描述符
+├── README.md                # 插件文档
+├── LICENSE                  # 许可证
+├── src/                     # 源代码
+│   ├── __init__.py
+│   ├── main.py              # 插件入口
+│   ├── tools/               # 工具实现
+│   │   ├── __init__.py
+│   │   └── search_tool.py
+│   └── utils/               # 工具函数
+│       └── helpers.py
+├── tests/                   # 测试代码
+│   ├── __init__.py
+│   └── test_search.py
+├── assets/                  # 资源文件
+│   └── icon.png
+├── requirements.txt         # Python 依赖
+└── setup.py                 # 打包配置
+
+# plugin.json 示例
+{
+  "id": "my-search-plugin",
+  "name": "My Search Plugin",
+  "version": "1.0.0",
+  "description": "A powerful search plugin",
+  "author": "Your Name",
+  "license": "MIT",
+  "engines": {
+    "agent-core": ">=2.0.0"
+  },
+  "extensionPoints": [
+    {
+      "type": "tool",
+      "name": "search",
+      "entry": "src/main.py:SearchTool"
+    }
+  ],
+  "permissions": [
+    "network:search",
+    "storage:read"
+  ],
+  "dependencies": [
+    "requests>=2.28.0"
+  ]
+}
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">8.3 开发工具链</h3>
+                
+                <div class="section">
+                    <h4>CLI 工具</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">插件开发 CLI 工具</div>
+                        <pre>
+# 创建新插件项目
+$ agent-plugin create my-plugin
+✓ Created plugin project: my-plugin
+✓ Initialized git repository
+✓ Installed dependencies
+
+# 开发模式运行
+$ cd my-plugin
+$ agent-plugin dev
+🔌 Starting plugin development server...
+✓ Plugin loaded: my-search-plugin@1.0.0
+✓ Watching for file changes...
+✓ Hot reload enabled
+
+# 运行测试
+$ agent-plugin test
+Running tests...
+✓ test_search_basic
+✓ test_search_advanced
+✓ test_search_error_handling
+3 passed in 0.52s
+
+# 打包插件
+$ agent-plugin package
+✓ Building plugin...
+✓ Created my-search-plugin-1.0.0.zip
+
+# 发布到市场
+$ agent-plugin publish
+✓ Uploading to marketplace...
+✓ Plugin published: my-search-plugin@1.0.0
+✓ URL: https://marketplace.example.com/plugins/my-search-plugin
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">8.4 调试支持</h3>
+                
+                <div class="section">
+                    <h4>调试功能</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>热重载</strong>：代码修改后自动重新加载插件</li>
+                        <li><strong>断点调试</strong>：支持 IDE 断点调试</li>
+                        <li><strong>日志查看</strong>：实时查看插件日志</li>
+                        <li><strong>状态检查</strong>：查看插件状态和性能指标</li>
+                        <li><strong>性能分析</strong>：分析插件性能瓶颈</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">8.5 测试框架</h3>
+                
+                <div class="section">
+                    <h4>测试最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>单元测试</strong>：测试插件核心逻辑</li>
+                        <li><strong>集成测试</strong>：测试插件与内核的交互</li>
+                        <li><strong>端到端测试</strong>：测试完整使用场景</li>
+                        <li><strong>性能测试</strong>：测试插件性能指标</li>
+                        <li><strong>安全测试</strong>：测试插件安全性</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">8.6 本章小结</h3>
+                <p>本章探讨了插件开发框架。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>开发框架要素：项目模板、开发工具、调试支持、测试框架、打包工具</li>
+                    <li>项目结构：plugin.json 描述符、src 源代码、tests 测试、assets 资源</li>
+                    <li>CLI 工具：create、dev、test、package、publish 命令</li>
+                    <li>调试功能：热重载、断点调试、日志查看、状态检查、性能分析</li>
+                    <li>测试类型：单元测试、集成测试、端到端测试、性能测试、安全测试</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 12 章 -->
+        <div class="chapter" id="chapter12">
+            <h2 class="chapter-title">第 12 章 插件安全与隔离</h2>
+            <div class="content">
+                <h3 class="section-title">12.1 安全威胁模型</h3>
+                
+                <p>插件系统面临的安全威胁包括：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>恶意插件</strong>：窃取数据、执行恶意代码、破坏系统</li>
+                    <li><strong>权限提升</strong>：越权访问、特权升级</li>
+                    <li><strong>资源耗尽</strong>：CPU/内存耗尽、磁盘占满</li>
+                    <li><strong>数据泄露</strong>：敏感信息泄露、隐私侵犯</li>
+                    <li><strong>依赖攻击</strong>：恶意依赖、供应链攻击</li>
+                </ul>
+                
+                <h3 class="section-title">12.2 沙箱隔离</h3>
+                
+                <div class="section">
+                    <h4>隔离层级</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>隔离技术</th>
+                                <th>隔离级别</th>
+                                <th>性能开销</th>
+                                <th>适用场景</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>进程隔离</strong></td>
+                                <td>高</td>
+                                <td>中</td>
+                                <td>高安全要求插件</td>
+                            </tr>
+                            <tr>
+                                <td><strong>容器隔离</strong></td>
+                                <td>极高</td>
+                                <td>中高</td>
+                                <td>第三方插件</td>
+                            </tr>
+                            <tr>
+                                <td><strong>解释器隔离</strong></td>
+                                <td>中</td>
+                                <td>低</td>
+                                <td>Python/JS 插件</td>
+                            </tr>
+                            <tr>
+                                <td><strong>权限隔离</strong></td>
+                                <td>低中</td>
+                                <td>极低</td>
+                                <td>可信插件</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h3 class="section-title">12.3 权限控制</h3>
+                
+                <div class="section">
+                    <h4>权限模型</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">插件权限模型</div>
+                        <pre>
+# 权限定义
+permissions = {
+    "network": {
+        "search": "允许网络搜索",
+        "api_call": "允许调用外部 API",
+        "websocket": "允许 WebSocket 连接"
+    },
+    "storage": {
+        "read": "允许读取存储",
+        "write": "允许写入存储",
+        "delete": "允许删除存储"
+    },
+    "system": {
+        "execute": "允许执行系统命令",
+        "file_access": "允许访问文件系统",
+        "env_read": "允许读取环境变量"
+    },
+    "agent": {
+        "tool_call": "允许调用其他工具",
+        "memory_read": "允许读取记忆",
+        "memory_write": "允许写入记忆"
+    }
+}
+
+# 插件权限声明
+{
+  "id": "my-plugin",
+  "permissions": [
+    "network:search",
+    "storage:read",
+    "agent:tool_call"
+  ]
+}
+
+# 权限检查
+class PermissionChecker:
+    def check(self, plugin_id: str, permission: str) -> bool:
+        plugin = self.get_plugin(plugin_id)
+        return permission in plugin.permissions
+    
+    def enforce(self, plugin_id: str, permission: str):
+        if not self.check(plugin_id, permission):
+            raise PermissionError(
+                f"Plugin {plugin_id} lacks permission {permission}"
+            )
+
+# 使用示例
+checker = PermissionChecker()
+try:
+    checker.enforce("my-plugin", "network:search")
+    # 执行需要权限的操作
+except PermissionError as e:
+    print(f"Permission denied: {e}")
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.4 资源限制</h3>
+                
+                <div class="section">
+                    <h4>资源配额</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>CPU 限制</strong>：限制插件 CPU 使用率</li>
+                        <li><strong>内存限制</strong>：限制插件内存使用上限</li>
+                        <li><strong>时间限制</strong>：限制插件执行时间</li>
+                        <li><strong>并发限制</strong>：限制插件并发请求数</li>
+                        <li><strong>存储限制</strong>：限制插件存储空间</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">12.5 安全审核</h3>
+                
+                <div class="section">
+                    <h4>审核流程</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>静态分析</strong>：代码扫描、漏洞检测</li>
+                        <li><strong>动态分析</strong>：沙箱运行、行为监控</li>
+                        <li><strong>人工审核</strong>：代码审查、功能验证</li>
+                        <li><strong>持续监控</strong>：运行时监控、异常检测</li>
+                        <li><strong>用户举报</strong>：社区监督、违规处理</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">12.6 本章小结</h3>
+                <p>本章探讨了插件安全与隔离。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>安全威胁：恶意插件、权限提升、资源耗尽、数据泄露、依赖攻击</li>
+                    <li>隔离技术：进程隔离、容器隔离、解释器隔离、权限隔离</li>
+                    <li>权限模型：network、storage、system、agent 四类权限</li>
+                    <li>资源限制：CPU、内存、时间、并发、存储五类配额</li>
+                    <li>安全审核：静态分析、动态分析、人工审核、持续监控、用户举报</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 17 章 -->
+        <div class="chapter" id="chapter17">
+            <h2 class="chapter-title">第 17 章 生态系统与未来趋势</h2>
+            <div class="content">
+                <h3 class="section-title">17.1 生态系统构建</h3>
+                
+                <div class="section">
+                    <h4>生态系统要素</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>开发者社区</strong>：文档、教程、论坛、示例</li>
+                        <li><strong>插件市场</strong>：发现、分发、评分、评价</li>
+                        <li><strong>标准规范</strong>：API 规范、安全标准、测试标准</li>
+                        <li><strong>治理机制</strong>：审核、认证、违规处理</li>
+                        <li><strong>激励机制</strong>：奖励、分成、推广、认证</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">17.2 技术趋势</h3>
+                
+                <div class="section">
+                    <h4>2026-2028 年技术趋势</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>AI 辅助开发</strong>：AI 生成插件代码、自动测试</li>
+                        <li><strong>跨平台插件</strong>：一次开发，多平台运行</li>
+                        <li><strong>WebAssembly 插件</strong>：高性能、高安全、跨语言</li>
+                        <li><strong>去中心化市场</strong>：区块链、智能合约、分布式存储</li>
+                        <li><strong>自动组合</strong>：AI 自动组合多个插件完成复杂任务</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">17.3 最佳实践清单</h3>
+                
+                <div class="section">
+                    <h4>插件化实施检查清单</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>架构设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 微内核设计，核心功能最小化</li>
+                                <li>✓ 明确定义扩展点</li>
+                                <li>✓ 统一生命周期管理</li>
+                                <li>✓ 松耦合设计</li>
+                            </ul>
+                        </li>
+                        <li><strong>开发支持</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 提供项目模板</li>
+                                <li>✓ 提供 CLI 工具</li>
+                                <li>✓ 提供调试支持</li>
+                                <li>✓ 提供测试框架</li>
+                            </ul>
+                        </li>
+                        <li><strong>安全保障</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 沙箱隔离</li>
+                                <li>✓ 权限控制</li>
+                                <li>✓ 资源限制</li>
+                                <li>✓ 安全审核</li>
+                            </ul>
+                        </li>
+                        <li><strong>生态建设</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 开发者文档</li>
+                                <li>✓ 插件市场</li>
+                                <li>✓ 标准规范</li>
+                                <li>✓ 治理机制</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 60px; border-left-color: var(--plugin-blue);">
+                    "从 MCP 协议的标准化，到 Spring AI Alibaba 的插件化框架，从单一工具插件到完整生态系统，插件化架构正在重塑 Agent 系统的设计范式。未来的插件生态系统将更加智能、更加开放、更加繁荣。这不仅是技术的进步，更是生态思维的演进。"
+                    <div class="quote-author">—— 全书结语</div>
+                </div>
+                
+                <h3 class="section-title">17.4 本章小结</h3>
+                <p>本章展望了生态系统与未来趋势。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>生态系统要素：开发者社区、插件市场、标准规范、治理机制、激励机制</li>
+                    <li>技术趋势：AI 辅助开发、跨平台插件、WebAssembly 插件、去中心化市场、自动组合</li>
+                    <li>最佳实践：架构设计、开发支持、安全保障、生态建设检查清单</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">插件化架构与框架</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;">
+                    <li>Alibaba (2026). "Spring AI Alibaba: Agentic AI Framework for Java Developers." GitHub.</li>
+                    <li>Coze Team (2025). "Coze Studio: AI Agent Development Platform." GitHub.</li>
+                    <li>Anthropic (2025). "Model Context Protocol (MCP) Specification." MCP Docs.</li>
+                </ol>
+                
+                <h3 class="section-title">微内核与扩展机制</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="4">
+                    <li>Eclipse Foundation (2025). "Eclipse Plugin Architecture." Eclipse Docs.</li>
+                    <li>Microsoft (2025). "VS Code Extension Architecture." VS Code Docs.</li>
+                </ol>
+                
+                <h3 class="section-title">安全与隔离</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="6">
+                    <li>Google (2025). "WebAssembly Security Model." Wasm Docs.</li>
+                    <li>Docker Inc (2025). "Container Security Best Practices." Docker Docs.</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.5em; margin-bottom: 25px; color: var(--plugin-blue); font-weight: 800; font-family: 'Georgia', serif;">插件化 Agent 可扩展架构设计</p>
+                <p style="font-size: 1.2em; margin-bottom: 15px; font-style: italic;">从微内核到生态系统的完整指南</p>
+                <p>© 2026 超级代码智能体 | 插件化架构版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 35px; font-size: 1em; line-height: 2.0;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="plugin-spectrum" style="margin-top: 50px;">
+                    <div class="spectrum-item spectrum-core">🔵 核心</div>
+                    <div class="spectrum-item spectrum-plugin">🟣 插件</div>
+                    <div class="spectrum-item spectrum-marketplace">🟡 市场</div>
+                    <div class="spectrum-item spectrum-ecosystem">🟢 生态</div>
+                </div>
+                <p style="margin-top: 50px; font-size: 0.95em; color: var(--text-secondary);">
+                    谨以此书献给所有在插件化架构前沿探索的工程师们<br>
+                    从 2024 年 MCP 协议到 2026 年完整生态系统<br>
+                    2 年探索，插件化架构——核心稳定与快速扩展的完美平衡
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢 Plugin-Based Agent Architecture');
+        console.log('📚 From Microkernel to Ecosystem (2024-2026)');
+        console.log('✨ 2 Years of Plugin Architecture Evolution');
+        console.log('🧩 Core + Plugin + Marketplace + Ecosystem = Scalable Agents');
+    </script>
+</body>
+</html>

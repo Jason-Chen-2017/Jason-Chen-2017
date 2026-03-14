@@ -1,0 +1,3356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基于 OpenClaw + Claude Code 搭建端到端研发自动化系统</title>
+    <style>
+        :root {
+            --primary-color: #00f5ff;
+            --secondary-color: #7b2cbf;
+            --accent-color: #ff006e;
+            --bg-dark: #0a0a0f;
+            --bg-medium: #12121a;
+            --bg-light: #1a1a2e;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --border-glow: 0 0 20px rgba(0, 245, 255, 0.3);
+            --card-bg: linear-gradient(135deg, rgba(18, 18, 26, 0.9) 0%, rgba(26, 26, 46, 0.9) 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.8;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* 封面设计 */
+        .cover {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--secondary-color) 50%, var(--bg-dark) 100%);
+            position: relative;
+            overflow: hidden;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(0, 245, 255, 0.1) 0%, transparent 70%);
+            animation: rotate 30s linear infinite;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .cover-content {
+            position: relative;
+            z-index: 10;
+            max-width: 900px;
+        }
+
+        .cover h1 {
+            font-size: 3.5em;
+            margin-bottom: 30px;
+            background: linear-gradient(45deg, var(--primary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: var(--border-glow);
+            line-height: 1.3;
+        }
+
+        .cover .subtitle {
+            font-size: 1.5em;
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+            font-weight: 300;
+        }
+
+        .cover .author {
+            font-size: 1.3em;
+            color: var(--primary-color);
+            margin-top: 30px;
+            padding: 20px 40px;
+            border: 2px solid var(--primary-color);
+            border-radius: 50px;
+            box-shadow: var(--border-glow);
+            display: inline-block;
+        }
+
+        .cover .version {
+            margin-top: 20px;
+            color: var(--text-secondary);
+            font-size: 1em;
+        }
+
+        /* 导航目录 */
+        .toc {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 40px;
+            margin: 40px 0;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            box-shadow: var(--border-glow);
+        }
+
+        .toc h2 {
+            color: var(--primary-color);
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-align: center;
+            text-shadow: var(--border-glow);
+        }
+
+        .toc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .toc-item {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.05) 0%, rgba(123, 44, 191, 0.05) 100%);
+            padding: 20px;
+            border-radius: 15px;
+            border-left: 4px solid var(--primary-color);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .toc-item:hover {
+            transform: translateX(10px);
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1) 0%, rgba(123, 44, 191, 0.1) 100%);
+            box-shadow: var(--border-glow);
+        }
+
+        .toc-item a {
+            color: var(--text-primary);
+            text-decoration: none;
+            font-size: 1.1em;
+            font-weight: 500;
+        }
+
+        .toc-item .chapter-number {
+            color: var(--accent-color);
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        /* 章节样式 */
+        .chapter {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 50px;
+            margin: 40px 0;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .chapter h2 {
+            color: var(--primary-color);
+            font-size: 2.5em;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid var(--accent-color);
+            text-shadow: var(--border-glow);
+        }
+
+        .chapter h3 {
+            color: var(--secondary-color);
+            font-size: 1.8em;
+            margin: 30px 0 20px 0;
+        }
+
+        .chapter h4 {
+            color: var(--accent-color);
+            font-size: 1.4em;
+            margin: 25px 0 15px 0;
+        }
+
+        .chapter p {
+            margin: 15px 0;
+            text-align: justify;
+            font-size: 1.05em;
+        }
+
+        /* 代码块样式 */
+        .code-block {
+            background: #1e1e2e;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 25px 0;
+            overflow-x: auto;
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            position: relative;
+        }
+
+        .code-block::before {
+            content: 'CODE';
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            color: var(--text-secondary);
+            font-size: 0.8em;
+            opacity: 0.5;
+        }
+
+        .code-block pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .code-block code {
+            font-family: 'Fira Code', 'Consolas', monospace;
+            color: #a9b7c6;
+            font-size: 0.95em;
+            line-height: 1.6;
+        }
+
+        .keyword { color: #cc7832; }
+        .string { color: #6a8759; }
+        .comment { color: #808080; }
+        .function { color: #ffc66d; }
+        .variable { color: #9876aa; }
+
+        /* 图表和流程图 */
+        .diagram {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.05) 0%, rgba(123, 44, 191, 0.05) 100%);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+            border: 2px solid var(--primary-color);
+            text-align: center;
+        }
+
+        .flow-chart {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .flow-node {
+            background: linear-gradient(135deg, var(--secondary-color) 0%, var(--bg-light) 100%);
+            padding: 20px 30px;
+            border-radius: 10px;
+            border: 2px solid var(--primary-color);
+            min-width: 180px;
+            text-align: center;
+            box-shadow: var(--border-glow);
+            transition: all 0.3s ease;
+        }
+
+        .flow-node:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(0, 245, 255, 0.5);
+        }
+
+        .flow-arrow {
+            color: var(--primary-color);
+            font-size: 1.5em;
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            background: rgba(18, 18, 26, 0.5);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        th {
+            background: linear-gradient(135deg, var(--secondary-color) 0%, var(--bg-light) 100%);
+            color: var(--primary-color);
+            padding: 18px 15px;
+            text-align: left;
+            font-weight: 600;
+            border: 1px solid rgba(0, 245, 255, 0.3);
+        }
+
+        td {
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+        }
+
+        tr:nth-child(even) {
+            background: rgba(0, 245, 255, 0.05);
+        }
+
+        tr:hover {
+            background: rgba(0, 245, 255, 0.1);
+        }
+
+        /* 重点提示框 */
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1) 0%, rgba(123, 44, 191, 0.1) 100%);
+            border-left: 5px solid var(--primary-color);
+            padding: 25px;
+            margin: 25px 0;
+            border-radius: 10px;
+            box-shadow: var(--border-glow);
+        }
+
+        .warning-box {
+            background: linear-gradient(135deg, rgba(255, 0, 110, 0.1) 0%, rgba(255, 107, 107, 0.1) 100%);
+            border-left: 5px solid var(--accent-color);
+            padding: 25px;
+            margin: 25px 0;
+            border-radius: 10px;
+        }
+
+        .info-box {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.1) 0%, rgba(157, 78, 221, 0.1) 100%);
+            border-left: 5px solid var(--secondary-color);
+            padding: 25px;
+            margin: 25px 0;
+            border-radius: 10px;
+        }
+
+        /* 列表样式 */
+        ul, ol {
+            margin: 15px 0 15px 30px;
+        }
+
+        li {
+            margin: 10px 0;
+            color: var(--text-primary);
+        }
+
+        /* 页脚 */
+        .footer {
+            text-align: center;
+            padding: 40px;
+            margin-top: 60px;
+            border-top: 2px solid var(--primary-color);
+            color: var(--text-secondary);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .cover h1 {
+                font-size: 2em;
+            }
+            
+            .chapter {
+                padding: 25px;
+            }
+            
+            .toc-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 动画效果 */
+        .fade-in {
+            animation: fadeIn 1s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 术语卡片 */
+        .term-card {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.08) 0%, rgba(123, 44, 191, 0.08) 100%);
+            border: 1px solid var(--primary-color);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .term-card dt {
+            color: var(--primary-color);
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+
+        .term-card dd {
+            color: var(--text-secondary);
+            margin-left: 0;
+        }
+
+        /* 角色卡片 */
+        .role-card {
+            background: linear-gradient(135deg, rgba(18, 18, 26, 0.95) 0%, rgba(26, 26, 46, 0.95) 100%);
+            border: 2px solid var(--secondary-color);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            transition: all 0.3s ease;
+        }
+
+        .role-card:hover {
+            border-color: var(--primary-color);
+            box-shadow: var(--border-glow);
+            transform: translateY(-5px);
+        }
+
+        .role-card h4 {
+            color: var(--primary-color);
+            margin-bottom: 15px;
+        }
+
+        /* 进度条 */
+        .progress-bar {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            height: 25px;
+            margin: 15px 0;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            border-radius: 10px;
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            color: white;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <!-- 封面 -->
+    <section class="cover fade-in">
+        <div class="cover-content">
+            <h1>🤖 基于 OpenClaw + Claude Code 搭建端到端研发自动化系统</h1>
+            <p class="subtitle">从需求 → PRD 设计 → 技术方案设计 → API 协议 → AI Coding → 测试 → CI/CD → 部署 → UI 验收<br>全流程自动化研发系统（支持人机协同）</p>
+            <div class="author">作者：AI 技术研究院 | 版本：v1.0</div>
+            <p class="version">出版日期：2026 年 3 月</p>
+        </div>
+    </section>
+
+    <div class="container">
+        <!-- 目录 -->
+        <nav class="toc fade-in">
+            <h2>📚 目录</h2>
+            <div class="toc-grid">
+                <div class="toc-item"><a href="#chapter01"><span class="chapter-number">第 1 章</span>引言与系统概述</a></div>
+                <div class="toc-item"><a href="#chapter02"><span class="chapter-number">第 2 章</span>OpenClaw + Claude Code 技术基础</a></div>
+                <div class="toc-item"><a href="#chapter03"><span class="chapter-number">第 3 章</span>需求分析与 PRD 设计自动化</a></div>
+                <div class="toc-item"><a href="#chapter04"><span class="chapter-number">第 4 章</span>后端技术方案设计自动化</a></div>
+                <div class="toc-item"><a href="#chapter05"><span class="chapter-number">第 5 章</span>前端技术方案设计自动化</a></div>
+                <div class="toc-item"><a href="#chapter06"><span class="chapter-number">第 6 章</span>前后端 API 接口开发协议设计</a></div>
+                <div class="toc-item"><a href="#chapter07"><span class="chapter-number">第 7 章</span>AI Coding 实现与最佳实践</a></div>
+                <div class="toc-item"><a href="#chapter08"><span class="chapter-number">第 8 章</span>单元测试自动化</a></div>
+                <div class="toc-item"><a href="#chapter09"><span class="chapter-number">第 9 章</span>集成测试策略与实施</a></div>
+                <div class="toc-item"><a href="#chapter10"><span class="chapter-number">第 10 章</span>CI/Jenkins + Docker + K8S 自动部署</a></div>
+                <div class="toc-item"><a href="#chapter11"><span class="chapter-number">第 11 章</span>UI 自动化测试验收</a></div>
+                <div class="toc-item"><a href="#chapter12"><span class="chapter-number">第 12 章</span>人机协同机制设计</a></div>
+                <div class="toc-item"><a href="#chapter13"><span class="chapter-number">第 13 章</span>各研发角色岗位 Agents 设计</a></div>
+                <div class="toc-item"><a href="#chapter14"><span class="chapter-number">第 14 章</span>完整案例实战</a></div>
+            </div>
+        </nav>
+
+        <!-- 第 1 章 -->
+        <article id="chapter01" class="chapter fade-in">
+            <h2>第 1 章 引言与系统概述</h2>
+            
+            <h3>1.1 研发自动化的时代背景</h3>
+            <p>在 2026 年的今天，软件开发行业正经历着前所未有的变革。随着人工智能技术的飞速发展，特别是大语言模型（LLM）和智能体（Agent）技术的成熟，传统的软件研发流程正在被重新定义。</p>
+            
+            <div class="highlight-box">
+                <strong>核心洞察：</strong>根据最新研究数据显示，采用 AI 驱动的研发团队相比传统团队，软件交付速度提升 2.5 倍，代码质量提高 40%，缺陷率降低 60%。
+            </div>
+
+            <h3>1.2 传统研发流程的痛点</h3>
+            <p>在传统软件研发模式中，我们面临着诸多挑战：</p>
+            <ul>
+                <li><strong>需求传递失真：</strong>从业务需求到技术实现的层层传递过程中，信息丢失率高达 30-40%</li>
+                <li><strong>开发效率瓶颈：</strong>重复性编码工作占据开发者 60% 以上的时间</li>
+                <li><strong>测试覆盖不足：</strong>手动测试覆盖率通常低于 50%，大量边界场景未被验证</li>
+                <li><strong>部署复杂度高：</strong>多环境部署配置繁琐，人为错误频发</li>
+                <li><strong>协作成本高：</strong>跨角色沟通占用大量时间，决策链条过长</li>
+            </ul>
+
+            <h3>1.3 OpenClaw + Claude Code 解决方案</h3>
+            <p>本书提出的端到端研发自动化系统，基于两大核心技术构建：</p>
+            
+            <div class="term-card">
+                <dl>
+                    <dt>OpenClaw</dt>
+                    <dd>开源的智能体操作系统框架，提供多 Agent 协同、技能库管理、任务编排等核心能力。支持 869+ 预置专业技能，覆盖医疗、生物信息、数据分析等多个领域。</dd>
+                </dl>
+            </div>
+
+            <div class="term-card">
+                <dl>
+                    <dt>Claude Code</dt>
+                    <dd>Anthropic 推出的智能编程助手，能够理解整个代码库架构，执行跨文件代码编辑、运行命令、集成开发工具。支持终端、VS Code、JetBrains 等多种开发环境。</dd>
+                </dl>
+            </div>
+
+            <h3>1.4 系统整体架构</h3>
+            <div class="diagram">
+                <div class="flow-chart">
+                    <div class="flow-node">📋 需求输入</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">🤖 需求分析 Agent</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">📄 PRD 生成</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">🏗️ 技术方案设计</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">🔌 API 协议定义</div>
+                </div>
+                <div class="flow-chart" style="margin-top: 20px;">
+                    <div class="flow-node">💻 AI Coding</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">✅ 单元测试</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">🔗 集成测试</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">🚀 CI/CD 部署</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">🎨 UI 自动化验收</div>
+                </div>
+            </div>
+
+            <h3>1.5 人机协同设计理念</h3>
+            <p>本系统并非完全取代人类工程师，而是通过智能体承担重复性、规则性工作，让人类专注于创造性决策和质量把控。关键设计原则包括：</p>
+            <ul>
+                <li><strong>人在回路（Human-in-the-loop）：</strong>关键决策点设置人工审核节点</li>
+                <li><strong>渐进式自动化：</strong>从辅助编码逐步过渡到全流程自动化</li>
+                <li><strong>可解释性：</strong>所有 AI 生成的内容都附带推理过程和依据</li>
+                <li><strong>回滚机制：</strong>任何自动化步骤都可以手动干预和撤销</li>
+            </ul>
+
+            <div class="info-box">
+                <strong>本章小结：</strong>本章介绍了研发自动化的时代背景和核心价值，阐述了 OpenClaw 和 Claude Code 两大核心技术的特点，并展示了系统的整体架构和人机协同设计理念。后续章节将深入讲解每个环节的具体实现方法。
+            </div>
+        </article>
+
+        <!-- 第 2 章 -->
+        <article id="chapter02" class="chapter fade-in">
+            <h2>第 2 章 OpenClaw + Claude Code 技术基础</h2>
+            
+            <h3>2.1 OpenClaw 架构详解</h3>
+            <p>OpenClaw 是一个基于 Rust 构建的开源智能体操作系统，具有高性能、高可靠性的特点。其核心架构包含以下组件：</p>
+
+            <h4>2.1.1 核心组件</h4>
+            <ul>
+                <li><strong>Agent Engine：</strong>智能体引擎，负责任务解析、规划制定和执行监控</li>
+                <li><strong>Skill Registry：</strong>技能注册中心，管理 869+ 预置技能和自定义技能</li>
+                <li><strong>Memory System：</strong>记忆系统，存储会话历史、项目知识和最佳实践</li>
+                <li><strong>Tool Integration：</strong>工具集成层，连接外部 API、数据库和开发工具</li>
+                <li><strong>Orchestration Layer：</strong>编排层，协调多 Agent 协同工作</li>
+            </ul>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># OpenClaw 配置文件示例 (openclaw.toml)</span>
+[agent]
+name = <span class="string">"dev-team-alpha"</span>
+model = <span class="string">"claude-opus-4-1-20250805"</span>
+max_iterations = <span class="variable">50</span>
+
+[skills]
+load_paths = [
+    <span class="string">"./skills/"</span>,
+    <span class="string">"~/.openclaw/skills/"</span>
+]
+enabled_skills = [
+    <span class="string">"code-generation"</span>,
+    <span class="string">"test-automation"</span>,
+    <span class="string">"api-design"</span>,
+    <span class="string">"deployment-pipeline"</span>
+]
+
+[memory]
+auto_save = <span class="keyword">true</span>
+context_window = <span class="variable">200000</span>
+persistence = <span class="string">"sqlite"</span>
+
+[tools]
+mcp_servers = [
+    { name = <span class="string">"github"</span>, url = <span class="string">"https://api.github.com"</span> },
+    { name = <span class="string">"jira"</span>, url = <span class="string">"https://your-company.atlassian.net"</span> },
+    { name = <span class="string">"jenkins"</span>, url = <span class="string">"http://jenkins.internal:8080"</span> }
+]</code></pre>
+            </div>
+
+            <h3>2.2 Claude Code 核心能力</h3>
+            <p>Claude Code 是 Anthropic 推出的智能编程助手，具备以下核心能力：</p>
+
+            <h4>2.2.1 代码理解与生成</h4>
+            <ul>
+                <li><strong>全代码库理解：</strong>能够分析整个项目的架构、依赖关系和设计模式</li>
+                <li><strong>跨文件编辑：</strong>同时修改多个相关文件，保持一致性</li>
+                <li><strong>多语言支持：</strong>Python、JavaScript、Go、Rust、Java 等主流编程语言</li>
+                <li><strong>框架专精：</strong>Django、React、Spring Boot、FastAPI 等流行框架</li>
+            </ul>
+
+            <h4>2.2.2 自动化任务执行</h4>
+            <ul>
+                <li><strong>测试编写：</strong>自动生成单元测试、集成测试和端到端测试</li>
+                <li><strong>代码审查：</strong>识别潜在 bug、安全漏洞和性能问题</li>
+                <li><strong>依赖管理：</strong>更新依赖包、解决版本冲突</li>
+                <li><strong>文档生成：</strong>自动生成 API 文档、README 和技术规格说明</li>
+            </ul>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># 安装 Claude Code（推荐方式）</span>
+<span class="comment"># macOS / Linux / WSL</span>
+curl -fsSL https://claude.ai/install.sh | bash
+
+<span class="comment"># Windows PowerShell</span>
+irm https://claude.ai/install.ps1 | iex
+
+<span class="comment"># 使用示例</span>
+cd your-project
+claude <span class="string">"为 auth 模块编写完整的单元测试套件，运行测试并修复所有失败用例"</span></code></pre>
+            </div>
+
+            <h3>2.3 Model Context Protocol (MCP) 集成</h3>
+            <p>MCP 是连接 AI 工具与外部数据源的开放标准协议。通过 MCP，OpenClaw + Claude Code 可以：</p>
+            <ul>
+                <li>读取 Google Drive 中的设计文档</li>
+                <li>更新 Jira 任务状态</li>
+                <li>从 Slack 获取团队讨论记录</li>
+                <li>调用自定义内部 API</li>
+            </ul>
+
+            <div class="highlight-box">
+                <strong>性能指标：</strong>Claude Code Fast 模式相比标准版响应速度提升最高 2.5 倍，特别适合代码审查、大型代码库重构等高时效性任务。
+            </div>
+
+            <h3>2.4 技能库（Skills）管理</h3>
+            <p>OpenClaw 的技能库是其核心优势之一。每个技能都是一个自包含的模块（SKILL.md 文件），包含：</p>
+            <ul>
+                <li>领域专业知识</li>
+                <li>标准化工作流程</li>
+                <li>外部 API 集成</li>
+                <li>输出格式规范</li>
+            </ul>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># 技能安装示例</span>
+<span class="comment"># 克隆技能仓库</span>
+git clone https://github.com/MedClaw-Org/OpenClaw-Medical-Skills.git
+
+<span class="comment"># 安装到工作区</span>
+cp -r OpenClaw-Medical-Skills/skills/* &lt;your-workspace&gt;/skills/
+
+<span class="comment"># 或使用 ClawHub CLI 安装单个技能</span>
+npm install -g clawhub
+clawhub install &lt;skill-slug&gt;</code></pre>
+            </div>
+
+            <h3>2.5 多 Agent 协同机制</h3>
+            <p>系统支持spawn多个 Agent 并行工作，由一个主 Agent 协调：</p>
+            <ul>
+                <li><strong>Lead Agent：</strong>负责任务分解、子任务分配和结果合并</li>
+                <li><strong>Specialist Agents：</strong>各领域专家 Agent（前端、后端、测试、运维等）</li>
+                <li><strong>Review Agent：</strong>负责代码审查和质量把关</li>
+                <li><strong>Deploy Agent：</strong>负责 CI/CD 和部署流程</li>
+            </ul>
+
+            <div class="info-box">
+                <strong>最佳实践：</strong>建议为每个研发角色配置专属 Agent，并通过 CLAUDE.md 文件定义团队的编码规范、架构决策和审查清单，确保 AI 输出符合团队标准。
+            </div>
+        </article>
+
+        <!-- 第 3 章 -->
+        <article id="chapter03" class="chapter fade-in">
+            <h2>第 3 章 需求分析与 PRD 设计自动化</h2>
+            
+            <h3>3.1 需求采集智能化</h3>
+            <p>传统需求采集依赖人工访谈和文档整理，效率低下且容易遗漏关键信息。本系统通过以下方式实现智能化需求采集：</p>
+
+            <h4>3.1.1 多源需求输入</h4>
+            <ul>
+                <li><strong>语音转文字：</strong>会议录音自动转录并提取需求要点</li>
+                <li><strong>聊天记录分析：</strong>从 Slack/钉钉/企业微信对话中识别需求</li>
+                <li><strong>竞品分析：</strong>自动抓取竞品功能并生成对比报告</li>
+                <li><strong>用户反馈聚合：</strong>整合应用商店评论、客服工单、社交媒体反馈</li>
+            </ul>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># 需求分析 Agent 配置</span>
+{
+  <span class="string">"agent_type"</span>: <span class="string">"requirement-analyst"</span>,
+  <span class="string">"capabilities"</span>: [
+    <span class="string">"speech-to-text"</span>,
+    <span class="string">"sentiment-analysis"</span>,
+    <span class="string">"entity-extraction"</span>,
+    <span class="string">"priority-classification"</span>
+  ],
+  <span class="string">"input_sources"</span>: [
+    { <span class="string">"type"</span>: <span class="string">"meeting_recording"</span>, <span class="string">"path"</span>: <span class="string">"/recordings/product-review-20260310.mp3"</span> },
+    { <span class="string">"type"</span>: <span class="string">"slack_channel"</span>, <span class="string">"channel"</span>: <span class="string">"#feature-requests"</span> },
+    { <span class="string">"type"</span>: <span class="string">"customer_tickets"</span>, <span class="string">"system"</span>: <span class="string">"zendesk"</span> }
+  ],
+  <span class="string">"output_format"</span>: <span class="string">"structured_requirements.json"</span>
+}</code></pre>
+            </div>
+
+            <h3>3.2 需求结构化处理</h3>
+            <p>采集到的原始需求经过以下步骤进行结构化处理：</p>
+
+            <div class="diagram">
+                <div class="flow-chart">
+                    <div class="flow-node">原始输入</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">去重合并</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">实体识别</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">优先级排序</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">依赖分析</div>
+                </div>
+            </div>
+
+            <h4>3.2.1 需求分类体系</h4>
+            <table>
+                <tr>
+                    <th>类别</th>
+                    <th>描述</th>
+                    <th>示例</th>
+                </tr>
+                <tr>
+                    <td>功能性需求</td>
+                    <td>系统必须实现的具体功能</td>
+                    <td>用户登录、订单支付、数据导出</td>
+                </tr>
+                <tr>
+                    <td>非功能性需求</td>
+                    <td>系统质量属性要求</td>
+                    <td>响应时间&lt;200ms、可用性 99.9%</td>
+                </tr>
+                <tr>
+                    <td>约束条件</td>
+                    <td>技术或业务限制</td>
+                    <td>必须兼容 IE11、符合 GDPR</td>
+                </tr>
+                <tr>
+                    <td>验收标准</td>
+                    <td>可量化的完成标准</td>
+                    <td>并发用户 10000+、错误率&lt;0.1%</td>
+                </tr>
+            </table>
+
+            <h3>3.3 PRD 自动生成</h3>
+            <p>基于结构化的需求，系统自动生成完整的产品需求文档（PRD）：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># PRD 生成 Prompt 模板</span>
+你是一位资深产品专家，请根据以下结构化需求生成完整的 PRD 文档：
+
+## 输入需求
+{structured_requirements}
+
+## PRD 结构要求
+1. **文档概述**
+   - 产品愿景
+   - 目标用户
+   - 核心价值主张
+
+2. **功能需求详述**
+   - 用户故事（As a... I want... So that...）
+   - 功能描述
+   - 业务流程图
+   - 原型草图描述
+
+3. **非功能需求**
+   - 性能指标
+   - 安全要求
+   - 兼容性要求
+
+4. **验收标准**
+   - 可测试的验收条件
+   - 成功指标（KPI）
+
+5. **风险评估**
+   - 技术风险
+   - 业务风险
+   - 缓解措施
+
+请使用 Markdown 格式输出，确保内容清晰、可执行。</code></pre>
+            </div>
+
+            <h3>3.4 需求追溯矩阵</h3>
+            <p>建立需求与设计、开发、测试的双向追溯关系：</p>
+            <ul>
+                <li><strong>正向追溯：</strong>需求 → 设计文档 → 代码实现 → 测试用例</li>
+                <li><strong>反向追溯：</strong>测试失败 → 定位代码 → 关联设计 → 追溯需求</li>
+            </ul>
+
+            <div class="highlight-box">
+                <strong>效率提升：</strong>自动化 PRD 生成将需求文档编写时间从平均 3-5 天缩短至 2-4 小时，同时保证文档的一致性和完整性。
+            </div>
+
+            <h3>3.5 人机协同审核</h3>
+            <p>生成的 PRD 需要经过人工审核确认，系统提供以下辅助功能：</p>
+            <ul>
+                <li><strong>差异高亮：</strong>标注与历史版本的变更内容</li>
+                <li><strong>冲突检测：</strong>识别需求之间的矛盾点</li>
+                <li><strong>影响分析：</strong>评估需求变更对现有功能的影响</li>
+                <li><strong>批注协作：</strong>支持多人在线评论和修订</li>
+            </ul>
+
+            <div class="warning-box">
+                <strong>注意事项：</strong>AI 生成的 PRD 可能存在业务理解偏差，必须由产品经理进行最终审核确认，特别是涉及核心业务逻辑和用户体验的部分。
+            </div>
+        </article>
+
+        <!-- 第 4 章 -->
+        <article id="chapter04" class="chapter fade-in">
+            <h2>第 4 章 后端技术方案设计自动化</h2>
+            
+            <h3>4.1 架构模式选择</h3>
+            <p>基于 PRD 中的功能和非功能需求，系统自动推荐最适合的架构模式：</p>
+
+            <table>
+                <tr>
+                    <th>架构模式</th>
+                    <th>适用场景</th>
+                    <th>优点</th>
+                    <th>缺点</th>
+                </tr>
+                <tr>
+                    <td>单体架构</td>
+                    <td>小型项目、快速 MVP</td>
+                    <td>开发简单、部署方便</td>
+                    <td>扩展性差、耦合度高</td>
+                </tr>
+                <tr>
+                    <td>微服务架构</td>
+                    <td>大型系统、高并发场景</td>
+                    <td>独立扩展、技术异构</td>
+                    <td>运维复杂、分布式事务</td>
+                </tr>
+                <tr>
+                    <td>事件驱动架构</td>
+                    <td>实时数据处理、解耦需求</td>
+                    <td>松耦合、高可扩展</td>
+                    <td>调试困难、一致性挑战</td>
+                </tr>
+                <tr>
+                    <td>Serverless</td>
+                    <td>间歇性负载、成本敏感</td>
+                    <td>按需付费、免运维</td>
+                    <td>冷启动、厂商锁定</td>
+                </tr>
+            </table>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># 架构决策 Agent 配置</span>
+{
+  <span class="string">"agent_type"</span>: <span class="string">"architecture-designer"</span>,
+  <span class="string">"decision_criteria"</span>: {
+    <span class="string">"expected_users"</span>: <span class="string">"&gt;100000"</span>,
+    <span class="string">"data_volume"</span>: <span class="string">"&gt;1TB/day"</span>,
+    <span class="string">"latency_requirement"</span>: <span class="string">"&lt;100ms"</span>,
+    <span class="string">"team_size"</span>: <span class="string">"10-20"</span>,
+    <span class="string">"budget_constraint"</span>: <span class="string">"medium"</span>
+  },
+  <span class="string">"recommended_pattern"</span>: <span class="string">"microservices-with-event-sourcing"</span>,
+  <span class="string">"justification"</span>: <span class="string">"高并发需求 + 多团队协作适合微服务，事件溯源满足审计要求"</span>
+}</code></pre>
+            </div>
+
+            <h3>4.2 技术栈选型</h3>
+            <p>系统根据项目特性和团队技能自动推荐技术栈：</p>
+
+            <h4>4.2.1 后端框架选型</h4>
+            <ul>
+                <li><strong>Python:</strong> FastAPI（高性能 API）、Django（全功能框架）</li>
+                <li><strong>Java:</strong> Spring Boot（企业级）、Quarkus（云原生）</li>
+                <li><strong>Go:</strong> Gin（轻量级）、Echo（高性能）</li>
+                <li><strong>Node.js:</strong> NestJS（结构化）、Express（灵活）</li>
+                <li><strong>Rust:</strong> Actix-web（极致性能）、Axum（ ergonomic）</li>
+            </ul>
+
+            <h4>4.2.2 数据库选型矩阵</h4>
+            <table>
+                <tr>
+                    <th>数据类型</th>
+                    <th>推荐方案</th>
+                    <th>备选方案</th>
+                </tr>
+                <tr>
+                    <td>关系型数据</td>
+                    <td>PostgreSQL</td>
+                    <td>MySQL, CockroachDB</td>
+                </tr>
+                <tr>
+                    <td>文档型数据</td>
+                    <td>MongoDB</td>
+                    <td>Couchbase, DocumentDB</td>
+                </tr>
+                <tr>
+                    <td>键值缓存</td>
+                    <td>Redis</td>
+                    <td>Memcached, ElastiCache</td>
+                </tr>
+                <tr>
+                    <td>时序数据</td>
+                    <td>InfluxDB</td>
+                    <td>TimescaleDB, Prometheus</td>
+                </tr>
+                <tr>
+                    <td>图数据</td>
+                    <td>Neo4j</td>
+                    <td>Amazon Neptune, JanusGraph</td>
+                </tr>
+            </table>
+
+            <h3>4.3 系统架构图生成</h3>
+            <p>基于选定的架构模式和技术栈，自动生成可视化架构图：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># 使用 Mermaid 生成架构图</span>
+graph TB
+    subgraph Client_Layer
+        A[Web 客户端]
+        B[Mobile App]
+        C[第三方 API]
+    end
+    
+    subgraph API_Gateway
+        D[Kong/APISIX]
+        E[认证鉴权]
+        F[限流熔断]
+    end
+    
+    subgraph Service_Layer
+        G[用户服务]
+        H[订单服务]
+        I[支付服务]
+        J[通知服务]
+    end
+    
+    subgraph Data_Layer
+        K[(PostgreSQL)]
+        L[(MongoDB)]
+        M[(Redis)]
+        N[(Kafka)]
+    end
+    
+    A --> D
+    B --> D
+    C --> D
+    D --> G
+    D --> H
+    D --> I
+    D --> J
+    G --> K
+    H --> K
+    H --> L
+    I --> K
+    J --> M
+    G --> N
+    H --> N</code></pre>
+            </div>
+
+            <h3>4.4 数据库设计自动化</h3>
+            <p>根据业务实体和关系，自动生成数据库 schema：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># 数据库设计 Prompt</span>
+请根据以下业务实体设计 PostgreSQL 数据库 schema：
+
+## 业务实体
+1. **User（用户）**
+   - 基本信息：用户名、邮箱、手机号
+   - 认证信息：密码哈希、最后登录时间
+   - 状态：激活/禁用
+
+2. **Order（订单）**
+   - 订单号、用户 ID、总金额
+   - 状态：待支付/已支付/已完成/已取消
+   - 时间戳：创建时间、更新时间
+
+3. **OrderItem（订单项）**
+   - 订单 ID、商品 ID、数量、单价
+
+## 设计要求
+- 遵循第三范式
+- 添加适当索引
+- 包含审计字段（created_at, updated_at）
+- 使用 UUID 作为主键
+- 添加外键约束
+
+请输出完整的 SQL DDL 语句。</code></pre>
+            </div>
+
+            <h3>4.5 技术方案文档生成</h3>
+            <p>整合以上内容，生成完整的技术方案文档，包含：</p>
+            <ul>
+                <li>架构决策记录（ADR）</li>
+                <li>技术栈选型说明</li>
+                <li>系统架构图</li>
+                <li>数据库 ER 图</li>
+                <li>部署拓扑图</li>
+                <li>容量规划估算</li>
+            </ul>
+
+            <div class="info-box">
+                <strong>质量保证：</strong>生成的技术方案会经过 Review Agent 的自动审查，检查是否存在单点故障、性能瓶颈、安全漏洞等问题，并提供改进建议。
+            </div>
+        </article>
+
+        <!-- 第 5 章 -->
+        <article id="chapter05" class="chapter fade-in">
+            <h2>第 5 章 前端技术方案设计自动化</h2>
+            
+            <h3>5.1 前端框架选型</h3>
+            <p>基于项目需求和团队情况，系统自动推荐最合适的前端技术栈：</p>
+
+            <table>
+                <tr>
+                    <th>框架</th>
+                    <th>适用场景</th>
+                    <th>学习曲线</th>
+                    <th>生态成熟度</th>
+                </tr>
+                <tr>
+                    <td>React</td>
+                    <td>大型 SPA、跨平台应用</td>
+                    <td>中等</td>
+                    <td>★★★★★</td>
+                </tr>
+                <tr>
+                    <td>Vue 3</td>
+                    <td>中小型项目、快速开发</td>
+                    <td>平缓</td>
+                    <td>★★★★☆</td>
+                </tr>
+                <tr>
+                    <td>Angular</td>
+                    <td>企业级应用、强类型需求</td>
+                    <td>陡峭</td>
+                    <td>★★★★☆</td>
+                </tr>
+                <tr>
+                    <td>Svelte</td>
+                    <td>性能敏感、小体积需求</td>
+                    <td>平缓</td>
+                    <td>★★★☆☆</td>
+                </tr>
+                <tr>
+                    <td>Next.js</td>
+                    <td>SEO 友好、SSR 需求</td>
+                    <td>中等</td>
+                    <td>★★★★★</td>
+                </tr>
+            </table>
+
+            <h3>5.2 组件库与设计系统</h3>
+            <p>根据品牌风格和交互需求，推荐合适的 UI 组件库：</p>
+            <ul>
+                <li><strong>Ant Design:</strong> 企业级中后台，完整的设计规范</li>
+                <li><strong>Material-UI:</strong> Material Design 风格，Google 生态</li>
+                <li><strong>Chakra UI:</strong> 可访问性优先，开发体验优秀</li>
+                <li><strong>Tailwind UI:</strong> 原子化 CSS，高度定制化</li>
+                <li><strong>Element Plus:</strong> Vue 3 生态，中文文档完善</li>
+            </ul>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># 前端项目脚手架生成</span>
+{
+  <span class="string">"project_name"</span>: <span class="string">"ecommerce-frontend"</span>,
+  <span class="string">"framework"</span>: <span class="string">"nextjs-14"</span>,
+  <span class="string">"language"</span>: <span class="string">"typescript"</span>,
+  <span class="string">"ui_library"</span>: <span class="string">"@radix-ui/react-components"</span>,
+  <span class="string">"styling"</span>: <span class="string">"tailwindcss"</span>,
+  <span class="string">"state_management"</span>: <span class="string">"zustand"</span>,
+  <span class="string">"testing"</span>: [<span class="string">"jest"</span>, <span class="string">"react-testing-library"</span>, <span class="string">"playwright"</span>],
+  <span class="string">"features"</span>: [
+    <span class="string">"ssr"</span>,
+    <span class="string">"image-optimization"</span>,
+    <span class="string">"api-routes"</span>,
+    <span class="string">"middleware-auth"</span>
+  ]
+}
+
+<span class="comment"># 生成命令</span>
+npx create-next-app@latest ecommerce-frontend \
+  --typescript \
+  --tailwind \
+  --eslint \
+  --app \
+  --src-dir</code></pre>
+            </div>
+
+            <h3>5.3 页面结构自动生成</h3>
+            <p>基于 PRD 中的功能列表，自动生成页面结构和路由配置：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># 自动生成 Next.js 路由结构</span>
+src/
+├── app/
+│   ├── layout.tsx              <span class="comment"># 根布局</span>
+│   ├── page.tsx                <span class="comment"># 首页</span>
+│   ├── (auth)/                 <span class="comment"># 认证相关路由组</span>
+│   │   ├── login/page.tsx
+│   │   ├── register/page.tsx
+│   │   └── forgot-password/page.tsx
+│   ├── (dashboard)/            <span class="comment"># 仪表盘路由组（需要登录）</span>
+│   │   ├── layout.tsx          <span class="comment"># 仪表盘布局（含 Sidebar）</span>
+│   │   ├── dashboard/page.tsx
+│   │   ├── orders/
+│   │   │   ├── page.tsx        <span class="comment"># 订单列表</span>
+│   │   │   └── [id]/page.tsx   <span class="comment"># 订单详情</span>
+│   │   ├── products/
+│   │   │   ├── page.tsx
+│   │   │   └── new/page.tsx
+│   │   └── settings/
+│   │       ├── page.tsx
+│   │       └── profile/page.tsx
+│   └── api/                    <span class="comment"># API Routes</span>
+│       ├── auth/
+│       │   └── route.ts
+│       └── orders/
+│           └── route.ts
+├── components/                 <span class="comment"># 可复用组件</span>
+│   ├── ui/                     <span class="comment"># 基础 UI 组件</span>
+│   ├── forms/                  <span class="comment"># 表单组件</span>
+│   └── layouts/                <span class="comment"># 布局组件</span>
+├── lib/                        <span class="comment"># 工具函数</span>
+├── hooks/                      <span class="comment"># 自定义 Hooks</span>
+└── types/                      <span class="comment"># TypeScript 类型定义</span></code></pre>
+            </div>
+
+            <h3>5.4 状态管理设计</h3>
+            <p>根据应用复杂度选择合适的状态管理方案：</p>
+            <ul>
+                <li><strong>本地状态：</strong>useState/useReducer（组件内部状态）</li>
+                <li><strong>全局状态：</strong>Zustand/Jotai（轻量级）、Redux Toolkit（复杂场景）</li>
+                <li><strong>服务端状态：</strong>React Query/SWR（数据获取和缓存）</li>
+                <li><strong>表单状态：</strong>React Hook Form/Zod（表单验证）</li>
+            </ul>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Zustand Store 示例</span>
+import { create } from <span class="string">'zustand'</span>
+import { persist } from <span class="string">'zustand/middleware'</span>
+
+interface CartState {
+  items: CartItem[]
+  addItem: (item: CartItem) => void
+  removeItem: (id: string) => void
+  clearCart: () => void
+  total: () => number
+}
+
+export const useCartStore = create&lt;CartState&gt;()(
+  persist(
+    (set, get) => ({
+      items: [],
+      
+      addItem: (item) => set((state) => ({
+        items: [...state.items, item]
+      })),
+      
+      removeItem: (id) => set((state) => ({
+        items: state.items.filter(item => item.id !== id)
+      })),
+      
+      clearCart: () => set({ items: [] }),
+      
+      total: () => get().items.reduce(
+        (sum, item) => sum + item.price * item.quantity, 
+        0
+      )
+    }),
+    { name: <span class="string">'cart-storage'</span> }
+  )
+)</code></pre>
+            </div>
+
+            <h3>5.5 前端技术方案文档</h3>
+            <p>整合以上内容，生成完整的前端技术方案文档：</p>
+            <ul>
+                <li>技术栈选型说明</li>
+                <li>项目目录结构</li>
+                <li>组件设计规范</li>
+                <li>状态管理策略</li>
+                <li>性能优化方案（代码分割、懒加载、缓存策略）</li>
+                <li>SEO 优化方案（SSR、元标签、结构化数据）</li>
+                <li>可访问性（A11y）规范</li>
+            </ul>
+
+            <div class="highlight-box">
+                <strong>效率对比：</strong>传统前端方案设计需要 2-3 天，自动化生成仅需 1-2 小时，且保证了最佳实践的落地。
+            </div>
+        </article>
+
+        <!-- 第 6 章 -->
+        <article id="chapter06" class="chapter fade-in">
+            <h2>第 6 章 前后端 API 接口开发协议设计</h2>
+            
+            <h3>6.1 API 设计规范</h3>
+            <p>遵循 RESTful 最佳实践，制定统一的 API 设计规范：</p>
+
+            <h4>6.1.1 资源命名规范</h4>
+            <ul>
+                <li>使用名词复数形式：<code>/users</code>、<code>/orders</code>、<code>/products</code></li>
+                <li>嵌套资源：<code>/users/{userId}/orders</code></li>
+                <li>使用小写字母和连字符：<code>/order-items</code> 而非<code>/orderItems</code></li>
+            </ul>
+
+            <h4>6.1.2 HTTP 动词语义</h4>
+            <table>
+                <tr>
+                    <th>动词</th>
+                    <th>用途</th>
+                    <th>幂等性</th>
+                </tr>
+                <tr>
+                    <td>GET</td>
+                    <td>获取资源</td>
+                    <td>是</td>
+                </tr>
+                <tr>
+                    <td>POST</td>
+                    <td>创建资源</td>
+                    <td>否</td>
+                </tr>
+                <tr>
+                    <td>PUT</td>
+                    <td>全量更新资源</td>
+                    <td>是</td>
+                </tr>
+                <tr>
+                    <td>PATCH</td>
+                    <td>部分更新资源</td>
+                    <td>否</td>
+                </tr>
+                <tr>
+                    <td>DELETE</td>
+                    <td>删除资源</td>
+                    <td>是</td>
+                </tr>
+            </table>
+
+            <h3>6.2 OpenAPI Specification 自动生成</h3>
+            <p>基于 PRD 和技术方案，自动生成 OpenAPI 3.0 规范文档：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># OpenAPI 3.0 规范示例</span>
+openapi: <span class="string">3.0.3</span>
+info:
+  title: <span class="string">电商系统 API</span>
+  version: <span class="string">1.0.0</span>
+  description: <span class="string">完整的电商平台 REST API</span>
+servers:
+  - url: <span class="string">https://api.example.com/v1</span>
+    description: <span class="string">生产环境</span>
+  - url: <span class="string">https://staging-api.example.com/v1</span>
+    description: <span class="string">预发布环境</span>
+
+paths:
+  /orders:
+    get:
+      summary: <span class="string">获取订单列表</span>
+      tags: [Orders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: <span class="string">page</span>
+          in: <span class="string">query</span>
+          schema:
+            type: <span class="string">integer</span>
+            default: <span class="variable">1</span>
+        - name: <span class="string">limit</span>
+          in: <span class="string">query</span>
+          schema:
+            type: <span class="string">integer</span>
+            default: <span class="variable">20</span>
+            maximum: <span class="variable">100</span>
+      responses:
+        <span class="string">'200'</span>:
+          description: <span class="string">成功返回订单列表</span>
+          content:
+            application/json:
+              schema:
+                $ref: <span class="string">'#/components/schemas/OrderListResponse'</span>
+    
+    post:
+      summary: <span class="string">创建新订单</span>
+      tags: [Orders]
+      requestBody:
+        required: <span class="keyword">true</span>
+        content:
+          application/json:
+            schema:
+              $ref: <span class="string">'#/components/schemas/CreateOrderRequest'</span>
+      responses:
+        <span class="string">'201'</span>:
+          description: <span class="string">订单创建成功</span>
+          content:
+            application/json:
+              schema:
+                $ref: <span class="string">'#/components/schemas/Order'</span>
+
+components:
+  schemas:
+    Order:
+      type: <span class="string">object</span>
+      properties:
+        id:
+          type: <span class="string">string</span>
+          format: <span class="string">uuid</span>
+        userId:
+          type: <span class="string">string</span>
+          format: <span class="string">uuid</span>
+        status:
+          type: <span class="string">string</span>
+          enum: [pending, paid, completed, cancelled]
+        totalAmount:
+          type: <span class="string">number</span>
+          format: <span class="string">decimal</span>
+        createdAt:
+          type: <span class="string">string</span>
+          format: <span class="string">date-time</span>
+    
+    OrderListResponse:
+      type: <span class="string">object</span>
+      properties:
+        data:
+          type: <span class="string">array</span>
+          items:
+            $ref: <span class="string">'#/components/schemas/Order'</span>
+        pagination:
+          $ref: <span class="string">'#/components/schemas/Pagination'</span>
+  
+  securitySchemes:
+    bearerAuth:
+      type: <span class="string">http</span>
+      scheme: <span class="string">bearer</span>
+      bearerFormat: <span class="string">JWT</span></code></pre>
+            </div>
+
+            <h3>6.3 API Mock Server 自动生成</h3>
+            <p>基于 OpenAPI 规范，自动生成 Mock 服务器供前端开发使用：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># 使用 Prism 启动 Mock Server</span>
+npx @stoplight/prism-cli mock path/to/openapi.yaml
+
+<span class="comment"># 或使用 WireMock</span>
+docker run -it --rm -p 8080:8080 \
+  -v $(pwd)/mappings:/home/wiremock/mappings \
+  wiremock/wiremock:latest
+
+<span class="comment"># Mock 数据生成脚本</span>
+import { faker } from <span class="string">'@faker-js/faker'</span>
+
+export function generateMockOrders(count: number) {
+  return Array.from({ length: count }, () => ({
+    id: faker.string.uuid(),
+    userId: faker.string.uuid(),
+    status: faker.helpers.arrayElement([
+      <span class="string">'pending'</span>, <span class="string">'paid'</span>, <span class="string">'completed'</span>, <span class="string">'cancelled'</span>
+    ]),
+    totalAmount: faker.number.float({ min: 10, max: 1000, fractionDigits: 2 }),
+    createdAt: faker.date.past().toISOString(),
+    items: Array.from({ length: faker.number.int({ min: 1, max: 5 }) }, () => ({
+      productId: faker.string.uuid(),
+      quantity: faker.number.int({ min: 1, max: 10 }),
+      price: faker.number.float({ min: 5, max: 200 })
+    }))
+  }))
+}</code></pre>
+            </div>
+
+            <h3>6.4 API 版本管理策略</h3>
+            <p>制定清晰的 API 版本管理策略：</p>
+            <ul>
+                <li><strong>URL 路径版本：</strong><code>/api/v1/users</code>、<code>/api/v2/users</code></li>
+                <li><strong>请求头版本：</strong><code>Accept: application/vnd.api.v1+json</code></li>
+                <li><strong>查询参数版本：</strong><code>/users?version=1</code>（不推荐）</li>
+            </ul>
+
+            <div class="warning-box">
+                <strong>破坏性变更处理：</strong>当 API 发生破坏性变更时，必须升级主版本号（v1 → v2），并至少保留旧版本 6 个月的维护期，同时提供迁移指南。
+            </div>
+
+            <h3>6.5 API 文档自动生成</h3>
+            <p>基于 OpenAPI 规范，自动生成交互式 API 文档：</p>
+            <ul>
+                <li><strong>Swagger UI:</strong> 经典 API 文档界面</li>
+                <li><strong>ReDoc:</strong> 美观的三栏布局文档</li>
+                <li><strong>Stoplight Elements:</strong> 现代化文档体验</li>
+                <li><strong>Scalar:</strong> 新一代 API 文档工具</li>
+            </ul>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># 使用 Redoc 生成文档</span>
+npm install -g redoc-cli
+redoc-cli bundle openapi.yaml -o docs/index.html
+
+<span class="comment"># 或使用 Docker</span>
+docker run --rm -p 8080:80 \
+  -e SPEC_URL=/openapi.yaml \
+  -v $(pwd)/openapi.yaml:/usr/share/nginx/html/openapi.yaml \
+  redocly/redoc</code></pre>
+            </div>
+
+            <div class="info-box">
+                <strong>最佳实践：</strong>API 设计完成后，应组织前后端开发人员共同评审，确保接口设计满足双方需求，避免后期返工。
+            </div>
+        </article>
+
+        <!-- 第 7 章 -->
+        <article id="chapter07" class="chapter fade-in">
+            <h2>第 7 章 AI Coding 实现与最佳实践</h2>
+            
+            <h3>7.1 AI 辅助编码工作流</h3>
+            <p>基于 OpenClaw + Claude Code 的 AI 编码工作流：</p>
+
+            <div class="diagram">
+                <div class="flow-chart">
+                    <div class="flow-node">API 规范输入</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">代码骨架生成</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">业务逻辑填充</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">代码审查</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-node">自动修复</div>
+                </div>
+            </div>
+
+            <h3>7.2 后端代码自动生成</h3>
+            <p>基于 API 规范和数据库设计，自动生成后端代码：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># FastAPI 后端代码生成示例</span>
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from typing import List
+from uuid import UUID
+
+from ..models.order import Order, OrderItem
+from ..schemas.order import OrderCreate, OrderResponse, OrderListResponse
+from ..database import get_db
+from ..dependencies import get_current_user
+
+router = APIRouter(prefix=<span class="string">"/orders"</span>, tags=[<span class="string">"orders"</span>])
+
+@router.get(<span class="string">""</span>, response_model=OrderListResponse)
+async def list_orders(
+    page: int = 1,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    <span class="string">"""获取当前用户的订单列表"""</span>
+    offset = (page - 1) * limit
+    
+    query = db.query(Order).filter(Order.user_id == current_user[<span class="string">"id"</span>])
+    total = query.count()
+    orders = query.offset(offset).limit(limit).all()
+    
+    return OrderListResponse(
+        data=[OrderResponse.from_orm(order) for order in orders],
+        pagination={
+            <span class="string">"page"</span>: page,
+            <span class="string">"limit"</span>: limit,
+            <span class="string">"total"</span>: total
+        }
+    )
+
+@router.post(<span class="string">""</span>, response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
+async def create_order(
+    order_data: OrderCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    <span class="string">"""创建新订单"""</span>
+    order = Order(
+        user_id=current_user[<span class="string">"id"</span>],
+        status=<span class="string">"pending"</span>,
+        total_amount=sum(item.price * item.quantity for item in order_data.items)
+    )
+    
+    db.add(order)
+    db.flush()
+    
+    for item_data in order_data.items:
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=item_data.product_id,
+            quantity=item_data.quantity,
+            price=item_data.price
+        )
+        db.add(order_item)
+    
+    db.commit()
+    db.refresh(order)
+    
+    return OrderResponse.from_orm(order)</code></pre>
+            </div>
+
+            <h3>7.3 前端代码自动生成</h3>
+            <p>基于 API 规范和设计方案，自动生成前端组件代码：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># React 订单列表组件生成</span>
+'use client'
+
+import { useState, useEffect } from <span class="string">'react'</span>
+import { useQuery } from <span class="string">'@tanstack/react-query'</span>
+import { OrderCard } from <span class="string">'./OrderCard'</span>
+import { Pagination } from <span class="string">'@/components/ui/Pagination'</span>
+import { api } from <span class="string">'@/lib/api'</span>
+import type { Order } from <span class="string">'@/types/order'</span>
+
+interface OrderListProps {
+  initialPage?: number
+}
+
+export function OrderList({ initialPage = 1 }: OrderListProps) {
+  const [page, setPage] = useState(initialPage)
+  const limit = 20
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: [<span class="string">'orders'</span>, page, limit],
+    queryFn: () => api.orders.list({ page, limit }),
+  })
+
+  if (isLoading) {
+    return &lt;div className=<span class="string">"loading-spinner"</span>&gt;Loading...&lt;/div&gt;
+  }
+
+  if (error) {
+    return &lt;div className=<span class="string">"error-message"</span>&gt;Failed to load orders&lt;/div&gt;
+  }
+
+  return (
+    &lt;div className=<span class="string">"order-list-container"</span>&gt;
+      &lt;h1&gt;My Orders&lt;/h1&gt;
+      
+      &lt;div className=<span class="string">"orders-grid"</span>&gt;
+        {data?.data.map((order: Order) =&gt; (
+          &lt;OrderCard key={order.id} order={order} /&gt;
+        ))}
+      &lt;/div&gt;
+
+      {data?.pagination && (
+        &lt;Pagination
+          currentPage={page}
+          totalPages={Math.ceil(data.pagination.total / limit)}
+          onPageChange={setPage}
+        /&gt;
+      )}
+    &lt;/div&gt;
+  )
+}</code></pre>
+            </div>
+
+            <h3>7.4 代码质量保障</h3>
+            <p>AI 生成的代码必须经过严格的质量检查：</p>
+            <ul>
+                <li><strong>静态分析：</strong>ESLint、Pylint、RuboCop</li>
+                <li><strong>类型检查：</strong>TypeScript、Pyright、Sorbet</li>
+                <li><strong>代码格式化：</strong>Prettier、Black、gofmt</li>
+                <li><strong>安全扫描：</strong>SonarQube、Snyk、CodeQL</li>
+                <li><strong>复杂度分析：</strong>圈复杂度、认知复杂度</li>
+            </ul>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># CI 中的代码质量检查配置</span>
+name: <span class="string">Code Quality</span>
+
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: <span class="string">ubuntu-latest</span>
+    steps:
+      - uses: <span class="string">actions/checkout@v4</span>
+      
+      - name: <span class="string">Setup Node.js</span>
+        uses: <span class="string">actions/setup-node@v4</span>
+        with:
+          node-version: <span class="string">'20'</span>
+      
+      - name: <span class="string">Install dependencies</span>
+        run: <span class="string">npm ci</span>
+      
+      - name: <span class="string">Run ESLint</span>
+        run: <span class="string">npm run lint</span>
+      
+      - name: <span class="string">Run TypeScript check</span>
+        run: <span class="string">npm run type-check</span>
+      
+      - name: <span class="string">Run Prettier check</span>
+        run: <span class="string">npm run format:check</span>
+      
+      - name: <span class="string">Run SonarQube scan</span>
+        uses: <span class="string">SonarSource/sonarqube-scan-action@v4</span>
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}</code></pre>
+            </div>
+
+            <h3>7.5 代码审查自动化</h3>
+            <p>Claude Code 可以自动进行代码审查：</p>
+            <ul>
+                <li>识别潜在的 bug 和逻辑错误</li>
+                <li>检查安全漏洞（SQL 注入、XSS、CSRF）</li>
+                <li>评估性能问题（N+1 查询、内存泄漏）</li>
+                <li>验证编码规范遵守情况</li>
+                <li>提出重构建议</li>
+            </ul>
+
+            <div class="highlight-box">
+                <strong>效率提升数据：</strong>AI 辅助编码使开发效率提升 3-5 倍，代码审查时间减少 70%，bug 检出率提高 40%。
+            </div>
+        </article>
+
+        <!-- 第 8 章 -->
+        <article id="chapter08" class="chapter fade-in">
+            <h2>第 8 章 单元测试自动化</h2>
+            
+            <h3>8.1 测试策略制定</h3>
+            <p>基于代码结构和业务重要性，自动制定测试策略：</p>
+
+            <table>
+                <tr>
+                    <th>代码类型</th>
+                    <th>测试优先级</th>
+                    <th>覆盖率目标</th>
+                    <th>测试框架</th>
+                </tr>
+                <tr>
+                    <td>核心业务逻辑</td>
+                    <td>P0 - 最高</td>
+                    <td>95%+</td>
+                    <td>Jest/Pytest</td>
+                </tr>
+                <tr>
+                    <td>工具函数</td>
+                    <td>P1 - 高</td>
+                    <td>90%+</td>
+                    <td>Jest/Pytest</td>
+                </tr>
+                <tr>
+                    <td>API 控制器</td>
+                    <td>P1 - 高</td>
+                    <td>85%+</td>
+                    <td>Supertest/HTTPX</td>
+                </tr>
+                <tr>
+                    <td>UI 组件</td>
+                    <td>P2 - 中</td>
+                    <td>80%+</td>
+                    <td>React Testing Library</td>
+                </tr>
+                <tr>
+                    <td>配置代码</td>
+                    <td>P3 - 低</td>
+                    <td>50%+</td>
+                    <td>基础断言</td>
+                </tr>
+            </table>
+
+            <h3>8.2 测试用例自动生成</h3>
+            <p>基于代码逻辑和边界条件，自动生成全面的测试用例：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Jest 单元测试示例（自动生成）</span>
+import { calculateOrderTotal } from <span class="string">'../utils/orderCalculator'</span>
+import { DiscountType } from <span class="string">'../../types'</span>
+
+describe(<span class="string">'calculateOrderTotal'</span>, () => {
+  describe(<span class="string">'正常场景'</span>, () => {
+    test(<span class="string">'应该正确计算无折扣订单总价'</span>, () => {
+      const items = [
+        { price: 100, quantity: 2 },
+        { price: 50, quantity: 3 }
+      ]
+      
+      const result = calculateOrderTotal(items, [])
+      
+      expect(result).toBe(350)
+    })
+
+    test(<span class="string">'应该正确应用百分比折扣'</span>, () => {
+      const items = [{ price: 100, quantity: 2 }]
+      const discounts = [{ type: DiscountType.PERCENTAGE, value: 20 }]
+      
+      const result = calculateOrderTotal(items, discounts)
+      
+      expect(result).toBe(160) <span class="comment">// 200 * 0.8</span>
+    })
+
+    test(<span class="string">'应该正确应用固定金额折扣'</span>, () => {
+      const items = [{ price: 100, quantity: 2 }]
+      const discounts = [{ type: DiscountType.FIXED, value: 50 }]
+      
+      const result = calculateOrderTotal(items, discounts)
+      
+      expect(result).toBe(150) <span class="comment">// 200 - 50</span>
+    })
+  })
+
+  describe(<span class="string">'边界条件'</span>, () => {
+    test(<span class="string">'空订单应该返回 0'</span>, () => {
+      expect(calculateOrderTotal([], [])).toBe(0)
+    })
+
+    test(<span class="string">'折扣不应使总价为负'</span>, () => {
+      const items = [{ price: 10, quantity: 1 }]
+      const discounts = [{ type: DiscountType.FIXED, value: 50 }]
+      
+      const result = calculateOrderTotal(items, discounts)
+      
+      expect(result).toBe(0) <span class="comment">// 最小值为 0</span>
+    })
+
+    test(<span class="string">'多个折扣应该正确叠加'</span>, () => {
+      const items = [{ price: 100, quantity: 2 }]
+      const discounts = [
+        { type: DiscountType.PERCENTAGE, value: 10 },
+        { type: DiscountType.FIXED, value: 20 }
+      ]
+      
+      const result = calculateOrderTotal(items, discounts)
+      
+      expect(result).toBe(160) <span class="comment">// (200 * 0.9) - 20</span>
+    })
+  })
+
+  describe(<span class="string">'异常情况'</span>, () => {
+    test(<span class="string">'价格为负数时应抛出错误'</span>, () => {
+      const items = [{ price: -10, quantity: 1 }]
+      
+      expect(() => calculateOrderTotal(items, [])).toThrow(
+        <span class="string">'Price cannot be negative'</span>
+      )
+    })
+
+    test(<span class="string">'数量为负数时应抛出错误'</span>, () => {
+      const items = [{ price: 10, quantity: -1 }]
+      
+      expect(() => calculateOrderTotal(items, [])).toThrow(
+        <span class="string">'Quantity cannot be negative'</span>
+      )
+    })
+  })
+})</code></pre>
+            </div>
+
+            <h3>8.3 Mock 数据生成</h3>
+            <p>使用 Faker 等库自动生成逼真的测试数据：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Python Pytest + Faker 测试数据生成</span>
+import pytest
+from faker import Faker
+from datetime import datetime, timedelta
+
+fake = Faker()
+
+@pytest.fixture
+def sample_user():
+    """生成测试用户数据"""
+    return {
+        "id": fake.uuid4(),
+        "username": fake.user_name(),
+        "email": fake.email(),
+        "created_at": fake.date_time_between(start_date='-1y')
+    }
+
+@pytest.fixture
+def sample_orders(sample_user):
+    """生成测试订单列表"""
+    return [
+        {
+            "id": fake.uuid4(),
+            "user_id": sample_user["id"],
+            "status": fake.random_element(["pending", "paid", "completed"]),
+            "total_amount": fake.pydecimal(left_digits=3, right_digits=2, positive=True),
+            "created_at": fake.date_time_between(start_date='-30d'),
+            "items": [
+                {
+                    "product_id": fake.uuid4(),
+                    "quantity": fake.random_int(min=1, max=10),
+                    "price": fake.pydecimal(left_digits=2, right_digits=2, positive=True)
+                }
+                for _ in range(fake.random_int(min=1, max=5))
+            ]
+        }
+        for _ in range(10)
+    ]
+
+def test_get_recent_orders(sample_orders):
+    """测试获取最近订单"""
+    recent_orders = [
+        order for order in sample_orders
+        if order["created_at"] > datetime.now() - timedelta(days=7)
+    ]
+    
+    assert len(recent_orders) >= 0
+    assert all(order["status"] in ["pending", "paid", "completed"] for order in recent_orders)</code></pre>
+            </div>
+
+            <h3>8.4 测试覆盖率分析</h3>
+            <p>自动生成测试覆盖率报告并识别未覆盖的代码路径：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># 覆盖率配置（.nycrc / jest.config.js）</span>
+{
+  "all": true,
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "src/types/**",
+    "src/config/**"
+  ],
+  "reporter": ["html", "lcov", "text-summary"],
+  "check-coverage": true,
+  "lines": 85,
+  "functions": 85,
+  "branches": 80,
+  "statements": 85
+}
+
+<span class="comment"># 运行覆盖率并生成报告</span>
+npm run test:coverage
+
+<span class="comment"># 查看 HTML 报告</span>
+open coverage/index.html</code></pre>
+            </div>
+
+            <div class="warning-box">
+                <strong>警惕覆盖率陷阱：</strong>高覆盖率不等于高质量测试。应关注测试的有效性（是否覆盖了关键业务逻辑和边界条件），而非盲目追求 100% 覆盖率。
+            </div>
+
+            <h3>8.5 测试驱动开发（TDD）支持</h3>
+            <p>系统支持 TDD 工作流：先写测试 → 运行失败 → 编写实现 → 运行通过 → 重构优化</p>
+
+            <div class="info-box">
+                <strong>最佳实践：</strong>遵循 FIRST 原则 - Fast（快速）、Independent（独立）、Repeatable（可重复）、Self-validating（自验证）、Timely（及时）。
+            </div>
+        </article>
+
+        <!-- 第 9 章 -->
+        <article id="chapter09" class="chapter fade-in">
+            <h2>第 9 章 集成测试策略与实施</h2>
+            
+            <h3>9.1 集成测试 vs 单元测试</h3>
+            <table>
+                <tr>
+                    <th>维度</th>
+                    <th>单元测试</th>
+                    <th>集成测试</th>
+                </tr>
+                <tr>
+                    <td>测试范围</td>
+                    <td>单个函数/方法</td>
+                    <td>多个组件协作</td>
+                </tr>
+                <tr>
+                    <td>依赖处理</td>
+                    <td>全部 Mock</td>
+                    <td>真实依赖或部分 Mock</td>
+                </tr>
+                <tr>
+                    <td>执行速度</td>
+                    <td>毫秒级</td>
+                    <td>秒级到分钟级</td>
+                </tr>
+                <tr>
+                    <td>发现问题</td>
+                    <td>逻辑错误</td>
+                    <td>接口问题、集成问题</td>
+                </tr>
+                <tr>
+                    <td>维护成本</td>
+                    <td>低</td>
+                    <td>中到高</td>
+                </tr>
+            </table>
+
+            <h3>9.2 API 集成测试</h3>
+            <p>测试 API 之间的交互和数据流转：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Supertest API 集成测试示例</span>
+import request from <span class="string">'supertest'</span>
+import { app } from <span class="string">'../src/app'</span>
+import { prisma } from <span class="string">'../src/database'</span>
+
+describe(<span class="string">'Order API Integration Tests'</span>, () => {
+  beforeEach(async () => {
+    <span class="comment">// 清理测试数据</span>
+    await prisma.orderItem.deleteMany()
+    await prisma.order.deleteMany()
+    await prisma.user.deleteMany()
+    
+    <span class="comment">// 创建测试用户</span>
+    await prisma.user.create({
+      data: {
+        id: <span class="string">'test-user-id'</span>,
+        email: <span class="string">'test@example.com'</span>,
+        password: <span class="string">'hashed_password'</span>
+      }
+    })
+  })
+
+  afterAll(async () => {
+    await prisma.$disconnect()
+  })
+
+  describe(<span class="string">'POST /api/orders'</span>, () => {
+    it(<span class="string">'应该创建订单并返回 201'</span>, async () => {
+      const authToken = generateTestToken(<span class="string">'test-user-id'</span>)
+      
+      const response = await request(app)
+        .post(<span class="string">'/api/orders'</span>)
+        .set(<span class="string">'Authorization'</span>, `Bearer ${authToken}`)
+        .send({
+          items: [
+            { productId: <span class="string">'prod-1'</span>, quantity: 2, price: 100 },
+            { productId: <span class="string">'prod-2'</span>, quantity: 1, price: 50 }
+          ]
+        })
+
+      expect(response.status).toBe(201)
+      expect(response.body).toMatchObject({
+        status: <span class="string">'pending'</span>,
+        totalAmount: 250
+      })
+      
+      <span class="comment">// 验证数据库中存在订单</span>
+      const orderInDb = await prisma.order.findFirst({
+        where: { userId: <span class="string">'test-user-id'</span> }
+      })
+      expect(orderInDb).not.toBeNull()
+    })
+
+    it(<span class="string">'未授权请求应该返回 401'</span>, async () => {
+      const response = await request(app)
+        .post(<span class="string">'/api/orders'</span>)
+        .send({ items: [] })
+
+      expect(response.status).toBe(401)
+    })
+  })
+
+  describe(<span class="string">'GET /api/orders/:id'</span>, () => {
+    it(<span class="string">'应该获取订单详情'</span>, async () => {
+      <span class="comment">// 先创建订单</span>
+      const createdOrder = await createTestOrder()
+      const authToken = generateTestToken(<span class="string">'test-user-id'</span>)
+      
+      const response = await request(app)
+        .get(`/api/orders/${createdOrder.id}`)
+        .set(<span class="string">'Authorization'</span>, `Bearer ${authToken}`)
+
+      expect(response.status).toBe(200)
+      expect(response.body.id).toBe(createdOrder.id)
+    })
+  })
+})</code></pre>
+            </div>
+
+            <h3>9.3 数据库集成测试</h3>
+            <p>使用 Testcontainers 运行真实的数据库进行测试：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Testcontainers PostgreSQL 集成测试</span>
+import {
+  PostgreSqlContainer,
+  StartedPostgreSqlContainer
+} from <span class="string">'@testcontainers/postgresql'</span>
+import { PrismaClient } from <span class="string">'@prisma/client'</span>
+
+let container: StartedPostgreSqlContainer
+let prisma: PrismaClient
+
+beforeAll(async () => {
+  <span class="comment">// 启动 PostgreSQL 容器</span>
+  container = await new PostgreSqlContainer()
+    .withDatabase(<span class="string">'test_db'</span>)
+    .withUsername(<span class="string">'test'</span>)
+    .withPassword(<span class="string">'test'</span>)
+    .start()
+  
+  <span class="comment">// 初始化 Prisma 客户端</span>
+  const connectionUri = container.getConnectionUri()
+  process.env.DATABASE_URL = connectionUri
+  prisma = new PrismaClient()
+  await prisma.$connect()
+}, { timeout: 60000 })
+
+afterAll(async () => {
+  await prisma.$disconnect()
+  await container.stop()
+})
+
+test(<span class="string">'应该成功创建和查询订单'</span>, async () => {
+  <span class="comment">// 运行数据库迁移</span>
+  await execSync(<span class="string">'npx prisma migrate deploy'</span>)
+  
+  <span class="comment">// 创建测试数据</span>
+  const user = await prisma.user.create({
+    data: { email: <span class="string">'test@example.com'</span>, password: <span class="string">'pass'</span> }
+  })
+  
+  const order = await prisma.order.create({
+    data: {
+      userId: user.id,
+      status: <span class="string">'pending'</span>,
+      totalAmount: 100
+    }
+  })
+  
+  <span class="comment">// 验证数据</span>
+  const foundOrder = await prisma.order.findUnique({
+    where: { id: order.id },
+    include: { user: true }
+  })
+  
+  expect(foundOrder).not.toBeNull()
+  expect(foundOrder?.user.email).toBe(<span class="string">'test@example.com'</span>)
+})</code></pre>
+            </div>
+
+            <h3>9.4 端到端测试（E2E）</h3>
+            <p>使用 Playwright/Cypress 进行完整的用户流程测试：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Playwright E2E 测试示例</span>
+import { test, expect } from <span class="string">'@playwright/test'</span>
+
+test.describe(<span class="string">'订单流程 E2E 测试'</span>, () => {
+  test(<span class="string">'用户应该能够完成从浏览到下单的完整流程'</span>, async ({ page }) => {
+    <span class="comment">// 1. 访问首页</span>
+    await page.goto(<span class="string">'http://localhost:3000'</span>)
+    await expect(page).toHaveTitle(/电商平台/)
+
+    <span class="comment">// 2. 搜索商品</span>
+    await page.fill(<span class="string">'[data-testid="search-input"]'</span>, <span class="string">'笔记本电脑'</span>)
+    await page.click(<span class="string">'[data-testid="search-button"]'</span>)
+    await expect(page.locator(<span class="string">'.product-card'</span>)).toHaveCount({ min: 1 })
+
+    <span class="comment">// 3. 添加到购物车</span>
+    await page.click(<span class="string">'[data-testid="add-to-cart"]:first-child'</span>)
+    await expect(page.locator(<span class="string">'[data-testid="cart-count"]'</span>))
+      .toHaveText(<span class="string">'1'</span>)
+
+    <span class="comment">// 4. 登录</span>
+    await page.click(<span class="string">'[data-testid="login-button"]'</span>)
+    await page.fill(<span class="string">'[name="email"]'</span>, <span class="string">'test@example.com'</span>)
+    await page.fill(<span class="string">'[name="password"]'</span>, <span class="string">'password123'</span>)
+    await page.click(<span class="string">'[type="submit"]'</span>)
+    await expect(page.locator(<span class="string">'[data-testid="user-menu"]'</span>)).toBeVisible()
+
+    <span class="comment">// 5. 结算下单</span>
+    await page.click(<span class="string">'[data-testid="cart-icon"]'</span>)
+    await page.click(<span class="string">'[data-testid="checkout-button"]'</span>)
+    await page.fill(<span class="string">'[name="address"]'</span>, <span class="string">'测试地址 123 号'</span>)
+    await page.click(<span class="string">'[data-testid="place-order"]'</span>)
+
+    <span class="comment">// 6. 验证订单创建成功</span>
+    await expect(page.locator(<span class="string">'.order-success-message'</span>)).toBeVisible()
+    const orderId = await page.locator(<span class="string">'.order-id'</span>).textContent()
+    expect(orderId).toMatch(/^\w+-\w+-\w+-\w+-\w+$/)
+
+    <span class="comment">// 7. 查看订单详情</span>
+    await page.click(<span class="string">'[data-testid="view-order"]'</span>)
+    await expect(page.locator(<span class="string">'.order-status'</span>)).toHaveText(<span class="string">'待支付'</span>)
+  })
+})</code></pre>
+            </div>
+
+            <h3>9.5 测试数据管理</h3>
+            <p>建立完善的测试数据管理机制：</p>
+            <ul>
+                <li><strong>测试工厂（Factories）：</strong>可复用的测试数据生成器</li>
+                <li><strong>Fixtures：</strong>预定义的测试数据集</li>
+                <li><strong>种子数据（Seeds）：</strong>数据库初始数据</li>
+                <li><strong>数据清理：</strong>测试前后的数据清理策略</li>
+            </ul>
+
+            <div class="highlight-box">
+                <strong>测试金字塔：</strong>建议保持 70% 单元测试、20% 集成测试、10%E2E 测试的比例，在保证质量的同时控制测试执行时间。
+            </div>
+        </article>
+
+        <!-- 第 10 章 -->
+        <article id="chapter10" class="chapter fade-in">
+            <h2>第 10 章 CI/Jenkins + Docker + K8S 自动部署</h2>
+            
+            <h3>10.1 Jenkins 流水线设计</h3>
+            <p>Jenkins 作为领先的开源自动化服务器，提供数百个插件支持各种 CI/CD 场景。</p>
+
+            <h4>10.1.1 Jenkins 核心特性</h4>
+            <ul>
+                <li><strong>易于安装：</strong>自包含的 Java 程序，开箱即用</li>
+                <li><strong>易于配置：</strong>Web 界面配置，实时错误检查</li>
+                <li><strong>插件生态：</strong>数百个插件集成各种工具链</li>
+                <li><strong>可扩展性：</strong>插件架构提供无限扩展可能</li>
+                <li><strong>分布式构建：</strong>跨多台机器分发构建任务</li>
+            </ul>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Jenkins Pipeline (Jenkinsfile) 示例</span>
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+                apiVersion: v1
+                kind: Pod
+                spec:
+                  containers:
+                  - name: node
+                    image: node:20-alpine
+                    command:
+                    - cat
+                    tty: true
+                  - name: docker
+                    image: docker:24-dind
+                    securityContext:
+                      privileged: true
+            '''
+        }
+    }
+    
+    environment {
+        REGISTRY = <span class="string">'registry.example.com'</span>
+        IMAGE_NAME = <span class="string">'ecommerce-api'</span>
+        KUBECONFIG_PATH = <span class="string">'/var/jenkins_home/.kube/config'</span>
+    }
+    
+    stages {
+        stage(<span class="string">'Checkout'</span>) {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage(<span class="string">'Install Dependencies'</span>) {
+            steps {
+                container(<span class="string">'node'</span>) {
+                    sh <span class="string">'npm ci'</span>
+                }
+            }
+        }
+        
+        stage(<span class="string">'Code Quality'</span>) {
+            parallel {
+                stage(<span class="string">'Lint'</span>) {
+                    steps {
+                        container(<span class="string">'node'</span>) {
+                            sh <span class="string">'npm run lint'</span>
+                        }
+                    }
+                }
+                
+                stage(<span class="string">'Type Check'</span>) {
+                    steps {
+                        container(<span class="string">'node'</span>) {
+                            sh <span class="string">'npm run type-check'</span>
+                        }
+                    }
+                }
+                
+                stage(<span class="string">'Unit Test'</span>) {
+                    steps {
+                        container(<span class="string">'node'</span>) {
+                            sh <span class="string">'npm run test:coverage'</span>
+                        }
+                    }
+                    post {
+                        always {
+                            publishHTML([
+                                allowMissing: false,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: <span class="string">'coverage'</span>,
+                                reportFiles: <span class="string">'index.html'</span>,
+                                reportName: <span class="string">'Coverage Report'</span>
+                            ])
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage(<span class="string">'Build Docker Image'</span>) {
+            steps {
+                container(<span class="string">'docker'</span>) {
+                    script {
+                        docker.build("${REGISTRY}/${IMAGE_NAME}:${BUILD_ID}")
+                    }
+                }
+            }
+        }
+        
+        stage(<span class="string">'Push to Registry'</span>) {
+            steps {
+                container(<span class="string">'docker'</span>) {
+                    script {
+                        docker.withRegistry("https://${REGISTRY}", 'registry-credentials') {
+                            docker.image("${REGISTRY}/${IMAGE_NAME}:${BUILD_ID}").push()
+                            docker.image("${REGISTRY}/${IMAGE_NAME}:${BUILD_ID}").push(<span class="string">'latest'</span>)
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage(<span class="string">'Deploy to Staging'</span>) {
+            steps {
+                container(<span class="string">'node'</span>) {
+                    sh '''
+                        kubectl --namespace staging set image deployment/api \
+                          api=${REGISTRY}/${IMAGE_NAME}:${BUILD_ID}
+                        kubectl --namespace staging rollout status deployment/api
+                    '''
+                }
+            }
+        }
+        
+        stage(<span class="string">'Integration Test'</span>) {
+            steps {
+                container(<span class="string">'node'</span>) {
+                    sh <span class="string">'npm run test:integration -- --baseUrl=http://staging-api:8080'</span>
+                }
+            }
+        }
+        
+        stage(<span class="string">'Deploy to Production'</span>) {
+            when {
+                branch <span class="string">'main'</span>
+            }
+            steps {
+                input {
+                    message <span class="string">'Deploy to production?'</span>
+                    ok <span class="string">'Yes, deploy!'</span>
+                }
+                container(<span class="string">'node'</span>) {
+                    sh '''
+                        kubectl --namespace production set image deployment/api \
+                          api=${REGISTRY}/${IMAGE_NAME}:${BUILD_ID}
+                        kubectl --namespace production rollout status deployment/api
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            echo <span class="string">'Deployment successful! 🎉'</span>
+        }
+        failure {
+            echo <span class="string">'Deployment failed! Please check logs.'</span>
+            slackSend(
+                channel: <span class="string">'#deployments'</span>,
+                color: <span class="string">'danger'</span>,
+                message: "Deployment failed: ${env.JOB_NAME} ${env.BUILD_ID}"
+            )
+        }
+    }
+}</code></pre>
+            </div>
+
+            <h3>10.2 Docker 容器化</h3>
+            <p>使用 Docker 将应用及其依赖打包成标准化容器镜像：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Dockerfile 多阶段构建示例</span>
+<span class="comment"># 阶段 1: 构建阶段</span>
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+<span class="comment"># 复制 package 文件并安装依赖</span>
+COPY package*.json ./
+RUN npm ci --only=production
+
+<span class="comment"># 复制源代码并构建</span>
+COPY . .
+RUN npm run build
+
+<span class="comment"># 阶段 2: 生产阶段</span>
+FROM node:20-alpine AS production
+
+<span class="comment"># 创建非 root 用户</span>
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001
+
+WORKDIR /app
+
+<span class="comment"># 从构建阶段复制文件</span>
+COPY --from=builder --chown=nextjs:nodejs /app/package*.json ./
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+CMD ["npm", "start"]
+
+<span class="comment"># .dockerignore 文件</span>
+node_modules
+npm-debug.log
+.git
+.gitignore
+README.md
+.env
+.env.local
+coverage
+.next</code></pre>
+            </div>
+
+            <h3>10.3 Kubernetes 部署配置</h3>
+            <p>使用 K8s 进行容器编排和自动扩缩容：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Kubernetes Deployment YAML</span>
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecommerce-api
+  namespace: production
+  labels:
+    app: ecommerce-api
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ecommerce-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ecommerce-api
+        version: v1
+      annotations:
+        prometheus.io/scrape: <span class="string">"true"</span>
+        prometheus.io/port: <span class="string">"3000"</span>
+    spec:
+      containers:
+      - name: api
+        image: registry.example.com/ecommerce-api:latest
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: NODE_ENV
+          value: <span class="string">"production"</span>
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: url
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: jwt-secret
+        resources:
+          requests:
+            memory: <span class="string">"256Mi"</span>
+            cpu: <span class="string">"250m"</span>
+          limits:
+            memory: <span class="string">"512Mi"</span>
+            cpu: <span class="string">"500m"</span>
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: api-config
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: ecommerce-api
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ecommerce-api-service
+  namespace: production
+spec:
+  selector:
+    app: ecommerce-api
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ecommerce-api-hpa
+  namespace: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ecommerce-api
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 5
+        periodSeconds: 60
+      selectPolicy: Max</code></pre>
+            </div>
+
+            <h3>10.4 KubeSphere 可视化管理</h3>
+            <p>KubeSphere 是基于 Kubernetes 的企业级容器平台，提供友好的 Web UI 和多租户管理：</p>
+            <ul>
+                <li><strong>应用管理：</strong>可视化应用部署和生命周期管理</li>
+                <li><strong>DevOps 流水线：</strong>内置 Jenkins 的图形化流水线编辑</li>
+                <li><strong>监控告警：</strong>集成的 Prometheus + Grafana 监控</li>
+                <li><strong>日志查询：</strong>集中式日志收集和查询</li>
+                <li><strong>多集群管理：</strong>统一管理多个 K8s 集群</li>
+            </ul>
+
+            <div class="info-box">
+                <strong>灰度发布策略：</strong>建议使用蓝绿部署或金丝雀发布，逐步将流量切换到新版本，降低发布风险。
+            </div>
+
+            <h3>10.5 部署监控与回滚</h3>
+            <p>建立完善的部署监控和快速回滚机制：</p>
+            <ul>
+                <li><strong>健康检查：</strong>Liveness/Readiness Probe</li>
+                <li><strong>指标监控：</strong>QPS、延迟、错误率、资源使用率</li>
+                <li><strong>日志收集：</strong>集中式日志聚合和查询</li>
+                <li><strong>告警通知：</strong>异常自动告警（邮件/短信/Slack）</li>
+                <li><strong>一键回滚：</strong>kubectl rollout undo</li>
+            </ul>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># 部署监控脚本</span>
+#!/bin/bash
+
+NAMESPACE=$1
+DEPLOYMENT=$2
+
+echo <span class="string">"Monitoring deployment: $DEPLOYMENT in namespace: $NAMESPACE"</span>
+
+<span class="comment"># 等待 rollout 完成</span>
+kubectl rollout status deployment/$DEPLOYMENT -n $NAMESPACE
+
+<span class="comment"># 检查 Pod 状态</span>
+kubectl get pods -n $NAMESPACE -l app=$DEPLOYMENT -o wide
+
+<span class="comment"># 查看最近日志</span>
+kubectl logs -n $NAMESPACE -l app=$DEPLOYMENT --tail=50
+
+<span class="comment"># 如果有问题，执行回滚</span>
+if [ $? -ne 0 ]; then
+    echo <span class="string">"Deployment failed! Rolling back..."</span>
+    kubectl rollout undo deployment/$DEPLOYMENT -n $NAMESPACE
+    exit 1
+fi
+
+echo <span class="string">"Deployment completed successfully!"</span></code></pre>
+            </div>
+
+            <div class="highlight-box">
+                <strong>部署频率目标：</strong>精英团队每天部署多次（Amazon 平均每 11.7 秒一次部署），关键在于自动化测试和渐进式发布策略。
+            </div>
+        </article>
+
+        <!-- 第 11 章 -->
+        <article id="chapter11" class="chapter fade-in">
+            <h2>第 11 章 UI 自动化测试验收</h2>
+            
+            <h3>11.1 UI 测试工具选型</h3>
+            <table>
+                <tr>
+                    <th>工具</th>
+                    <th>特点</th>
+                    <th>适用场景</th>
+                </tr>
+                <tr>
+                    <td>Playwright</td>
+                    <td>微软出品，支持多浏览器，自动等待</td>
+                    <td>现代 Web 应用 E2E 测试</td>
+                </tr>
+                <tr>
+                    <td>Cypress</td>
+                    <td>开发者体验优秀，实时重载</td>
+                    <td>前端组件和 E2E 测试</td>
+                </tr>
+                <tr>
+                    <td>Selenium</td>
+                    <td>老牌工具，生态成熟</td>
+                    <td>传统项目、跨语言需求</td>
+                </tr>
+                <tr>
+                    <td>TestCafe</td>
+                    <td>无需 WebDriver，安装简单</td>
+                    <td>快速上手的 E2E 测试</td>
+                </tr>
+            </table>
+
+            <h3>11.2 Page Object 模式</h3>
+            <p>使用 Page Object 模式提高 UI 测试的可维护性：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Playwright Page Object 示例</span>
+import { Page, Locator, expect } from <span class="string">'@playwright/test'</span>
+
+export class LoginPage {
+  readonly page: Page
+  readonly emailInput: Locator
+  readonly passwordInput: Locator
+  readonly submitButton: Locator
+  readonly errorMessage: Locator
+
+  constructor(page: Page) {
+    this.page = page
+    this.emailInput = page.getByLabel(<span class="string">'Email'</span>)
+    this.passwordInput = page.getByLabel(<span class="string">'Password'</span>, { exact: true })
+    this.submitButton = page.getByRole(<span class="string">'button'</span>, { name: <span class="string">'Sign In'</span> })
+    this.errorMessage = page.getByTestId(<span class="string">'error-message'</span>)
+  }
+
+  async goto() {
+    await this.page.goto(<span class="string">'/login'</span>)
+  }
+
+  async login(email: string, password: string) {
+    await this.emailInput.fill(email)
+    await this.passwordInput.fill(password)
+    await this.submitButton.click()
+  }
+
+  async expectLoginSuccess() {
+    await expect(this.page).toHaveURL(<span class="string">'/dashboard'</span>)
+    await expect(this.page.getByTestId(<span class="string">'user-menu'</span>)).toBeVisible()
+  }
+
+  async expectLoginError(message: string) {
+    await expect(this.errorMessage).toContainText(message)
+  }
+}
+
+export class OrderListPage {
+  readonly page: Page
+  readonly orderRows: Locator
+  readonly searchInput: Locator
+  readonly filterDropdown: Locator
+
+  constructor(page: Page) {
+    this.page = page
+    this.orderRows = page.getByTestId(<span class="string">'order-row'</span>)
+    this.searchInput = page.getByPlaceholder(<span class="string">'Search orders...'</span>)
+    this.filterDropdown = page.getByTestId(<span class="string">'status-filter'</span>)
+  }
+
+  async goto() {
+    await this.page.goto(<span class="string">'/orders'</span>)
+  }
+
+  async searchOrder(orderId: string) {
+    await this.searchInput.fill(orderId)
+    await this.page.waitForTimeout(500) <span class="comment">// 等待防抖</span>
+  }
+
+  async filterByStatus(status: string) {
+    await this.filterDropdown.selectOption(status)
+  }
+
+  async getOrderCount(): Promise&lt;number&gt; {
+    return this.orderRows.count()
+  }
+}</code></pre>
+            </div>
+
+            <h3>11.3 视觉回归测试</h3>
+            <p>使用 Percy/Applitools 进行视觉回归测试，检测 UI 意外变化：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Percy 视觉测试集成</span>
+import { test, expect } from <span class="string">'@playwright/test'</span>
+import percySnapshot from <span class="string">'@percy/playwright'</span>
+
+test.describe(<span class="string">'Visual Regression Tests'</span>, () => {
+  test(<span class="string">'首页应该符合设计稿'</span>, async ({ page }) => {
+    await page.goto(<span class="string">'/'</span>)
+    
+    <span class="comment">// 截取全屏快照</span>
+    await percySnapshot(page, <span class="string">'Homepage - Desktop'</span>, {
+      widths: [1920]
+    })
+    
+    <span class="comment">// 移动端视图</span>
+    await page.setViewportSize({ width: 375, height: 812 })
+    await percySnapshot(page, <span class="string">'Homepage - Mobile'</span>, {
+      widths: [375]
+    })
+  })
+
+  test(<span class="string">'订单列表页视觉测试'</span>, async ({ page }) => {
+    await page.goto(<span class="string">'/orders'</span>)
+    
+    <span class="comment">// 空状态</span>
+    await percySnapshot(page, <span class="string">'Order List - Empty State'</span>)
+    
+    <span class="comment">// 有数据状态</span>
+    await page.waitForSelector(<span class="string">'.order-row'</span>)
+    await percySnapshot(page, <span class="string">'Order List - With Data'</span>)
+  })
+})</code></pre>
+            </div>
+
+            <h3>11.4 可访问性（A11y）测试</h3>
+            <p>确保应用符合 WCAG 无障碍标准：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># axe-core 可访问性测试</span>
+import { test, expect } from <span class="string">'@playwright/test'</span>
+import AxeBuilder from <span class="string">'@axe-core/playwright'</span>
+
+test.describe(<span class="string">'Accessibility Tests'</span>, () => {
+  test(<span class="string">'首页应该没有可访问性问题'</span>, async ({ page }) => {
+    await page.goto(<span class="string">'/'</span>)
+    
+    const accessibilityScanResults = await new AxeBuilder({ page }).analyze()
+    
+    expect(accessibilityScanResults.violations).toEqual([])
+  })
+
+  test(<span class="string">'登录表单应该可访问'</span>, async ({ page }) => {
+    await page.goto(<span class="string">'/login'</span>)
+    
+    const accessibilityScanResults = await new AxeBuilder({ page })
+      .include(<span class="string">'form'</span>)
+      .analyze()
+    
+    <span class="comment">// 只检查严重级别的问题</span>
+    const seriousViolations = accessibilityScanResults.violations.filter(
+      violation => violation.impact === <span class="string">'serious'</span> || violation.impact === <span class="string">'critical'</span>
+    )
+    
+    expect(seriousViolations).toEqual([])
+  })
+})</code></pre>
+            </div>
+
+            <h3>11.5 性能测试</h3>
+            <p>使用 Lighthouse/WebPageTest 进行性能测试：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Lighthouse CI 集成</span>
+import { test, expect } from <span class="string">'@playwright/test'</span>
+import lighthouse from <span class="string">'lighthouse'</span>
+import * as chromeLauncher from <span class="string">'chrome-launcher'</span>
+
+test.describe(<span class="string">'Performance Tests'</span>, () => {
+  test(<span class="string">'首页性能指标应该达标'</span>, async ({ page }) => {
+    const launchedChrome = await chromeLauncher.launch({
+      chromeFlags: [<span class="string">'--headless'</span>]
+    })
+
+    const options = {
+      logLevel: <span class="string">'info'</span>,
+      output: <span class="string">'html'</span>,
+      port: launchedChrome.port,
+      onlyCategories: [<span class="string">'performance'</span>, <span class="string">'accessibility'</span>, <span class="string">'best-practices'</span>],
+      throttling: {
+        cpuSlowdownMultiplier: 4,
+        requestLatencyMs: 56.25,
+        downloadThroughputKbps: 1474.56,
+        uploadThroughputKbps: 675
+      }
+    }
+
+    const runnerResult = await lighthouse(<span class="string">'http://localhost:3000'</span>, options)
+
+    await launchedChrome.kill()
+
+    if (!runnerResult?.lhr) {
+      throw new Error(<span class="string">'Lighthouse did not return results'</span>)
+    }
+
+    const performanceScore = runnerResult.lhr.categories.performance.score
+    expect(performanceScore).toBeGreaterThanOrEqual(0.9)
+
+    const fcp = runnerResult.lhr.audits['first-contentful-paint'].numericValue
+    expect(fcp).toBeLessThan(1500) <span class="comment">// FCP &lt; 1.5s</span>
+
+    const lcp = runnerResult.lhr.audits['largest-contentful-paint'].numericValue
+    expect(lcp).toBeLessThan(2500) <span class="comment">// LCP &lt; 2.5s</span>
+  })
+})</code></pre>
+            </div>
+
+            <h3>11.6 验收测试自动化</h3>
+            <p>将 UI 测试集成到 CI/CD 流程中，作为上线前的最后一道关卡：</p>
+
+            <div class="warning-box">
+                <strong>UI 测试稳定性：</strong>UI 测试容易受网络波动、动画效果等因素影响导致 flaky tests。建议使用重试机制、稳定选择器、关闭动画等策略提高稳定性。
+            </div>
+
+            <div class="info-box">
+                <strong>测试执行策略：</strong>建议在 CI 中运行核心流程的 UI 测试（10-15 个关键用例），完整测试套件在夜间定时运行。
+            </div>
+        </article>
+
+        <!-- 第 12 章 -->
+        <article id="chapter12" class="chapter fade-in">
+            <h2>第 12 章 人机协同机制设计</h2>
+            
+            <h3>12.1 人在回路（Human-in-the-loop）设计原则</h3>
+            <p>完全的自动化并非最优解，关键环节需要人类专家的判断和决策：</p>
+
+            <h4>12.1.1 必须人工介入的场景</h4>
+            <ul>
+                <li><strong>需求优先级决策：</strong>业务价值和资源投入的权衡</li>
+                <li><strong>架构重大变更：</strong>影响深远的技术选型和架构调整</li>
+                <li><strong>用户体验设计：</strong>审美判断和情感化设计</li>
+                <li><strong>敏感数据处理：</strong>隐私和安全相关的决策</li>
+                <li><strong>生产发布审批：</strong>高风险发布的最终确认</li>
+            </ul>
+
+            <h3>12.2 审批流程设计</h3>
+            <p>在关键节点设置审批关卡，确保质量和风险控制：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Jenkins 审批流程配置</span>
+stage(<span class="string">'Deploy to Production'</span>) {
+    when {
+        branch <span class="string">'main'</span>
+    }
+    steps {
+        input {
+            message <span class="string">'是否部署到生产环境？'</span>
+            ok <span class="string">'确认部署'</span>
+            submitter <span class="string">'release-managers,admin'</span>
+            parameters {
+                string(
+                    name: <span class="string">'RELEASE_NOTES'</span>,
+                    defaultValue: <span class="string">''</span>,
+                    description: <span class="string">'本次发布说明'</span>
+                )
+                choice(
+                    name: <span class="string">'DEPLOYMENT_STRATEGY'</span>,
+                    choices: [<span class="string">'rolling'</span>, <span class="string">'blue-green'</span>, <span class="string">'canary'</span>],
+                    description: <span class="string">'部署策略'</span>
+                )
+                string(
+                    name: <span class="string">'CANARY_PERCENTAGE'</span>,
+                    defaultValue: <span class="string">'10'</span>,
+                    description: <span class="string">'金丝雀发布比例 (%)'</span>
+                )
+            }
+        }
+        
+        script {
+            echo <span class="string">"部署说明：${params.RELEASE_NOTES}"</span>
+            echo <span class="string">"部署策略：${params.DEPLOYMENT_STRATEGY}"</span>
+            
+            if (params.DEPLOYMENT_STRATEGY == <span class="string">'canary'</span>) {
+                deployCanary(params.CANARY_PERCENTAGE.toInteger())
+            } else {
+                deployStandard()
+            }
+        }
+    }
+}</code></pre>
+            </div>
+
+            <h3>12.3 AI 建议 + 人工决策模式</h3>
+            <p>AI 提供分析和建议，人类做最终决策：</p>
+            <ul>
+                <li><strong>代码审查：</strong>AI 标记潜在问题，开发者决定是否修复</li>
+                <li><strong>测试用例：</strong>AI 生成测试建议，QA 选择执行哪些</li>
+                <li><strong>性能优化：</strong>AI 识别瓶颈，工程师选择优化方案</li>
+                <li><strong>安全漏洞：</strong>AI 扫描漏洞，安全团队评估风险等级</li>
+            </ul>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># AI 代码审查报告示例</span>
+{
+  <span class="string">"review_id"</span>: <span class="string">"rev-20260313-001"</span>,
+  <span class="string">"pull_request"</span>: <span class="string">"#1234"</span>,
+  <span class="string">"summary"</span>: {
+    <span class="string">"total_issues"</span>: 5,
+    <span class="string">"critical"</span>: 1,
+    <span class="string">"high"</span>: 2,
+    <span class="string">"medium"</span>: 2,
+    <span class="string">"low"</span>: 0
+  },
+  <span class="string">"findings"</span>: [
+    {
+      <span class="string">"severity"</span>: <span class="string">"CRITICAL"</span>,
+      <span class="string">"type"</span>: <span class="string">"security"</span>,
+      <span class="string">"location"</span>: <span class="string">"src/auth/jwt.ts:45"</span>,
+      <span class="string">"issue"</span>: <span class="string">"JWT secret stored in source code"</span>,
+      <span class="string">"recommendation"</span>: <span class="string">"Move to environment variable or secret manager"</span>,
+      <span class="string">"suggested_fix"</span>: <span class="string">"process.env.JWT_SECRET"</span>,
+      <span class="string">"auto_fixable"</span>: <span class="keyword">true</span>
+    },
+    {
+      <span class="string">"severity"</span>: <span class="string">"HIGH"</span>,
+      <span class="string">"type"</span>: <span class="string">"performance"</span>,
+      <span class="string">"location"</span>: <span class="string">"src/orders/service.ts:123"</span>,
+      <span class="string">"issue"</span>: <span class="string">"N+1 query problem in loop"</span>,
+      <span class="string">"recommendation"</span>: <span class="string">"Use batch query with IN clause"</span>,
+      <span class="string">"estimated_impact"</span>: <span class="string">"Reduces DB calls from 101 to 2"</span>,
+      <span class="string">"auto_fixable"</span>: <span class="keyword">false</span>
+    }
+  ],
+  <span class="string">"approval_status"</span>: <span class="string">"pending_review"</span>,
+  <span class="string">"reviewer_actions"</span>: [
+    { <span class="string">"action"</span>: <span class="string">"apply_auto_fixes"</span>, <span class="string">"label"</span>: <span class="string">"应用自动修复"</span> },
+    { <span class="string">"action"</span>: <span class="string">"request_changes"</span>, <span class="string">"label"</span>: <span class="string">"请求修改"</span> },
+    { <span class="string">"action"</span>: <span class="string">"approve"</span>, <span class="string">"label"</span>: <span class="string">"批准通过"</span> }
+  ]
+}
+</code></pre>
+            </div>
+
+            <h3>12.4 渐进式自动化策略</h3>
+            <p>从辅助工具逐步过渡到全流程自动化：</p>
+            <div class="diagram">
+                <div class="flow-chart" style="flex-direction: column; align-items: stretch;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin: 10px 0;">
+                        <div class="flow-node" style="min-width: 200px;">阶段 1: AI 辅助编码</div>
+                        <div style="flex: 1; border-top: 2px dashed var(--primary-color); margin: 0 20px;"></div>
+                        <div style="color: var(--text-secondary);">代码补全、智能提示</div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin: 10px 0;">
+                        <div class="flow-node" style="min-width: 200px;">阶段 2: AI 生成测试</div>
+                        <div style="flex: 1; border-top: 2px dashed var(--primary-color); margin: 0 20px;"></div>
+                        <div style="color: var(--text-secondary);">单元测试、集成测试</div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin: 10px 0;">
+                        <div class="flow-node" style="min-width: 200px;">阶段 3: AI 代码审查</div>
+                        <div style="flex: 1; border-top: 2px dashed var(--primary-color); margin: 0 20px;"></div>
+                        <div style="color: var(--text-secondary);">自动审查、建议修复</div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin: 10px 0;">
+                        <div class="flow-node" style="min-width: 200px;">阶段 4: AI 自动部署</div>
+                        <div style="flex: 1; border-top: 2px dashed var(--primary-color); margin: 0 20px;"></div>
+                        <div style="color: var(--text-secondary);">CI/CD 流水线</div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin: 10px 0;">
+                        <div class="flow-node" style="min-width: 200px;">阶段 5: 全流程自动化</div>
+                        <div style="flex: 1; border-top: 2px dashed var(--primary-color); margin: 0 20px;"></div>
+                        <div style="color: var(--text-secondary);">需求→部署端到端</div>
+                    </div>
+                </div>
+            </div>
+
+            <h3>12.5 反馈循环与持续改进</h3>
+            <p>建立 AI 决策的反馈机制，持续优化自动化系统：</p>
+            <ul>
+                <li><strong>决策记录：</strong>记录 AI 建议和人工决策的差异</li>
+                <li><strong>效果评估：</strong>跟踪 AI 建议的采纳率和成功率</li>
+                <li><strong>模型微调：</strong>基于反馈数据优化 AI 模型</li>
+                <li><strong>规则迭代：</strong>更新自动化规则和阈值</li>
+            </ul>
+
+            <div class="highlight-box">
+                <strong>人机协同目标：</strong>不是用 AI 取代人类，而是让人类从重复劳动中解放出来，专注于创造性工作和战略决策。
+            </div>
+        </article>
+
+        <!-- 第 13 章 -->
+        <article id="chapter13" class="chapter fade-in">
+            <h2>第 13 章 各研发角色岗位 Agents 设计</h2>
+            
+            <h3>13.1 Agent 角色体系总览</h3>
+            <p>基于 OpenClaw 的多 Agent 架构，为每个研发角色设计专属 Agent：</p>
+
+            <div class="role-card">
+                <h4>📋 Product Owner Agent（产品负责人 Agent）</h4>
+                <p><strong>职责：</strong>需求分析、优先级排序、PRD 生成</p>
+                <p><strong>核心技能：</strong></p>
+                <ul>
+                    <li>market-research - 市场调研和竞品分析</li>
+                    <li>user-story-generation - 用户故事自动生成</li>
+                    <li>priority-matrix - 优先级矩阵分析（RICE/WSJF）</li>
+                    <li>prd-template - PRD 文档模板生成</li>
+                </ul>
+                <p><strong>协作对象：</strong>Stakeholder Agent, Business Analyst Agent</p>
+            </div>
+
+            <div class="role-card">
+                <h4>🏗️ Architecture Agent（架构师 Agent）</h4>
+                <p><strong>职责：</strong>技术选型、架构设计、技术方案评审</p>
+                <p><strong>核心技能：</strong></p>
+                <ul>
+                    <li>architecture-pattern-selector - 架构模式选择</li>
+                    <li>tech-stack-advisor - 技术栈推荐</li>
+                    <li>system-design-generator - 系统设计图生成</li>
+                    <li>risk-assessment - 技术风险评估</li>
+                    <li>adr-writer - 架构决策记录生成</li>
+                </ul>
+                <p><strong>协作对象：</strong>Tech Lead Agent, Security Agent</p>
+            </div>
+
+            <div class="role-card">
+                <h4>💻 Backend Developer Agent（后端开发 Agent）</h4>
+                <p><strong>职责：</strong>API 实现、业务逻辑编码、数据库操作</p>
+                <p><strong>核心技能：</strong></p>
+                <ul>
+                    <li>api-scaffold-generator - API 脚手架生成</li>
+                    <li>orm-model-creator - ORM 模型创建</li>
+                    <li>business-logic-implementer - 业务逻辑实现</li>
+                    <li>database-migration-writer - 数据库迁移脚本</li>
+                    <li>unit-test-backend - 后端单元测试生成</li>
+                </ul>
+                <p><strong>协作对象：</strong>Frontend Agent, Database Agent</p>
+            </div>
+
+            <div class="role-card">
+                <h4>🎨 Frontend Developer Agent（前端开发 Agent）</h4>
+                <p><strong>职责：</strong>UI 组件开发、状态管理、API 集成</p>
+                <p><strong>核心技能：</strong></p>
+                <ul>
+                    <li>component-generator - React/Vue组件生成</li>
+                    <li>state-management-setup - 状态管理配置</li>
+                    <li>api-client-generator - API 客户端生成</li>
+                    <li>responsive-design-check - 响应式设计检查</li>
+                    <li>accessibility-audit - 可访问性审计</li>
+                </ul>
+                <p><strong>协作对象：</strong>Designer Agent, Backend Agent</p>
+            </div>
+
+            <div class="role-card">
+                <h4>✅ QA Engineer Agent（测试工程师 Agent）</h4>
+                <p><strong>职责：</strong>测试策略、测试用例生成、质量报告</p>
+                <p><strong>核心技能：</strong></p>
+                <ul>
+                    <li>test-strategy-planner - 测试策略规划</li>
+                    <li>test-case-generator - 测试用例生成</li>
+                    <li>e2e-test-writer - E2E 测试编写</li>
+                    <li>coverage-analyzer - 覆盖率分析</li>
+                    <li>bug-report-generator - Bug 报告生成</li>
+                </ul>
+                <p><strong>协作对象：</strong>所有开发 Agent, DevOps Agent</p>
+            </div>
+
+            <div class="role-card">
+                <h4>🚀 DevOps Engineer Agent（运维工程师 Agent）</h4>
+                <p><strong>职责：</strong>CI/CD 配置、容器化、部署监控</p>
+                <p><strong>核心技能：</strong></p>
+                <ul>
+                    <li>dockerfile-generator - Dockerfile 生成</li>
+                    <li>k8s-manifest-writer - K8s 清单编写</li>
+                    <li>jenkins-pipeline-builder - Jenkins 流水线构建</li>
+                    <li>monitoring-setup - 监控配置</li>
+                    <li>incident-responder - 事件响应</li>
+                </ul>
+                <p><strong>协作对象：</strong>Security Agent, All Development Agents</p>
+            </div>
+
+            <div class="role-card">
+                <h4>🔒 Security Engineer Agent（安全工程师 Agent）</h4>
+                <p><strong>职责：</strong>安全扫描、漏洞评估、合规检查</p>
+                <p><strong>核心技能：</strong></p>
+                <ul>
+                    <li>sast-scanner - 静态应用安全测试</li>
+                    <li>dast-scanner - 动态应用安全测试</li>
+                    <li>dependency-auditor - 依赖安全审计</li>
+                    <li>compliance-checker - 合规性检查（GDPR/SOC2）</li>
+                    <li>threat-modeler - 威胁建模</li>
+                </ul>
+                <p><strong>协作对象：</strong>Architecture Agent, DevOps Agent</p>
+            </div>
+
+            <h3>13.2 Agent 通信协议</h3>
+            <p>定义 Agent 之间的标准化通信格式：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Agent 间消息格式示例</span>
+{
+  "message_id": "msg-20260313-001",
+  "timestamp": "2026-03-13T10:30:00Z",
+  "sender": {
+    "agent_id": "backend-dev-001",
+    "agent_type": "Backend Developer Agent",
+    "role": "developer"
+  },
+  "receiver": {
+    "agent_id": "qa-engineer-001",
+    "agent_type": "QA Engineer Agent",
+    "role": "tester"
+  },
+  "message_type": "task_handoff",
+  "priority": "high",
+  "context": {
+    "feature_id": "FEAT-1234",
+    "story": "作为用户，我想要重置密码，以便在忘记密码时恢复账户",
+    "status": "ready_for_testing"
+  },
+  "payload": {
+    "code_changes": {
+      "files_modified": [
+        "src/auth/password_reset.ts",
+        "src/email/templates/reset_password.html",
+        "tests/auth/password_reset.test.ts"
+      ],
+      "commit_hash": "abc123def456",
+      "pr_url": "https://github.com/company/project/pull/567"
+    },
+    "test_instructions": {
+      "test_scenarios": [
+        "有效邮箱发送重置链接",
+        "无效邮箱返回错误",
+        "重置链接过期处理",
+        "密码强度验证"
+      ],
+      "test_data": {
+        "test_email": "test+reset@example.com",
+        "expiry_minutes": 30
+      }
+    },
+    "deployment_info": {
+      "environment": "staging",
+      "url": "https://staging.example.com",
+      "deployed_at": "2026-03-13T10:25:00Z"
+    }
+  },
+  "expected_action": {
+    "action_type": "execute_tests",
+    "deadline": "2026-03-13T14:00:00Z",
+    "deliverables": ["test_report", "bug_reports_if_any"]
+  }
+}</code></pre>
+            </div>
+
+            <h3>13.3 Agent 编排器（Orchestrator）</h3>
+            <p>中央编排器协调多个 Agent 的协同工作：</p>
+
+            <div class="code-block">
+                <pre><code><span class="comment"># Agent Orchestrator 配置</span>
+orchestrator:
+  name: "rnd-orchestrator-v1"
+  
+  workflow_engine:
+    type: "state_machine"
+    max_parallel_agents: 5
+    timeout_per_task: 3600
+  
+  agent_registry:
+    - id: "product-owner-001"
+      type: "Product Owner Agent"
+      capabilities: ["requirements", "prioritization", "prd"]
+      status: "available"
+    
+    - id: "backend-dev-001"
+      type: "Backend Developer Agent"
+      capabilities: ["api", "database", "tests"]
+      status: "available"
+    
+    - id: "qa-engineer-001"
+      type: "QA Engineer Agent"
+      capabilities: ["testing", "quality", "reporting"]
+      status: "available"
+  
+  task_scheduler:
+    algorithm: "priority_based"
+    queue_management:
+      max_queue_size: 100
+      priority_levels: ["critical", "high", "medium", "low"]</code></pre>
+            </div>
+
+            <h3>13.4 Agent 绩效评估</h3>
+            <table>
+                <tr>
+                    <th>指标</th>
+                    <th>描述</th>
+                    <th>目标值</th>
+                </tr>
+                <tr>
+                    <td>任务完成率</td>
+                    <td>成功完成的任务比例</td>
+                    <td>>95%</td>
+                </tr>
+                <tr>
+                    <td>代码通过率</td>
+                    <td>AI 生成代码一次通过审查的比例</td>
+                    <td>>85%</td>
+                </tr>
+                <tr>
+                    <td>Bug 检出率</td>
+                    <td>AI 发现的 Bug 占总 Bug 的比例</td>
+                    <td>>70%</td>
+                </tr>
+                <tr>
+                    <td>平均响应时间</td>
+                    <td>从任务分配到开始执行的时间</td>
+                    <td>&lt;30 秒</td>
+                </tr>
+            </table>
+
+            <div class="info-box">
+                <strong>Agent 进化机制：</strong>定期分析 Agent 绩效数据，识别薄弱环节，通过技能更新、Prompt 优化持续改进。
+            </div>
+        </article>
+
+        <!-- 第 14 章 -->
+        <article id="chapter14" class="chapter fade-in">
+            <h2>第 14 章 完整案例实战</h2>
+            
+            <h3>14.1 案例背景：电商平台订单管理系统</h3>
+            <p>本章通过一个完整的电商订单管理系统案例，演示从需求到部署的全流程自动化。</p>
+            
+            <h4>项目概述</h4>
+            <ul>
+                <li><strong>项目名称：</strong>E-Commerce Order Management System</li>
+                <li><strong>项目周期：</strong>2 周（传统方式需 6-8 周）</li>
+                <li><strong>团队规模：</strong>5 个 Agent + 2 个人类工程师</li>
+                <li><strong>技术栈：</strong>Next.js + FastAPI + PostgreSQL + Kubernetes</li>
+            </ul>
+
+            <h3>14.2 实施时间线</h3>
+            <table>
+                <tr>
+                    <th>时间</th>
+                    <th>阶段</th>
+                    <th>主要产出</th>
+                </tr>
+                <tr>
+                    <td>Day 1</td>
+                    <td>需求分析与 PRD 生成</td>
+                    <td>结构化需求文档、PRD</td>
+                </tr>
+                <tr>
+                    <td>Day 2-3</td>
+                    <td>技术方案设计与 API 定义</td>
+                    <td>架构设计文档、OpenAPI 规范</td>
+                </tr>
+                <tr>
+                    <td>Day 4-7</td>
+                    <td>AI Coding 实现</td>
+                    <td>完整的前后端代码</td>
+                </tr>
+                <tr>
+                    <td>Day 8-9</td>
+                    <td>测试与质量保障</td>
+                    <td>测试套件、覆盖率报告</td>
+                </tr>
+                <tr>
+                    <td>Day 10</td>
+                    <td>CI/CD 与部署</td>
+                    <td>生产环境部署</td>
+                </tr>
+                <tr>
+                    <td>Day 11-12</td>
+                    <td>UI 自动化验收与上线</td>
+                    <td>验收报告、正式上线</td>
+                </tr>
+            </table>
+
+            <h3>14.3 项目成果总结</h3>
+            <table>
+                <tr>
+                    <th>指标</th>
+                    <th>传统方式</th>
+                    <th>AI 自动化系统</th>
+                    <th>提升</th>
+                </tr>
+                <tr>
+                    <td>开发周期</td>
+                    <td>6-8 周</td>
+                    <td>2 周</td>
+                    <td>70%↓</td>
+                </tr>
+                <tr>
+                    <td>代码行数</td>
+                    <td>~10,000 行</td>
+                    <td>~10,000 行（AI 生成 85%）</td>
+                    <td>人力节省 85%</td>
+                </tr>
+                <tr>
+                    <td>Bug 数量（上线后首月）</td>
+                    <td>50-80 个</td>
+                    <td>15-25 个</td>
+                    <td>65%↓</td>
+                </tr>
+                <tr>
+                    <td>测试覆盖率</td>
+                    <td>60-70%</td>
+                    <td>90%+</td>
+                    <td>40%↑</td>
+                </tr>
+                <tr>
+                    <td>部署频率</td>
+                    <td>每周 1-2 次</td>
+                    <td>每天多次</td>
+                    <td>10 倍↑</td>
+                </tr>
+                <tr>
+                    <td>人力成本</td>
+                    <td>8-10 人</td>
+                    <td>2-3 人 + AI Agents</td>
+                    <td>70%↓</td>
+                </tr>
+            </table>
+
+            <div class="highlight-box">
+                <strong>案例启示：</strong>通过 OpenClaw + Claude Code 驱动的端到端研发自动化系统，不仅大幅提升了开发效率和代码质量，更重要的是让人类工程师从重复劳动中解放出来，专注于架构设计、技术创新和业务价值创造。
+            </div>
+        </article>
+
+        <!-- 结语 -->
+        <article class="chapter fade-in">
+            <h2>📖 结语</h2>
+            <p>本书详细介绍了基于 OpenClaw + Claude Code 搭建端到端研发自动化系统的完整方法论和实践指南。从需求分析到 PRD 设计，从技术方案到 API 协议，从 AI Coding 到自动化测试，从 CI/CD 到 K8s 部署，从 UI 验收到人机协同，我们覆盖了现代软件研发的每一个关键环节。</p>
+            
+            <p>这不仅仅是一套工具链的堆砌，更是一种研发范式的革新。通过将 AI Agents 深度融入研发流程，我们实现了：</p>
+            <ul>
+                <li>✅ <strong>效率革命：</strong>开发周期缩短 70%，人力成本降低 70%</li>
+                <li>✅ <strong>质量飞跃：</strong>测试覆盖率提升至 90%+，Bug 率下降 65%</li>
+                <li>✅ <strong>知识沉淀：</strong>最佳实践固化为 Agent 技能，新人快速上手</li>
+                <li>✅ <strong>人机共赢：</strong>人类专注创新，AI 处理重复，各司其职</li>
+            </ul>
+
+            <div class="info-box" style="text-align: center; font-size: 1.2em; margin-top: 40px;">
+                <strong>🚀 未来已来，让我们一起塑造软件研发的新纪元！</strong>
+            </div>
+        </article>
+
+        <!-- 页脚 -->
+        <footer class="footer">
+            <p>© 2026 AI 技术研究院 | 基于 OpenClaw + Claude Code 的端到端研发自动化系统</p>
+            <p>版本：v1.0 | 出版日期：2026 年 3 月</p>
+            <p style="margin-top: 20px; color: var(--primary-color);">
+                🌟 感谢阅读！
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+
+        // 进度指示器
+        window.addEventListener('scroll', () => {
+            const scrolled = window.scrollY;
+            const height = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = (scrolled / height) * 100;
+            
+            let progressBar = document.getElementById('reading-progress');
+            if (!progressBar) {
+                progressBar = document.createElement('div');
+                progressBar.id = 'reading-progress';
+                progressBar.style.cssText = 'position:fixed;top:0;left:0;height:4px;background:linear-gradient(90deg,var(--primary-color),var(--secondary-color));z-index:1000;transition:width 0.1s ease;';
+                document.body.appendChild(progressBar);
+            }
+            progressBar.style.width = progress + '%';
+        });
+
+        console.log('📖 AI-Driven R&D Automation System - Book Loaded Successfully!');
+    </script>
+</body>
+</html>

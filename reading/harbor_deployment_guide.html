@@ -1,0 +1,1452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Harbor 私有镜像仓库部署与权限配置指南</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: pulse 4s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+        
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        header .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .toc {
+            background: #f8f9fa;
+            padding: 30px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .toc h2 {
+            color: #1e3c72;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+        
+        .toc ul {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 10px;
+        }
+        
+        .toc li {
+            padding: 10px 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .toc a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .toc a:hover {
+            color: #764ba2;
+            transform: translateX(5px);
+        }
+        
+        .section {
+            padding: 40px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .section:last-child {
+            border-bottom: none;
+        }
+        
+        .section h2 {
+            color: #1e3c72;
+            font-size: 2em;
+            margin-bottom: 25px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .section h3 {
+            color: #2a5298;
+            font-size: 1.5em;
+            margin: 25px 0 15px 0;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .feature-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .feature-card h4 {
+            font-size: 1.3em;
+            margin-bottom: 10px;
+        }
+        
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 25px;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            border-left: 5px solid #667eea;
+        }
+        
+        .code-block .comment {
+            color: #6a9955;
+        }
+        
+        .code-block .command {
+            color: #569cd6;
+        }
+        
+        .code-block .string {
+            color: #ce9178;
+        }
+        
+        .code-block .keyword {
+            color: #c586c0;
+        }
+        
+        .note {
+            background: #fff3cd;
+            border-left: 5px solid #ffc107;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        
+        .warning {
+            background: #f8d7da;
+            border-left: 5px solid #dc3545;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        
+        .success {
+            background: #d4edda;
+            border-left: 5px solid #28a745;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .step-list {
+            counter-reset: step-counter;
+            list-style: none;
+        }
+        
+        .step-list li {
+            counter-increment: step-counter;
+            padding: 20px;
+            margin: 15px 0;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            position: relative;
+            padding-left: 60px;
+        }
+        
+        .step-list li::before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        
+        .architecture-diagram {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .architecture-diagram svg {
+            max-width: 100%;
+            height: auto;
+        }
+        
+        footer {
+            background: #1e3c72;
+            color: white;
+            text-align: center;
+            padding: 30px;
+            margin-top: 40px;
+        }
+        
+        @media (max-width: 768px) {
+            .section {
+                padding: 20px;
+            }
+            
+            header h1 {
+                font-size: 1.8em;
+            }
+            
+            .toc ul {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🐳 Harbor 私有镜像仓库部署与权限配置指南</h1>
+            <p class="subtitle">基于 Docker Compose 的企业级容器镜像管理解决方案</p>
+            <p style="margin-top: 15px; opacity: 0.8;">版本：Harbor v2.x | 更新时间：2026 年 3 月</p>
+        </header>
+        
+        <nav class="toc">
+            <h2>📑 目录导航</h2>
+            <ul>
+                <li><a href="#section1">1. Harbor 简介与核心特性</a></li>
+                <li><a href="#section2">2. 系统要求与环境准备</a></li>
+                <li><a href="#section3">3. Harbor 架构设计</a></li>
+                <li><a href="#section4">4. 自动化部署流程</a></li>
+                <li><a href="#section5">5. SSL/TLS 证书配置</a></li>
+                <li><a href="#section6">6. RBAC 权限管理体系</a></li>
+                <li><a href="#section7">7. 项目与用户管理</a></li>
+                <li><a href="#section8">8. 镜像推送与拉取</a></li>
+                <li><a href="#section9">9. 高可用配置方案</a></li>
+                <li><a href="#section10">10. 监控与维护</a></li>
+            </ul>
+        </nav>
+        
+        <section id="section1" class="section">
+            <h2>1. Harbor 简介与核心特性</h2>
+            
+            <p style="font-size: 1.1em; margin: 20px 0;">
+                Harbor 是一个开源的云原生制品仓库，主要用于存储和管理容器镜像、Helm Charts 等云原生制品。
+                作为 CNCF（云原生计算基金会）的毕业项目，Harbor 已成为企业级容器镜像管理的标准解决方案。
+            </p>
+            
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>🔐 基于角色的访问控制 (RBAC)</h4>
+                    <p>支持细粒度的权限管理，用户通过角色获得对项目资源的访问权限，包括管理员、开发者、访客等多种角色。</p>
+                </div>
+                <div class="feature-card">
+                    <h4>🔄 镜像复制</h4>
+                    <p>支持跨多个 Registry 实例的镜像同步复制，适用于负载均衡、高可用、混合云和多云场景。</p>
+                </div>
+                <div class="feature-card">
+                    <h4>🖥️ 图形化用户界面</h4>
+                    <p>提供直观的 Web 管理界面，支持镜像浏览、检索、项目管理和用户管理等操作。</p>
+                </div>
+                <div class="feature-card">
+                    <h4>🔍 漏洞扫描</h4>
+                    <p>集成 Clair、Trivy 等扫描器，自动检测镜像中的安全漏洞，保障镜像安全性。</p>
+                </div>
+                <div class="feature-card">
+                    <h4>📊 审计日志</h4>
+                    <p>所有针对镜像仓库的操作都会被记录追溯，满足企业审计合规要求。</p>
+                </div>
+                <div class="feature-card">
+                    <h4>🌐 AD/LDAP 集成</h4>
+                    <p>支持与企业现有的 AD/LDAP 目录服务集成，实现统一身份认证管理。</p>
+                </div>
+            </div>
+            
+            <div class="note">
+                <strong>💡 提示：</strong>Harbor 是首个源自中国并成为 CNCF 毕业项目的开源软件，由 VMware 中国研发团队主导开发。
+            </div>
+        </section>
+        
+        <section id="section2" class="section">
+            <h2>2. 系统要求与环境准备</h2>
+            
+            <h3>2.1 硬件要求</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>组件</th>
+                        <th>最低配置</th>
+                        <th>推荐配置</th>
+                        <th>生产环境配置</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>CPU</td>
+                        <td>2 核</td>
+                        <td>4 核</td>
+                        <td>8 核+</td>
+                    </tr>
+                    <tr>
+                        <td>内存</td>
+                        <td>4 GB</td>
+                        <td>8 GB</td>
+                        <td>16 GB+</td>
+                    </tr>
+                    <tr>
+                        <td>磁盘</td>
+                        <td>50 GB SSD</td>
+                        <td>100 GB SSD</td>
+                        <td>500 GB+ SSD/SAN</td>
+                    </tr>
+                    <tr>
+                        <td>网络</td>
+                        <td>1 Gbps</td>
+                        <td>1 Gbps</td>
+                        <td>10 Gbps</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h3>2.2 软件要求</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>软件</th>
+                        <th>版本要求</th>
+                        <th>说明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Docker</td>
+                        <td>v20.10.0+</td>
+                        <td>容器运行时环境</td>
+                    </tr>
+                    <tr>
+                        <td>Docker Compose</td>
+                        <td>v2.0.0+</td>
+                        <td>容器编排工具</td>
+                    </tr>
+                    <tr>
+                        <td>OpenSSL</td>
+                        <td>v1.1.1+</td>
+                        <td>证书生成工具</td>
+                    </tr>
+                    <tr>
+                        <td>操作系统</td>
+                        <td>CentOS 7.6+ / Ubuntu 18.04+</td>
+                        <td>Linux 发行版</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h3>2.3 环境初始化脚本</h3>
+            <div class="code-block">
+<span class="comment"># ============================================</span>
+<span class="comment"># Harbor 部署环境初始化脚本</span>
+<span class="comment"># 适用于 CentOS/RHEL 系统</span>
+<span class="comment"># ============================================</span>
+
+<span class="comment"># 1. 禁用防火墙（生产环境建议配置规则而非完全关闭）</span>
+<span class="command">systemctl</span> stop firewalld
+<span class="command">systemctl</span> disable firewalld
+
+<span class="comment"># 2. 禁用 SELinux</span>
+<span class="command">setenforce</span> 0
+<span class="command">sed</span> -i <span class="string">'s/enforcing/disabled/'</span> /etc/selinux/config
+
+<span class="comment"># 3. 设置主机名</span>
+<span class="command">hostnamectl</span> set-hostname harbor-server
+
+<span class="comment"># 4. 安装基础依赖包</span>
+<span class="command">yum install</span> -y wget net-tools nfs-utils lrzsz gcc gcc-c++ make \
+    cmake libxml2-devel openssl-devel curl curl-devel unzip sudo \
+    ntp libaio-devel vim ncurses-devel autoconf automake zlib-devel \
+    python3-devel epel-release openssh-server socat ipvsadm conntrack
+
+<span class="comment"># 5. 配置 Docker CE 国内镜像源（阿里云）</span>
+<span class="command">yum-config-manager</span> --add-repo http://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+
+<span class="comment"># 6. 安装 Docker</span>
+<span class="command">yum install</span> -y docker-ce docker-ce-cli containerd.io
+
+<span class="comment"># 7. 启动并设置 Docker 开机自启</span>
+<span class="command">systemctl</span> enable --now docker
+
+<span class="comment"># 8. 配置 Docker 镜像加速器</span>
+<span class="command">mkdir</span> -p /etc/docker
+<span class="command">cat</span> > /etc/docker/daemon.json << EOF
+{
+  "registry-mirrors": [
+    "https://hub.rat.dev",
+    "https://docker.1panel.live",
+    "https://docker.rainbond.cc"
+  ],
+  "insecure-registries": ["harbor.yourdomain.com"]
+}
+EOF
+
+<span class="command">systemctl</span> restart docker
+
+<span class="comment"># 9. 安装 Docker Compose</span>
+<span class="command">curl</span> -L "https://github.com/docker/compose/releases/download/v2.20.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+<span class="command">chmod</span> +x /usr/local/bin/docker-compose
+<span class="command">ln</span> -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+
+<span class="comment"># 10. 验证安装</span>
+<span class="command">docker</span> --version
+<span class="command">docker-compose</span> --version
+            </div>
+            
+            <div class="warning">
+                <strong>⚠️ 警告：</strong>生产环境中不建议完全关闭防火墙和 SELinux，应该配置适当的安全策略和访问规则。
+            </div>
+        </section>
+        
+        <section id="section3" class="section">
+            <h2>3. Harbor 架构设计</h2>
+            
+            <div class="architecture-diagram">
+                <svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Background -->
+                    <rect width="800" height="600" fill="#f8f9fa"/>
+                    
+                    <!-- Title -->
+                    <text x="400" y="40" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e3c72">Harbor 系统架构图</text>
+                    
+                    <!-- User Layer -->
+                    <rect x="50" y="70" width="700" height="60" rx="10" fill="#667eea" opacity="0.9"/>
+                    <text x="400" y="105" text-anchor="middle" font-size="16" fill="white">用户层 (Users / CI/CD Systems)</text>
+                    
+                    <!-- Proxy Layer -->
+                    <rect x="50" y="150" width="700" height="50" rx="8" fill="#2a5298" opacity="0.9"/>
+                    <text x="400" y="180" text-anchor="middle" font-size="14" fill="white">代理层 (Nginx / Load Balancer - HTTPS:443)</text>
+                    
+                    <!-- Core Services -->
+                    <rect x="50" y="220" width="220" height="80" rx="8" fill="#764ba2" opacity="0.9"/>
+                    <text x="160" y="250" text-anchor="middle" font-size="14" fill="white">Harbor Core</text>
+                    <text x="160" y="270" text-anchor="middle" font-size="12" fill="white">(API & UI)</text>
+                    
+                    <rect x="290" y="220" width="220" height="80" rx="8" fill="#764ba2" opacity="0.9"/>
+                    <text x="400" y="250" text-anchor="middle" font-size="14" fill="white">Registry</text>
+                    <text x="400" y="270" text-anchor="middle" font-size="12" fill="white">(镜像存储)</text>
+                    
+                    <rect x="530" y="220" width="220" height="80" rx="8" fill="#764ba2" opacity="0.9"/>
+                    <text x="640" y="250" text-anchor="middle" font-size="14" fill="white">ChartMuseum</text>
+                    <text x="640" y="270" text-anchor="middle" font-size="12" fill="white">(Helm Charts)</text>
+                    
+                    <!-- Support Services -->
+                    <rect x="50" y="320" width="170" height="60" rx="8" fill="#1e3c72" opacity="0.8"/>
+                    <text x="135" y="355" text-anchor="middle" font-size="13" fill="white">PostgreSQL</text>
+                    
+                    <rect x="240" y="320" width="170" height="60" rx="8" fill="#1e3c72" opacity="0.8"/>
+                    <text x="325" y="355" text-anchor="middle" font-size="13" fill="white">Redis</text>
+                    
+                    <rect x="430" y="320" width="170" height="60" rx="8" fill="#1e3c72" opacity="0.8"/>
+                    <text x="515" y="355" text-anchor="middle" font-size="13" fill="white">Trivy Scanner</text>
+                    
+                    <rect x="620" y="320" width="130" height="60" rx="8" fill="#1e3c72" opacity="0.8"/>
+                    <text x="685" y="355" text-anchor="middle" font-size="13" fill="white">Job Service</text>
+                    
+                    <!-- Storage -->
+                    <rect x="50" y="400" width="700" height="70" rx="10" fill="#28a745" opacity="0.9"/>
+                    <text x="400" y="430" text-anchor="middle" font-size="16" fill="white">持久化存储层</text>
+                    <text x="400" y="455" text-anchor="middle" font-size="13" fill="white">文件系统 / NFS / S3 / OSS</text>
+                    
+                    <!-- Arrows -->
+                    <line x1="400" y1="130" x2="400" y2="150" stroke="#667eea" stroke-width="3" marker-end="url(#arrowhead)"/>
+                    <line x1="400" y1="200" x2="400" y2="220" stroke="#667eea" stroke-width="3" marker-end="url(#arrowhead)"/>
+                    <line x1="400" y1="300" x2="400" y2="320" stroke="#667eea" stroke-width="3" marker-end="url(#arrowhead)"/>
+                    <line x1="400" y1="380" x2="400" y2="400" stroke="#667eea" stroke-width="3" marker-end="url(#arrowhead)"/>
+                    
+                    <!-- Arrow marker definition -->
+                    <defs>
+                        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#667eea"/>
+                        </marker>
+                    </defs>
+                </svg>
+            </div>
+            
+            <h3>3.1 核心组件说明</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>组件名称</th>
+                        <th>功能描述</th>
+                        <th>端口</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Proxy (Nginx)</strong></td>
+                        <td>反向代理，处理所有外部请求，提供 HTTPS 终止</td>
+                        <td>443/80</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Harbor Core</strong></td>
+                        <td>核心服务，提供 API 接口和 Web 界面，处理认证授权</td>
+                        <td>8080</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Registry</strong></td>
+                        <td>Docker Registry v2，负责镜像的存储和分发</td>
+                        <td>5000</td>
+                    </tr>
+                    <tr>
+                        <td><strong>ChartMuseum</strong></td>
+                        <td>Helm Chart 仓库服务</td>
+                        <td>6060</td>
+                    </tr>
+                    <tr>
+                        <td><strong>PostgreSQL</strong></td>
+                        <td>存储用户信息、项目元数据、镜像元数据等</td>
+                        <td>5432</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Redis</strong></td>
+                        <td>缓存会话、令牌、任务队列等</td>
+                        <td>6379</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Trivy</strong></td>
+                        <td>镜像漏洞扫描器</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Job Service</strong></td>
+                        <td>后台任务调度，处理复制、扫描等异步任务</td>
+                        <td>-</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+        
+        <section id="section4" class="section">
+            <h2>4. 自动化部署流程</h2>
+            
+            <ol class="step-list">
+                <li>
+                    <strong>下载 Harbor 安装包</strong>
+                    <p>从 GitHub Releases 页面下载最新版本的 Harbor 离线安装包：</p>
+                    <div class="code-block">
+<span class="comment"># 下载 Harbor 离线安装包（以 v2.9.0 为例）</span>
+<span class="command">wget</span> https://github.com/goharbor/harbor/releases/download/v2.9.0/harbor-offline-installer-v2.9.0.tgz
+
+<span class="comment"># 解压安装包</span>
+<span class="command">tar</span> zxvf harbor-offline-installer-v2.9.0.tgz -C /opt/
+
+<span class="comment"># 进入 Harbor 目录</span>
+<span class="command">cd</span> /opt/harbor
+                    </div>
+                </li>
+                
+                <li>
+                    <strong>配置 harbor.yml 文件</strong>
+                    <p>编辑 Harbor 主配置文件，设置 hostname、HTTPS 证书路径等关键参数：</p>
+                    <div class="code-block">
+<span class="comment"># 复制模板配置文件</span>
+<span class="command">cp</span> harbor.yml.tmpl harbor.yml
+
+<span class="comment"># 编辑配置文件</span>
+<span class="command">vim</span> harbor.yml
+                    </div>
+                    
+                    <div class="code-block">
+<span class="comment"># harbor.yml 配置示例</span>
+<span class="keyword">hostname:</span> harbor.yourdomain.com
+
+<span class="keyword">http:</span>
+  <span class="keyword">port:</span> 8080
+
+<span class="keyword">https:</span>
+  <span class="keyword">port:</span> 443
+  <span class="keyword">certificate:</span> /opt/harbor/certs/server.crt
+  <span class="keyword">private_key:</span> /opt/harbor/certs/server.key
+
+<span class="keyword">harbor_admin_password:</span> Harbor12345
+
+<span class="keyword">database:</span>
+  <span class="keyword">password:</span> root123
+  <span class="keyword">max_idle_conns:</span> 50
+  <span class="keyword">max_open_conns:</span> 1000
+
+<span class="keyword">data_volume:</span> /data/harbor
+
+<span class="keyword">trivy:</span>
+  <span class="keyword">ignore_unfixed:</span> false
+  <span class="keyword">skip_update:</span> false
+  <span class="keyword">offline_scan:</span> false
+  <span class="keyword">skip_java_db_update:</span> false
+
+<span class="keyword">jobservice:</span>
+  <span class="keyword">max_job_workers:</span> 10
+
+<span class="keyword">notification:</span>
+  <span class="keyword">webhook_job_max_retry:</span> 10
+
+<span class="keyword">log:</span>
+  <span class="keyword">level:</span> info
+  <span class="keyword">local:</span>
+    <span class="keyword">rotate_count:</span> 50
+    <span class="keyword">rotate_size:</span> 200M
+    <span class="keyword">location:</span> /var/log/harbor
+
+<span class="keyword">_version:</span> 2.9.0
+                    </div>
+                </li>
+                
+                <li>
+                    <strong>执行安装脚本</strong>
+                    <div class="code-block">
+<span class="comment"># 运行安装脚本</span>
+<span class="command">./install.sh</span>
+
+<span class="comment"># 可选参数：</span>
+<span class="comment"># --with-trivy     安装 Trivy 漏洞扫描器</span>
+<span class="comment"># --with-chartmuseum 安装 ChartMuseum Helm 仓库</span>
+<span class="comment"># --with-notary    安装 Notary 内容信任服务</span>
+
+<span class="comment"># 完整安装示例</span>
+<span class="command">./install.sh</span> --with-trivy --with-chartmuseum
+                    </div>
+                </li>
+                
+                <li>
+                    <strong>验证安装</strong>
+                    <div class="code-block">
+<span class="comment"># 检查所有容器状态</span>
+<span class="command">docker-compose</span> ps
+
+<span class="comment"># 查看 Harbor 日志</span>
+<span class="command">docker-compose</span> logs -f
+
+<span class="comment"># 测试 Web 界面访问</span>
+<span class="command">curl</span> -k https://harbor.yourdomain.com
+                    </div>
+                    
+                    <div class="success">
+                        <strong>✅ 成功标志：</strong>所有容器状态为 Up，Web 界面可正常访问，默认管理员账号 admin 可登录。
+                    </div>
+                </li>
+            </ol>
+        </section>
+        
+        <section id="section5" class="section">
+            <h2>5. SSL/TLS 证书配置</h2>
+            
+            <h3>5.1 使用 OpenSSL 生成自签名证书</h3>
+            <div class="code-block">
+<span class="comment"># ============================================</span>
+<span class="comment"># SSL 证书生成脚本</span>
+<span class="comment"># ============================================</span>
+
+<span class="comment"># 1. 创建证书目录</span>
+<span class="command">mkdir</span> -p /opt/harbor/certs
+<span class="command">cd</span> /opt/harbor/certs
+
+<span class="comment"># 2. 生成 CA 私钥</span>
+<span class="command">openssl</span> genrsa -out ca.key 4096
+
+<span class="comment"># 3. 生成 CA 证书</span>
+<span class="command">openssl</span> req -x509 -new -nodes -sha512 -days 3650 \
+  -subj "/C=CN/ST=Beijing/L=Beijing/O=YourCompany/OU=IT/CN=harbor.yourdomain.com" \
+  -key ca.key \
+  -out ca.crt
+
+<span class="comment"># 4. 生成服务器私钥</span>
+<span class="command">openssl</span> genrsa -out server.key 4096
+
+<span class="comment"># 5. 生成证书签名请求 (CSR)</span>
+<span class="command">openssl</span> req -sha512 -new \
+  -subj "/C=CN/ST=Beijing/L=Beijing/O=YourCompany/OU=IT/CN=harbor.yourdomain.com" \
+  -key server.key \
+  -out server.csr
+
+<span class="comment"># 6. 创建扩展配置文件（添加 SAN）</span>
+<span class="command">cat</span> > v3.ext << EOF
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1=harbor.yourdomain.com
+DNS.2=harbor
+IP.1=192.168.1.100
+EOF
+
+<span class="comment"># 7. 使用 CA 证书签发服务器证书</span>
+<span class="command">openssl</span> x509 -req -sha512 -days 3650 \
+  -extfile v3.ext \
+  -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -in server.csr \
+  -out server.crt
+
+<span class="comment"># 8. 将证书转换为 Docker 信任的格式</span>
+<span class="command">cp</span> ca.crt /etc/pki/ca-trust/source/anchors/harbor-ca.crt
+<span class="command">update-ca-trust</span>
+
+<span class="comment"># 9. 配置 Docker 信任证书</span>
+<span class="command">mkdir</span> -p /etc/docker/certs.d/harbor.yourdomain.com
+<span class="command">cp</span> ca.crt /etc/docker/certs.d/harbor.yourdomain.com/ca.crt
+<span class="command">systemctl</span> restart docker
+            </div>
+            
+            <h3>5.2 使用 Let's Encrypt 获取免费证书</h3>
+            <div class="code-block">
+<span class="comment"># 安装 Certbot</span>
+<span class="command">yum install</span> -y certbot
+
+<span class="comment"># 获取证书（ standalone 模式）</span>
+<span class="command">certbot</span> certonly --standalone -d harbor.yourdomain.com
+
+<span class="comment"># 证书位置</span>
+<span class="comment"># /etc/letsencrypt/live/harbor.yourdomain.com/fullchain.pem</span>
+<span class="comment"># /etc/letsencrypt/live/harbor.yourdomain.com/privkey.pem</span>
+
+<span class="comment"># 创建软链接到 Harbor 证书目录</span>
+<span class="command">ln</span> -s /etc/letsencrypt/live/harbor.yourdomain.com/fullchain.pem /opt/harbor/certs/server.crt
+<span class="command">ln</span> -s /etc/letsencrypt/live/harbor.yourdomain.com/privkey.pem /opt/harbor/certs/server.key
+            </div>
+            
+            <div class="note">
+                <strong>💡 提示：</strong>生产环境强烈建议使用受信任的 CA 颁发的证书或 Let's Encrypt 免费证书，避免使用自签名证书。
+            </div>
+        </section>
+        
+        <section id="section6" class="section">
+            <h2>6. RBAC 权限管理体系</h2>
+            
+            <p style="margin: 20px 0;">
+                Harbor 实现了基于角色的访问控制（RBAC）模型，通过用户 - 角色 - 权限三层结构实现细粒度的权限管理。
+                权限控制主要在项目（Project）级别进行，用户可以属于多个项目，并在不同项目中拥有不同的角色。
+            </p>
+            
+            <h3>6.1 预定义角色</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>角色名称</th>
+                        <th>角色代码</th>
+                        <th>权限描述</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>超级管理员</strong></td>
+                        <td>admin</td>
+                        <td>系统最高权限，可管理所有项目、用户、系统配置、查看审计日志等</td>
+                    </tr>
+                    <tr>
+                        <td><strong>项目管理员</strong></td>
+                        <td>projectadmin</td>
+                        <td>管理特定项目，包括成员管理、镜像管理、扫描策略配置等</td>
+                    </tr>
+                    <tr>
+                        <td><strong>开发者</strong></td>
+                        <td>developer</td>
+                        <td>推送和拉取镜像、查看项目信息、触发扫描等</td>
+                    </tr>
+                    <tr>
+                        <td><strong>访客</strong></td>
+                        <td>guest</td>
+                        <td>仅可拉取公开项目的镜像，查看基本信息</td>
+                    </tr>
+                    <tr>
+                        <td><strong>受限访客</strong></td>
+                        <td>limited_guest</td>
+                        <td>仅可拉取镜像，无法查看其他信息</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h3>6.2 权限矩阵</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>权限项</th>
+                        <th>Admin</th>
+                        <th>ProjectAdmin</th>
+                        <th>Developer</th>
+                        <th>Guest</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>创建项目</td>
+                        <td>✅</td>
+                        <td>❌</td>
+                        <td>❌</td>
+                        <td>❌</td>
+                    </tr>
+                    <tr>
+                        <td>删除项目</td>
+                        <td>✅</td>
+                        <td>✅ (本项目)</td>
+                        <td>❌</td>
+                        <td>❌</td>
+                    </tr>
+                    <tr>
+                        <td>添加成员</td>
+                        <td>✅</td>
+                        <td>✅ (本项目)</td>
+                        <td>❌</td>
+                        <td>❌</td>
+                    </tr>
+                    <tr>
+                        <td>推送镜像</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>❌</td>
+                    </tr>
+                    <tr>
+                        <td>拉取镜像</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>✅ (公开)</td>
+                    </tr>
+                    <tr>
+                        <td>删除镜像</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>❌</td>
+                        <td>❌</td>
+                    </tr>
+                    <tr>
+                        <td>触发扫描</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>❌</td>
+                    </tr>
+                    <tr>
+                        <td>查看日志</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>❌</td>
+                    </tr>
+                    <tr>
+                        <td>配置复制</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>❌</td>
+                        <td>❌</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h3>6.3 自定义角色（Harbor v2.4+）</h3>
+            <div class="code-block">
+<span class="comment"># 通过 Harbor API 创建自定义角色</span>
+<span class="command">curl</span> -X POST "https://harbor.yourdomain.com/api/v2.0/roles" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "custom_developer",
+    "description": "自定义开发者角色",
+    "permissions": [
+      {"resource": "project", "action": "read"},
+      {"resource": "repository", "action": "pull"},
+      {"resource": "repository", "action": "push"},
+      {"resource": "scan", "action": "create"}
+    ]
+  }'
+            </div>
+        </section>
+        
+        <section id="section7" class="section">
+            <h2>7. 项目与用户管理</h2>
+            
+            <h3>7.1 项目管理</h3>
+            <p>项目是 Harbor 中资源组织的基本单位，分为公开项目和私有项目：</p>
+            <ul style="margin: 15px 0 15px 30px;">
+                <li><strong>公开项目（Public）：</strong>任何用户都可以拉取镜像</li>
+                <li><strong>私有项目（Private）：</strong>只有项目成员才能访问</li>
+            </ul>
+            
+            <div class="code-block">
+<span class="comment"># ============================================</span>
+<span class="comment"># 项目管理脚本示例</span>
+<span class="comment"># ============================================</span>
+
+<span class="comment"># 1. 创建公开项目</span>
+<span class="command">curl</span> -X POST "https://harbor.yourdomain.com/api/v2.0/projects" \
+  -H "Authorization: Basic $(echo -n 'admin:Harbor12345' | base64)" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_name": "library",
+    "public": true,
+    "metadata": {
+      "auto_scan": "true"
+    }
+  }'
+
+<span class="comment"># 2. 创建私有项目</span>
+<span class="command">curl</span> -X POST "https://harbor.yourdomain.com/api/v2.0/projects" \
+  -H "Authorization: Basic $(echo -n 'admin:Harbor12345' | base64)" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_name": "backend-services",
+    "public": false,
+    "storage_limit": 10737418240,
+    "metadata": {
+      "auto_scan": "true",
+      "prevent_vul": "true",
+      "severity": "high"
+    }
+  }'
+
+<span class="comment"># 3. 列出所有项目</span>
+<span class="command">curl</span> -X GET "https://harbor.yourdomain.com/api/v2.0/projects" \
+  -H "Authorization: Basic $(echo -n 'admin:Harbor12345' | base64)"
+
+<span class="comment"># 4. 删除项目</span>
+<span class="command">curl</span> -X DELETE "https://harbor.yourdomain.com/api/v2.0/projects/1" \
+  -H "Authorization: Basic $(echo -n 'admin:Harbor12345' | base64)"
+            </div>
+            
+            <h3>7.2 用户管理</h3>
+            <div class="code-block">
+<span class="comment"># ============================================</span>
+<span class="comment"># 用户管理脚本示例</span>
+<span class="comment"># ============================================</span>
+
+<span class="comment"># 1. 创建本地用户</span>
+<span class="command">curl</span> -X POST "https://harbor.yourdomain.com/api/v2.0/users" \
+  -H "Authorization: Basic $(echo -n 'admin:Harbor12345' | base64)" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "developer1",
+    "email": "developer1@company.com",
+    "realname": "张开发者",
+    "password": "DevPass123!",
+    "comment": "后端开发工程师",
+    "role_id": 0
+  }'
+
+<span class="comment"># 2. 查询用户列表</span>
+<span class="command">curl</span> -X GET "https://harbor.yourdomain.com/api/v2.0/users?username=developer1" \
+  -H "Authorization: Basic $(echo -n 'admin:Harbor12345' | base64)"
+
+<span class="comment"># 3. 更新用户信息</span>
+<span class="command">curl</span> -X PUT "https://harbor.yourdomain.com/api/v2.0/users/2" \
+  -H "Authorization: Basic $(echo -n 'admin:Harbor12345' | base64)" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "realname": "张高级开发者",
+    "email": "senior.developer1@company.com"
+  }'
+
+<span class="comment"># 4. 删除用户</span>
+<span class="command">curl</span> -X DELETE "https://harbor.yourdomain.com/api/v2.0/users/2" \
+  -H "Authorization: Basic $(echo -n 'admin:Harbor12345' | base64)"
+
+<span class="comment"># 5. 设置用户管理员权限</span>
+<span class="command">curl</span> -X PUT "https://harbor.yourdomain.com/api/v2.0/users/2/sysadmin" \
+  -H "Authorization: Basic $(echo -n 'admin:Harbor12345' | base64)" \
+  -H "Content-Type: application/json" \
+  -d '{"sysadmin_flag": true}'
+            </div>
+            
+            <h3>7.3 项目成员管理</h3>
+            <div class="code-block">
+<span class="comment"># ============================================</span>
+<span class="comment"># 项目成员管理脚本</span>
+<span class="comment"># ============================================</span>
+
+<span class="comment"># 1. 添加用户到项目并分配角色</span>
+<span class="command">curl</span> -X POST "https://harbor.yourdomain.com/api/v2.0/projects/1/members" \
+  -H "Authorization: Basic $(echo -n 'admin:Harbor12345' | base64)" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "role_id": 2,
+    "member_user": {
+      "user_id": 2,
+      "username": "developer1"
+    }
+  }'
+
+<span class="comment"># 角色 ID 映射：1=管理员，2=开发者，3=访客，4=项目管理员，5=受限访客</span>
+
+<span class="comment"># 2. 查询项目成员</span>
+<span class="command">curl</span> -X GET "https://harbor.yourdomain.com/api/v2.0/projects/1/members" \
+  -H "Authorization: Basic $(echo -n 'admin:Harbor12345' | base64)"
+
+<span class="comment"># 3. 更新成员角色</span>
+<span class="command">curl</span> -X PUT "https://harbor.yourdomain.com/api/v2.0/projects/1/members/2" \
+  -H "Authorization: Basic $(echo -n 'admin:Harbor12345' | base64)" \
+  -H "Content-Type: application/json" \
+  -d '{"role_id": 4}'
+
+<span class="comment"># 4. 移除项目成员</span>
+<span class="command">curl</span> -X DELETE "https://harbor.yourdomain.com/api/v2.0/projects/1/members/2" \
+  -H "Authorization: Basic $(echo -n 'admin:Harbor12345' | base64)"
+            </div>
+            
+            <h3>7.4 LDAP/AD 集成配置</h3>
+            <div class="code-block">
+<span class="comment"># LDAP 配置示例（通过 API）</span>
+<span class="command">curl</span> -X PUT "https://harbor.yourdomain.com/api/v2.0/configurations" \
+  -H "Authorization: Basic $(echo -n 'admin:Harbor12345' | base64)" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "auth_mode": "ldap_auth",
+    "ldap_url": "ldap://ldap.company.com:389",
+    "ldap_base_dn": "dc=company,dc=com",
+    "ldap_uid": "uid",
+    "ldap_scope": 2,
+    "ldap_filter": "(objectClass=person)",
+    "ldap_search_dn": "cn=admin,dc=company,dc=com",
+    "ldap_search_password": "LdapAdminPass",
+    "ldap_group_base_dn": "ou=groups,dc=company,dc=com",
+    "ldap_group_filter": "(objectClass=groupOfNames)",
+    "ldap_group_gid": "cn",
+    "ldap_group_scope": 2
+  }'
+            </div>
+        </section>
+        
+        <section id="section8" class="section">
+            <h2>8. 镜像推送与拉取</h2>
+            
+            <h3>8.1 Docker CLI 操作</h3>
+            <div class="code-block">
+<span class="comment"># ============================================</span>
+<span class="comment"># 镜像推送与拉取操作</span>
+<span class="comment"># ============================================</span>
+
+<span class="comment"># 1. 登录 Harbor</span>
+<span class="command">docker login</span> harbor.yourdomain.com
+<span class="comment"># 输入用户名和密码</span>
+
+<span class="comment"># 2. 标记本地镜像</span>
+<span class="command">docker tag</span> myapp:latest harbor.yourdomain.com/library/myapp:v1.0.0
+
+<span class="comment"># 3. 推送镜像到 Harbor</span>
+<span class="command">docker push</span> harbor.yourdomain.com/library/myapp:v1.0.0
+
+<span class="comment"># 4. 从 Harbor 拉取镜像</span>
+<span class="command">docker pull</span> harbor.yourdomain.com/library/myapp:v1.0.0
+
+<span class="comment"># 5. 登出</span>
+<span class="command">docker logout</span> harbor.yourdomain.com
+            </div>
+            
+            <h3>8.2 CI/CD 集成示例</h3>
+            <div class="code-block">
+<span class="comment"># Jenkins Pipeline 示例</span>
+pipeline {
+    agent any
+    
+    environment {
+        HARBOR_URL = 'harbor.yourdomain.com'
+        HARBOR_PROJECT = 'backend-services'
+        HARBOR_USER = credentials('harbor-user')
+        HARBOR_PASS = credentials('harbor-pass')
+    }
+    
+    stages {
+        stage('Build Image') {
+            steps {
+                script {
+                    docker.build("${env.HARBOR_URL}/${env.HARBOR_PROJECT}/myapp:${env.BUILD_NUMBER}")
+                }
+            }
+        }
+        
+        stage('Push to Harbor') {
+            steps {
+                script {
+                    docker.withRegistry("https://${env.HARBOR_URL}", 
+                        [usernamePassword(credentialsId: 'harbor-creds', 
+                         usernameVariable: 'USER', 
+                         passwordVariable: 'PASS')]) {
+                        docker.image("${env.HARBOR_URL}/${env.HARBOR_PROJECT}/myapp:${env.BUILD_NUMBER}").push()
+                    }
+                }
+            }
+        }
+        
+        stage('Scan Image') {
+            steps {
+                script {
+                    sh """
+                    curl -X POST "https://${env.HARBOR_URL}/api/v2.0/projects/${env.HARBOR_PROJECT}/repositories/myapp/artifacts/latest/scan" \\
+                      -u "${env.HARBOR_USER}:${env.HARBOR_PASS}"
+                    """
+                }
+            }
+        }
+    }
+}
+            </div>
+            
+            <h3>8.3 Kubernetes 集成</h3>
+            <div class="code-block">
+<span class="comment"># 创建 Kubernetes ImagePullSecret</span>
+<span class="command">kubectl create secret docker-registry harbor-secret \</span>
+  --docker-server=harbor.yourdomain.com \
+  --docker-username=developer1 \
+  --docker-password=DevPass123! \
+  --docker-email=developer1@company.com \
+  -n default
+
+<span class="comment"># 在 Pod 中使用</span>
+apiVersion: v1
+kind: Pod
+metadata:
+  name: myapp-pod
+spec:
+  containers:
+  - name: myapp
+    image: harbor.yourdomain.com/backend-services/myapp:v1.0.0
+  imagePullSecrets:
+  - name: harbor-secret
+            </div>
+        </section>
+        
+        <section id="section9" class="section">
+            <h2>9. 高可用配置方案</h2>
+            
+            <h3>9.1 外部数据库配置</h3>
+            <div class="code-block">
+<span class="comment"># harbor.yml 配置外部 PostgreSQL</span>
+<span class="keyword">database:</span>
+  <span class="keyword">type:</span> external
+  <span class="keyword">external:</span>
+    <span class="keyword">host:</span> pg-cluster.company.com
+    <span class="keyword">port:</span> 5432
+    <span class="keyword">username:</span> harbor
+    <span class="keyword">password:</span> SecureDbPass123
+    <span class="keyword">core_database:</span> registry
+    <span class="keyword">notary_server_database:</span> notary_server
+    <span class="keyword">notary_signer_database:</span> notary_signer
+    <span class="keyword">sslmode:</span> require
+    <span class="keyword">max_idle_conns:</span> 100
+    <span class="keyword">max_open_conns:</span> 2000
+            </div>
+            
+            <h3>9.2 外部 Redis 配置</h3>
+            <div class="code-block">
+<span class="comment"># harbor.yml 配置外部 Redis</span>
+<span class="keyword">redis:</span>
+  <span class="keyword">type:</span> external
+  <span class="keyword">external:</span>
+    <span class="keyword">host:</span> redis-cluster.company.com
+    <span class="keyword">port:</span> 6379
+    <span class="keyword">password:</span> SecureRedisPass123
+    <span class="keyword">namespace:</span> harbor
+    <span class="keyword">idle_timeout_seconds:</span> 30
+            </div>
+            
+            <h3>9.3 对象存储配置（S3/OSS）</h3>
+            <div class="code-block">
+<span class="comment"># Registry 存储驱动配置（config.yml）</span>
+<span class="keyword">storage:</span>
+  <span class="keyword">filesystem:</span>
+    <span class="keyword">rootdirectory:</span> /storage
+  <span class="keyword">s3:</span>
+    <span class="keyword">accesskey:</span> AKIAIOSFODNN7EXAMPLE
+    <span class="keyword">secretkey:</span> wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    <span class="keyword">region:</span> us-east-1
+    <span class="keyword">bucket:</span> harbor-images
+    <span class="keyword">encrypt:</span> true
+    <span class="keyword">secure:</span> true
+            </div>
+            
+            <h3>9.4 多节点部署架构</h3>
+            <div class="architecture-diagram">
+                <svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="800" height="500" fill="#f8f9fa"/>
+                    <text x="400" y="30" text-anchor="middle" font-size="18" font-weight="bold" fill="#1e3c72">Harbor 高可用架构</text>
+                    
+                    <!-- Load Balancer -->
+                    <rect x="300" y="60" width="200" height="50" rx="8" fill="#dc3545" opacity="0.9"/>
+                    <text x="400" y="90" text-anchor="middle" font-size="14" fill="white">Load Balancer (HAProxy/Nginx)</text>
+                    
+                    <!-- Harbor Nodes -->
+                    <rect x="100" y="140" width="180" height="70" rx="8" fill="#667eea" opacity="0.9"/>
+                    <text x="190" y="170" text-anchor="middle" font-size="13" fill="white">Harbor Node 1</text>
+                    <text x="190" y="190" text-anchor="middle" font-size="11" fill="white">192.168.1.101</text>
+                    
+                    <rect x="310" y="140" width="180" height="70" rx="8" fill="#667eea" opacity="0.9"/>
+                    <text x="400" y="170" text-anchor="middle" font-size="13" fill="white">Harbor Node 2</text>
+                    <text x="400" y="190" text-anchor="middle" font-size="11" fill="white">192.168.1.102</text>
+                    
+                    <rect x="520" y="140" width="180" height="70" rx="8" fill="#667eea" opacity="0.9"/>
+                    <text x="610" y="170" text-anchor="middle" font-size="13" fill="white">Harbor Node 3</text>
+                    <text x="610" y="190" text-anchor="middle" font-size="11" fill="white">192.168.1.103</text>
+                    
+                    <!-- Shared Services -->
+                    <rect x="100" y="250" width="200" height="60" rx="8" fill="#28a745" opacity="0.9"/>
+                    <text x="200" y="275" text-anchor="middle" font-size="13" fill="white">PostgreSQL Cluster</text>
+                    <text x="200" y="295" text-anchor="middle" font-size="11" fill="white">(Patroni + etcd)</text>
+                    
+                    <rect x="350" y="250" width="200" height="60" rx="8" fill="#fd7e14" opacity="0.9"/>
+                    <text x="450" y="275" text-anchor="middle" font-size="13" fill="white">Redis Cluster</text>
+                    <text x="450" y="295" text-anchor="middle" font-size="11" fill="white">(Sentinel Mode)</text>
+                    
+                    <rect x="600" y="250" width="150" height="60" rx="8" fill="#20c997" opacity="0.9"/>
+                    <text x="675" y="275" text-anchor="middle" font-size="13" fill="white">Object Storage</text>
+                    <text x="675" y="295" text-anchor="middle" font-size="11" fill="white">(S3/OSS/MinIO)</text>
+                    
+                    <!-- Connections -->
+                    <line x1="400" y1="110" x2="190" y2="140" stroke="#667eea" stroke-width="2"/>
+                    <line x1="400" y1="110" x2="400" y2="140" stroke="#667eea" stroke-width="2"/>
+                    <line x1="400" y1="110" x2="610" y2="140" stroke="#667eea" stroke-width="2"/>
+                    
+                    <line x1="190" y1="210" x2="200" y2="250" stroke="#28a745" stroke-width="2"/>
+                    <line x1="400" y1="210" x2="450" y2="250" stroke="#fd7e14" stroke-width="2"/>
+                    <line x1="610" y1="210" x2="675" y2="250" stroke="#20c997" stroke-width="2"/>
+                </svg>
+            </div>
+        </section>
+        
+        <section id="section10" class="section">
+            <h2>10. 监控与维护</h2>
+            
+            <h3>10.1 健康检查</h3>
+            <div class="code-block">
+<span class="comment"># ============================================</span>
+<span class="comment"># Harbor 健康检查脚本</span>
+<span class="comment"># ============================================</span>
+
+<span class="comment">#!/bin/bash</span>
+
+HARBOR_URL="harbor.yourdomain.com"
+ADMIN_USER="admin"
+ADMIN_PASS="Harbor12345"
+
+<span class="comment"># 检查容器状态</span>
+<span class="command">echo</span> "=== 检查容器状态 ==="
+docker-compose ps
+
+<span class="comment"># 检查 API 健康</span>
+<span class="command">echo</span> -e "\n=== 检查 API 健康 ==="
+<span class="command">curl</span> -k -s -o /dev/null -w "%{http_code}" \
+  https://${HARBOR_URL}/api/v2.0/ping
+
+<span class="comment"># 检查系统信息</span>
+<span class="command">echo</span> -e "\n\n=== 系统信息 ==="
+<span class="command">curl</span> -k -s -u ${ADMIN_USER}:${ADMIN_PASS} \
+  https://${HARBOR_URL}/api/v2.0/systeminfo | jq .
+
+<span class="comment"># 检查存储使用情况</span>
+<span class="command">echo</span> -e "\n=== 存储使用情况 ==="
+<span class="command">df</span> -h /data
+
+<span class="comment"># 检查数据库连接</span>
+<span class="command">echo</span> -e "\n=== 数据库连接数 ==="
+docker exec harbor-db psql -U postgres -d registry \
+  -c "SELECT count(*) FROM pg_stat_activity;"
+            </div>
+            
+            <h3>10.2 日志管理</h3>
+            <div class="code-block">
+<span class="comment"># 日志文件位置</span>
+/var/log/harbor/
+├── core.log          # Core 服务日志
+├── jobservice.log    # Job Service 日志
+├── nginx.log         # Nginx 访问日志
+├── proxy.log         # 代理日志
+├── registry.log      # Registry 日志
+└── trivy.log         # Trivy 扫描日志
+
+<span class="comment"># 查看实时日志</span>
+<span class="command">docker-compose</span> logs -f core
+<span class="command">docker-compose</span> logs -f registry
+<span class="command">tail</span> -f /var/log/harbor/core.log
+
+<span class="comment"># 日志轮转配置（harbor.yml）</span>
+<span class="keyword">log:</span>
+  <span class="keyword">level:</span> info
+  <span class="keyword">local:</span>
+    <span class="keyword">rotate_count:</span> 50
+    <span class="keyword">rotate_size:</span> 200M
+    <span class="keyword">location:</span> /var/log/harbor
+            </div>
+            
+            <h3>10.3 备份与恢复</h3>
+            <div class="code-block">
+<span class="comment"># ============================================</span>
+<span class="comment"># Harbor 备份脚本</span>
+<span class="comment"># ============================================</span>
+
+<span class="comment">#!/bin/bash</span>
+
+BACKUP_DIR="/backup/harbor/$(date +%Y%m%d_%H%M%S)"
+<span class="command">mkdir</span> -p ${BACKUP_DIR}
+
+<span class="comment"># 备份数据库</span>
+<span class="command">docker exec</span> harbor-db pg_dump -U postgres registry > ${BACKUP_DIR}/registry.sql
+<span class="command">docker exec</span> harbor-db pg_dump -U postgres notaryserver > ${BACKUP_DIR}/notary_server.sql
+<span class="command">docker exec</span> harbor-db pg_dump -U postgres notarysigner > ${BACKUP_DIR}/notary_signer.sql
+
+<span class="comment"># 备份配置文件</span>
+<span class="command">cp</span> /opt/harbor/harbor.yml ${BACKUP_DIR}/
+<span class="command">cp</span> -r /opt/harbor/certs ${BACKUP_DIR}/
+
+<span class="comment"># 备份镜像数据</span>
+<span class="command">rsync</span> -av /data/harbor/ ${BACKUP_DIR}/harbor_data/
+
+<span class="comment"># 压缩备份</span>
+<span class="command">tar</span> -czf ${BACKUP_DIR}.tar.gz ${BACKUP_DIR}
+<span class="command">rm</span> -rf ${BACKUP_DIR}
+
+<span class="command">echo</span> "Backup completed: ${BACKUP_DIR}.tar.gz"
+            </div>
+            
+            <h3>10.4 Prometheus 监控配置</h3>
+            <div class="code-block">
+<span class="comment"># Prometheus scrape 配置</span>
+scrape_configs:
+  - job_name: 'harbor'
+    static_configs:
+      - targets: ['harbor.yourdomain.com']
+    metrics_path: '/api/v2.0/metrics'
+    basic_auth:
+      username: 'admin'
+      password: 'Harbor12345'
+
+<span class="comment"># Grafana Dashboard 关键指标</span>
+- 镜像总数
+- 项目总数
+- 用户总数
+- 存储使用量
+- 漏洞扫描统计
+- API 请求延迟
+- 容器健康状态
+            </div>
+        </section>
+        
+        <footer>
+            <p><strong>📚 Harbor 私有镜像仓库部署与权限配置指南</strong></p>
+            <p>版本：v1.0 | 更新时间：2026 年 3 月 13 日</p>
+            <p>适用于 OpenClaw + Claude Code 端到端研发自动化系统</p>
+        </footer>
+    </div>
+    
+    <script>
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>7*24 小时运行状态监控与问题响应系统 - 基于 OpenClaw + Claude Code 的端到端研发自动化系统</title>
+    <style>
+        :root {
+            --primary-color: #00f5ff;
+            --secondary-color: #7b2cbf;
+            --accent-color: #ff006e;
+            --bg-dark: #0a0a0f;
+            --bg-card: rgba(20, 20, 35, 0.8);
+            --text-primary: #ffffff;
+            --text-secondary: #b8b8d0;
+            --success: #00ff88;
+            --warning: #ffaa00;
+            --danger: #ff4444;
+            --info: #00d4ff;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a1a2e 100%);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--secondary-color), var(--accent-color));
+            padding: 40px 20px;
+            text-align: center;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(123, 44, 191, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: pulse 4s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+            position: relative;
+            z-index: 1;
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 8px 20px;
+            background: var(--success);
+            color: var(--bg-dark);
+            border-radius: 20px;
+            font-weight: bold;
+            margin-top: 15px;
+            animation: glow 2s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 10px var(--success); }
+            50% { box-shadow: 0 0 25px var(--success); }
+        }
+
+        .section {
+            background: var(--bg-card);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 25px;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .section-title {
+            font-size: 1.8em;
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title::before {
+            content: '▸';
+            color: var(--accent-color);
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 20px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: rgba(30, 30, 50, 0.6);
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid rgba(0, 245, 255, 0.15);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary-color);
+            box-shadow: 0 10px 30px rgba(0, 245, 255, 0.2);
+        }
+
+        .card-title {
+            font-size: 1.3em;
+            color: var(--info);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .metric-item {
+            background: rgba(0, 245, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+        }
+
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .metric-label {
+            font-size: 0.9em;
+            color: var(--text-secondary);
+            margin-top: 5px;
+        }
+
+        .alert-level {
+            padding: 5px 12px;
+            border-radius: 5px;
+            font-size: 0.85em;
+            font-weight: bold;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .alert-p0 { background: var(--danger); color: white; }
+        .alert-p1 { background: var(--warning); color: var(--bg-dark); }
+        .alert-p2 { background: var(--info); color: var(--bg-dark); }
+        .alert-p3 { background: var(--text-secondary); color: var(--bg-dark); }
+
+        .workflow-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(123, 44, 191, 0.1);
+            border-radius: 10px;
+            border-left: 4px solid var(--secondary-color);
+        }
+
+        .step-number {
+            background: var(--secondary-color);
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        .step-title {
+            font-size: 1.2em;
+            color: var(--primary-color);
+            margin-bottom: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: rgba(30, 30, 50, 0.4);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        th {
+            background: rgba(0, 245, 255, 0.2);
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
+        tr:hover {
+            background: rgba(0, 245, 255, 0.05);
+        }
+
+        .architecture-diagram {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 30px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .arch-layer {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(123, 44, 191, 0.1));
+            border: 2px solid var(--primary-color);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+
+        .arch-layer-title {
+            font-size: 1.3em;
+            color: var(--accent-color);
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .component-box {
+            display: inline-block;
+            background: rgba(30, 30, 50, 0.8);
+            padding: 10px 20px;
+            border-radius: 8px;
+            margin: 8px;
+            border: 1px solid var(--info);
+            font-size: 0.95em;
+        }
+
+        .response-flow {
+            position: relative;
+            padding: 20px;
+        }
+
+        .flow-arrow {
+            text-align: center;
+            font-size: 2em;
+            color: var(--primary-color);
+            margin: 10px 0;
+        }
+
+        ul {
+            list-style: none;
+            padding-left: 20px;
+        }
+
+        ul li {
+            position: relative;
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+
+        ul li::before {
+            content: '▹';
+            color: var(--primary-color);
+            position: absolute;
+            left: 0;
+        }
+
+        .highlight {
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
+        .code-block {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+
+        .code-block .keyword { color: var(--accent-color); }
+        .code-block .string { color: var(--success); }
+        .code-block .comment { color: var(--text-secondary); }
+
+        footer {
+            text-align: center;
+            padding: 30px;
+            margin-top: 40px;
+            border-top: 1px solid rgba(0, 245, 255, 0.2);
+            color: var(--text-secondary);
+        }
+
+        @media (max-width: 768px) {
+            .grid-2, .grid-3 {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 1.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 7*24 小时运行状态监控与问题响应系统</h1>
+            <p class="subtitle">基于 OpenClaw + Claude Code 的端到端研发自动化系统</p>
+            <div class="status-badge">✅ 系统正常运行 | 实时监控中</div>
+        </header>
+
+        <!-- 系统概述 -->
+        <section class="section">
+            <h2 class="section-title">系统概述</h2>
+            <div class="grid-2">
+                <div class="card">
+                    <h3 class="card-title">📋 系统定位</h3>
+                    <p>本监控系统是<span class="highlight">基于 OpenClaw + Claude Code 的端到端研发自动化系统</span>的核心组成部分，覆盖从需求分析到生产部署的全流程自动化研发链路。系统实现<span class="highlight">7*24 小时不间断监控</span>，确保研发自动化流程的稳定性和可靠性。</p>
+                </div>
+                <div class="card">
+                    <h3 class="card-title">🎯 核心目标</h3>
+                    <ul>
+                        <li>实时监控全流程各节点运行状态</li>
+                        <li>智能告警与自动问题发现</li>
+                        <li>快速响应与故障自愈能力</li>
+                        <li>支持人机协同干预机制</li>
+                        <li>数据驱动的持续优化改进</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- 整体架构设计 -->
+        <section class="section">
+            <h2 class="section-title">整体架构设计</h2>
+            
+            <div class="architecture-diagram">
+                <div class="arch-layer">
+                    <div class="arch-layer-title">📊 数据采集层 (Data Collection Layer)</div>
+                    <div>
+                        <span class="component-box">Node Exporter</span>
+                        <span class="component-box">cAdvisor</span>
+                        <span class="component-box">Jenkins Metrics</span>
+                        <span class="component-box">K8s Metrics Server</span>
+                        <span class="component-box">Application APM</span>
+                        <span class="component-box">Log Collectors</span>
+                    </div>
+                </div>
+
+                <div class="flow-arrow">⬇</div>
+
+                <div class="arch-layer">
+                    <div class="arch-layer-title">📈 数据处理层 (Data Processing Layer)</div>
+                    <div>
+                        <span class="component-box">Prometheus Server</span>
+                        <span class="component-box">VictoriaMetrics</span>
+                        <span class="component-box">Elasticsearch</span>
+                        <span class="component-box">Fluentd/Fluent Bit</span>
+                    </div>
+                </div>
+
+                <div class="flow-arrow">⬇</div>
+
+                <div class="arch-layer">
+                    <div class="arch-layer-title">🔔 告警引擎层 (Alert Engine Layer)</div>
+                    <div>
+                        <span class="component-box">Alertmanager</span>
+                        <span class="component-box">规则引擎</span>
+                        <span class="component-box">AI 异常检测</span>
+                        <span class="component-box">告警路由</span>
+                    </div>
+                </div>
+
+                <div class="flow-arrow">⬇</div>
+
+                <div class="arch-layer">
+                    <div class="arch-layer-title">👁 可视化展示层 (Visualization Layer)</div>
+                    <div>
+                        <span class="component-box">Grafana Dashboard</span>
+                        <span class="component-box">Kibana</span>
+                        <span class="component-box">自定义监控大屏</span>
+                        <span class="component-box">移动端监控 APP</span>
+                    </div>
+                </div>
+
+                <div class="flow-arrow">⬇</div>
+
+                <div class="arch-layer">
+                    <div class="arch-layer-title">🤖 响应执行层 (Response Execution Layer)</div>
+                    <div>
+                        <span class="component-box">自动修复脚本</span>
+                        <span class="component-box">ChatOps 机器人</span>
+                        <span class="component-box">工单系统</span>
+                        <span class="component-box">值班调度系统</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 监控指标体系 -->
+        <section class="section">
+            <h2 class="section-title">监控指标体系</h2>
+            
+            <div class="grid-3">
+                <div class="card">
+                    <h3 class="card-title">🖥 基础设施监控</h3>
+                    <div class="metric-grid">
+                        <div class="metric-item">
+                            <div class="metric-value">CPU</div>
+                            <div class="metric-label">使用率 > 80%</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value">MEM</div>
+                            <div class="metric-label">使用率 > 85%</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value">DISK</div>
+                            <div class="metric-label">使用率 > 90%</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value">NET</div>
+                            <div class="metric-label">带宽/丢包率</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">☸ K8S 集群监控</h3>
+                    <div class="metric-grid">
+                        <div class="metric-item">
+                            <div class="metric-value">POD</div>
+                            <div class="metric-label">运行状态/重启</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value">NODE</div>
+                            <div class="metric-label">Ready 状态</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value">HPA</div>
+                            <div class="metric-label">扩缩容事件</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value">ETCD</div>
+                            <div class="metric-label">延迟/健康度</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">🔄 CI/CD Pipeline 监控</h3>
+                    <div class="metric-grid">
+                        <div class="metric-item">
+                            <div class="metric-value">BUILD</div>
+                            <div class="metric-label">成功率/时长</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value">DEPLOY</div>
+                            <div class="metric-label">部署状态</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value">TEST</div>
+                            <div class="metric-label">通过率/覆盖率</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value">QUEUE</div>
+                            <div class="metric-label">排队任务数</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h3 class="card-title">📝 详细监控指标清单</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>监控类别</th>
+                            <th>指标名称</th>
+                            <th>采集频率</th>
+                            <th>告警阈值</th>
+                            <th>告警级别</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td rowspan="4">节点资源</td>
+                            <td>node_cpu_usage_percent</td>
+                            <td>15s</td>
+                            <td>> 80% 持续 5 分钟</td>
+                            <td><span class="alert-level alert-p2">P2</span></td>
+                        </tr>
+                        <tr>
+                            <td>node_memory_usage_percent</td>
+                            <td>15s</td>
+                            <td>> 85% 持续 5 分钟</td>
+                            <td><span class="alert-level alert-p2">P2</span></td>
+                        </tr>
+                        <tr>
+                            <td>node_disk_usage_percent</td>
+                            <td>30s</td>
+                            <td>> 90%</td>
+                            <td><span class="alert-level alert-p1">P1</span></td>
+                        </tr>
+                        <tr>
+                            <td>node_network_receive_drop</td>
+                            <td>15s</td>
+                            <td>> 100 packets/s</td>
+                            <td><span class="alert-level alert-p2">P2</span></td>
+                        </tr>
+                        <tr>
+                            <td rowspan="4">K8S 集群</td>
+                            <td>kube_pod_status_phase</td>
+                            <td>30s</td>
+                            <td>Pod != Running</td>
+                            <td><span class="alert-level alert-p1">P1</span></td>
+                        </tr>
+                        <tr>
+                            <td>kube_node_status_condition</td>
+                            <td>30s</td>
+                            <td>Node NotReady</td>
+                            <td><span class="alert-level alert-p0">P0</span></td>
+                        </tr>
+                        <tr>
+                            <td>etcd_server_leader_changes</td>
+                            <td>30s</td>
+                            <td>> 3 次/10 分钟</td>
+                            <td><span class="alert-level alert-p1">P1</span></td>
+                        </tr>
+                        <tr>
+                            <td>apiserver_request_duration_seconds</td>
+                            <td>15s</td>
+                            <td>P99 > 1s</td>
+                            <td><span class="alert-level alert-p2">P2</span></td>
+                        </tr>
+                        <tr>
+                            <td rowspan="4">CI/CD</td>
+                            <td>jenkins_job_build_duration</td>
+                            <td>实时</td>
+                            <td>> 30 分钟</td>
+                            <td><span class="alert-level alert-p3">P3</span></td>
+                        </tr>
+                        <tr>
+                            <td>jenkins_job_build_result</td>
+                            <td>实时</td>
+                            <td>FAILED</td>
+                            <td><span class="alert-level alert-p2">P2</span></td>
+                        </tr>
+                        <tr>
+                            <td>deployment_rollout_status</td>
+                            <td>实时</td>
+                            <td>Failed/Timeout</td>
+                            <td><span class="alert-level alert-p1">P1</span></td>
+                        </tr>
+                        <tr>
+                            <td>pipeline_queue_size</td>
+                            <td>60s</td>
+                            <td>> 50</td>
+                            <td><span class="alert-level alert-p3">P3</span></td>
+                        </tr>
+                        <tr>
+                            <td rowspan="3">应用服务</td>
+                            <td>http_request_duration_seconds</td>
+                            <td>10s</td>
+                            <td>P95 > 500ms</td>
+                            <td><span class="alert-level alert-p2">P2</span></td>
+                        </tr>
+                        <tr>
+                            <td>http_request_errors_total</td>
+                            <td>10s</td>
+                            <td>错误率 > 5%</td>
+                            <td><span class="alert-level alert-p1">P1</span></td>
+                        </tr>
+                        <tr>
+                            <td>service_availability</td>
+                            <td>30s</td>
+                            <td>< 99.9%</td>
+                            <td><span class="alert-level alert-p0">P0</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 告警规则配置 -->
+        <section class="section">
+            <h2 class="section-title">告警规则配置</h2>
+            
+            <div class="grid-2">
+                <div class="card">
+                    <h3 class="card-title">⚠️ 告警级别定义</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>级别</th>
+                                <th>响应时间</th>
+                                <th>通知方式</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="alert-level alert-p0">P0</span> 灾难级</td>
+                                <td>立即 (5 分钟内)</td>
+                                <td>电话 + 短信 + IM</td>
+                            </tr>
+                            <tr>
+                                <td><span class="alert-level alert-p1">P1</span> 严重级</td>
+                                <td>15 分钟内</td>
+                                <td>短信 + IM</td>
+                            </tr>
+                            <tr>
+                                <td><span class="alert-level alert-p2">P2</span> 警告级</td>
+                                <td>1 小时内</td>
+                                <td>IM + 邮件</td>
+                            </tr>
+                            <tr>
+                                <td><span class="alert-level alert-p3">P3</span> 提示级</td>
+                                <td>工作时间内</td>
+                                <td>邮件 + 工单</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">📢 告警通知渠道</h3>
+                    <ul>
+                        <li><strong>企业微信/钉钉:</strong> 实时推送所有级别告警</li>
+                        <li><strong>短信通知:</strong> P0/P1 级别紧急告警</li>
+                        <li><strong>电话呼叫:</strong> P0 级别灾难告警 (轮询值班人员)</li>
+                        <li><strong>邮件通知:</strong> P2/P3 级别及日报汇总</li>
+                        <li><strong>Webhook:</strong> 集成第三方系统 (如 PagerDuty)</li>
+                        <li><strong>Slack/Teams:</strong> 国际团队协作渠道</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h3 class="card-title">🔧 Alertmanager 配置示例</h3>
+                <div class="code-block">
+<span class="comment"># alertmanager.yml 配置文件</span>
+<span class="keyword">global:</span>
+  smtp_smarthost: <span class="string">'smtp.company.com:587'</span>
+  smtp_from: <span class="string">'alertmanager@company.com'</span>
+  resolve_timeout: 5m
+
+<span class="keyword">route:</span>
+  group_by: [<span class="string">'alertname'</span>, <span class="string">'cluster'</span>, <span class="string">'service'</span>]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: <span class="string">'default-receiver'</span>
+  
+  routes:
+    - match:
+        severity: <span class="string">'critical'</span>
+      receiver: <span class="string">'pagerduty-critical'</span>
+      continue: true
+    - match:
+        severity: <span class="string">'warning'</span>
+      receiver: <span class="string">'wechat-warning'</span>
+
+<span class="keyword">receivers:</span>
+  - name: <span class="string">'default-receiver'</span>
+    email_configs:
+      - to: <span class="string">'team@company.com'</span>
+        
+  - name: <span class="string">'pagerduty-critical'</span>
+    pagerduty_configs:
+      - service_key: <span class="string">'YOUR_PAGERDUTY_KEY'</span>
+        
+  - name: <span class="string">'wechat-warning'</span>
+    wechat_configs:
+      - corp_id: <span class="string">'YOUR_CORP_ID'</span>
+        secret: <span class="string">'YOUR_SECRET'</span>
+        agent_id: <span class="string">'YOUR_AGENT_ID'</span>
+        to_user: <span class="string">'@all'</span>
+
+<span class="keyword">inhibit_rules:</span>
+  - source_match:
+      severity: <span class="string">'critical'</span>
+    target_match:
+      severity: <span class="string">'warning'</span>
+    equal: [<span class="string">'alertname'</span>, <span class="string">'cluster'</span>, <span class="string">'service'</span>]
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h3 class="card-title">📜 Prometheus 告警规则示例</h3>
+                <div class="code-block">
+<span class="comment"># alert_rules.yml</span>
+<span class="keyword">groups:</span>
+  - name: <span class="string">'kubernetes-alerts'</span>
+    rules:
+      - alert: <span class="string">KubernetesNodeNotReady</span>
+        expr: <span class="string">kube_node_status_condition{condition="Ready",status="true"} == 0</span>
+        for: <span class="string">5m</span>
+        labels:
+          severity: <span class="string">critical</span>
+        annotations:
+          summary: <span class="string">"Kubernetes 节点 {{ $labels.node }} 未就绪"</span>
+          description: <span class="string">"节点 {{ $labels.node }} 已经 5 分钟处于 NotReady 状态"</span>
+          
+      - alert: <span class="string">KubernetesPodCrashLooping</span>
+        expr: <span class="string">rate(kube_pod_container_status_restarts_total[15m]) > 0</span>
+        for: <span class="string">5m</span>
+        labels:
+          severity: <span class="string">warning</span>
+        annotations:
+          summary: <span class="string">"Pod {{ $labels.pod }} 频繁重启"</span>
+          description: <span class="string">"Pod {{ $labels.namespace }}/{{ $labels.pod }} 在 15 分钟内重启 {{ $value }} 次"</span>
+          
+      - alert: <span class="string">HighCPUUsage</span>
+        expr: <span class="string">100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80</span>
+        for: <span class="string">5m</span>
+        labels:
+          severity: <span class="string">warning</span>
+        annotations:
+          summary: <span class="string">"主机 {{ $labels.instance }} CPU 使用率过高"</span>
+          description: <span class="string">"CPU 使用率已超过 80%，当前值：{{ $value }}%"</span>
+          
+      - alert: <span class="string">JenkinsBuildFailed</span>
+        expr: <span class="string">jenkins_job_build_result{result="FAILURE"} == 1</span>
+        for: <span class="string">0m</span>
+        labels:
+          severity: <span class="string">warning</span>
+        annotations:
+          summary: <span class="string">"Jenkins 构建失败：{{ $labels.job }}"</span>
+          description: <span class="string">"构建 #{{ $labels.number }} 失败，请及时处理"</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 问题响应机制 -->
+        <section class="section">
+            <h2 class="section-title">问题响应机制</h2>
+            
+            <div class="response-flow">
+                <div class="workflow-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <div class="step-title">🔍 问题发现与告警触发</div>
+                        <p>监控系统实时采集各项指标，当检测到异常时自动触发告警规则。AI 异常检测模块会识别潜在问题并提前预警。</p>
+                        <ul>
+                            <li>自动采集：Prometheus + Exporters 每 15-30 秒采集一次数据</li>
+                            <li>规则匹配：Alertmanager 根据预定义规则判断是否触发告警</li>
+                            <li>AI 预测：基于历史数据的异常模式识别，提前发现潜在风险</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="flow-arrow">⬇</div>
+
+                <div class="workflow-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <div class="step-title">📢 告警通知与分级路由</div>
+                        <p>根据告警级别和类型，自动路由到相应的通知渠道和责任人。</p>
+                        <ul>
+                            <li><strong>P0 级:</strong> 立即电话呼叫当前值班人员 + 短信 + IM + 邮件，同时通知技术负责人</li>
+                            <li><strong>P1 级:</strong> 短信 + IM + 邮件，15 分钟内未确认则升级通知</li>
+                            <li><strong>P2 级:</strong> IM + 邮件，工作时间内处理</li>
+                            <li><strong>P3 级:</strong> 邮件 + 工单系统，纳入日常优化计划</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="flow-arrow">⬇</div>
+
+                <div class="workflow-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <div class="step-title">🎯 告警确认与分派</div>
+                        <p>值班人员收到告警后需在规定时间内确认，系统自动跟踪响应时效。</p>
+                        <ul>
+                            <li>值班人员通过 IM/短信链接快速确认告警</li>
+                            <li>15 分钟内未确认，自动升级到备份值班人员</li>
+                            <li>30 分钟内未确认，自动通知团队负责人</li>
+                            <li>自动生成工单并关联相关告警信息</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="flow-arrow">⬇</div>
+
+                <div class="workflow-step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <div class="step-title">🔧 问题诊断与处理</div>
+                        <p>基于监控数据和诊断工具进行问题定位和处理。</p>
+                        <ul>
+                            <li><strong>自动诊断:</strong> 系统提供一键诊断报告，包含相关指标、日志、变更记录</li>
+                            <li><strong>知识库推荐:</strong> AI 助手根据告警类型推荐相似案例和解决方案</li>
+                            <li><strong>远程协作:</strong> 支持多人在线协作处理，实时共享屏幕和终端</li>
+                            <li><strong>人机协同:</strong> 对于复杂问题，Claude Code 助手提供代码级分析和修复建议</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="flow-arrow">⬇</div>
+
+                <div class="workflow-step">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <div class="step-title">🤖 自动修复与人工干预</div>
+                        <p>系统支持自动修复常见故障，复杂问题需要人工介入。</p>
+                        <ul>
+                            <li><strong>自动修复场景:</strong>
+                                <ul>
+                                    <li>Pod 异常重启 (超过阈值自动重建)</li>
+                                    <li>磁盘清理 (日志文件自动轮转清理)</li>
+                                    <li>服务重启 (健康检查失败自动重启容器)</li>
+                                    <li>证书续期 (SSL 证书到期前自动更新)</li>
+                                </ul>
+                            </li>
+                            <li><strong>人工干预场景:</strong>
+                                <ul>
+                                    <li>代码缺陷导致的服务异常</li>
+                                    <li>配置错误需要人工审核</li>
+                                    <li>跨系统依赖问题协调</li>
+                                    <li>安全事件应急响应</li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="flow-arrow">⬇</div>
+
+                <div class="workflow-step">
+                    <div class="step-number">6</div>
+                    <div class="step-content">
+                        <div class="step-title">✅ 问题解决与验证</div>
+                        <p>问题解决后进行验证和关闭流程。</p>
+                        <ul>
+                            <li>验证监控指标恢复正常</li>
+                            <li>执行自动化回归测试</li>
+                            <li>用户反馈确认 (如适用)</li>
+                            <li>更新工单状态并记录解决方案</li>
+                            <li>告警自动解除或手动关闭</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="flow-arrow">⬇</div>
+
+                <div class="workflow-step">
+                    <div class="step-number">7</div>
+                    <div class="step-content">
+                        <div class="step-title">📊 事后复盘与改进</div>
+                        <p>对重大故障进行复盘分析，持续改进系统稳定性。</p>
+                        <ul>
+                            <li>生成故障报告 (时间线、影响范围、根因分析)</li>
+                            <li>召开复盘会议，制定改进措施</li>
+                            <li>更新监控规则和告警阈值</li>
+                            <li>完善应急预案和 Runbook</li>
+                            <li>跟踪改进措施落实情况</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 值班排班管理 -->
+        <section class="section">
+            <h2 class="section-title">值班排班管理</h2>
+            
+            <div class="grid-2">
+                <div class="card">
+                    <h3 class="card-title">📅 7*24 值班制度</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>班次</th>
+                                <th>时间段</th>
+                                <th>人员配置</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>早班</td>
+                                <td>08:00 - 16:00</td>
+                                <td>2 名值班工程师</td>
+                            </tr>
+                            <tr>
+                                <td>中班</td>
+                                <td>16:00 - 24:00</td>
+                                <td>2 名值班工程师</td>
+                            </tr>
+                            <tr>
+                                <td>夜班</td>
+                                <td>00:00 - 08:00</td>
+                                <td>1 名值班工程师 + 1 名待命</td>
+                            </tr>
+                            <tr>
+                                <td>周末/节假日</td>
+                                <td>全天</td>
+                                <td>1 名现场 + 1 名远程待命</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">👥 值班角色职责</h3>
+                    <ul>
+                        <li><strong>Primary On-call:</strong> 第一响应人，负责告警确认和初步处理</li>
+                        <li><strong>Secondary On-call:</strong> 备份响应人，Primary 无法响应时接手</li>
+                        <li><strong>Escalation Manager:</strong> 升级联系人，重大故障协调资源</li>
+                        <li><strong>Subject Matter Expert:</strong> 领域专家，提供专业技术支持</li>
+                    </ul>
+                    <p style="margin-top: 15px;"><strong>轮换周期:</strong> 每周轮换，确保公平分配</p>
+                    <p><strong>交接班:</strong> 每日 15 分钟线上交接，同步未完成事项</p>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h3 class="card-title">📱 值班管理工具集成</h3>
+                <div class="grid-3">
+                    <div class="metric-item">
+                        <div class="metric-value" style="font-size: 1.5em;">PagerDuty</div>
+                        <div class="metric-label">值班调度与升级</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" style="font-size: 1.5em;">Opsgenie</div>
+                        <div class="metric-label">告警管理与响应</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" style="font-size: 1.5em;">自研系统</div>
+                        <div class="metric-label">定制化值班平台</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- CI/CD + K8S 部署监控集成 -->
+        <section class="section">
+            <h2 class="section-title">CI/CD + K8S 部署监控集成</h2>
+            
+            <div class="card">
+                <h3 class="card-title">🔄 Jenkins Pipeline 监控集成</h3>
+                <div class="code-block">
+<span class="comment">// Jenkinsfile 示例 - 集成监控和告警</span>
+<span class="keyword">pipeline</span> {
+    agent any
+    
+    environment {
+        MONITORING_ENABLED = <span class="string">'true'</span>
+        ALERT_CHANNEL = <span class="string">'#ci-cd-alerts'</span>
+    }
+    
+    options {
+        timeout(time: 1, unit: <span class="string">'HOURS'</span>)
+        buildDiscarder(logRotator(numToKeepStr: <span class="string">'30'</span>))
+    }
+    
+    stages {
+        stage(<span class="string">'Build'</span>) {
+            steps {
+                script {
+                    // 记录构建开始指标
+                    recordMetric(<span class="string">'build_start'</span>, env.BUILD_NUMBER)
+                }
+                sh <span class="string">'mvn clean package -DskipTests'</span>
+            }
+            post {
+                success {
+                    recordMetric(<span class="string">'build_success'</span>, env.BUILD_NUMBER)
+                }
+                failure {
+                    recordMetric(<span class="string">'build_failure'</span>, env.BUILD_NUMBER)
+                    sendAlert(<span class="string">'BUILD_FAILED'</span>, env.JOB_NAME, env.BUILD_NUMBER)
+                }
+            }
+        }
+        
+        stage(<span class="string">'Test'</span>) {
+            steps {
+                sh <span class="string">'mvn test'</span>
+            }
+            post {
+                always {
+                    junit <span class="string">'target/surefire-reports/*.xml'</span>
+                    publishCoverage adapters: [jacocoAdapter()], sourceFileResolver: sourceFiles(<span class="string">'NEVER_STORE'</span>)
+                }
+            }
+        }
+        
+        stage(<span class="string">'Deploy to K8S'</span>) {
+            steps {
+                script {
+                    // 部署前健康检查
+                    healthCheck(env.TARGET_CLUSTER)
+                    
+                    // 执行滚动更新
+                    sh <span class="string">"kubectl set image deployment/${APP_NAME} ${CONTAINER_NAME}=${IMAGE_TAG} -n ${NAMESPACE}"</span>
+                    
+                    // 等待 rollout 完成
+                    sh <span class="string">"kubectl rollout status deployment/${APP_NAME} -n ${NAMESPACE} --timeout=300s"</span>
+                }
+            }
+            post {
+                success {
+                    sendNotification(<span class="string">'DEPLOY_SUCCESS'</span>, env.APP_NAME, env.IMAGE_TAG)
+                    recordDeployment(env.APP_NAME, env.IMAGE_TAG, <span class="string">'SUCCESS'</span>)
+                }
+                failure {
+                    sendAlert(<span class="string">'DEPLOY_FAILED'</span>, env.APP_NAME, env.BUILD_NUMBER)
+                    // 自动回滚
+                    script {
+                        sh <span class="string">"kubectl rollout undo deployment/${APP_NAME} -n ${NAMESPACE}"</span>
+                    }
+                }
+            }
+        }
+        
+        stage(<span class="string">'Post-Deploy Verification'</span>) {
+            steps {
+                script {
+                    // 部署后验证
+                    sleep(time: 60, unit: <span class="string">'SECONDS'</span>)
+                    runSmokeTests(env.APP_URL)
+                    checkMetrics(env.APP_NAME)
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            cleanWs()
+            recordPipelineMetrics(env.JOB_NAME, env.BUILD_NUMBER, currentBuild.result)
+        }
+    }
+}
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h3 class="card-title">☸ K8S 部署监控配置</h3>
+                <div class="code-block">
+<span class="comment"># Kubernetes Deployment with Monitoring Annotations</span>
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: research-automation-system
+  namespace: production
+  annotations:
+    prometheus.io/scrape: <span class="string">"true"</span>
+    prometheus.io/port: <span class="string">"8080"</span>
+    prometheus.io/path: <span class="string">"/metrics"</span>
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: research-automation
+  template:
+    metadata:
+      labels:
+        app: research-automation
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: <span class="string">"true"</span>
+    spec:
+      containers:
+      - name: app
+        image: research-automation:v1.0.0
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: <span class="string">"512Mi"</span>
+            cpu: <span class="string">"250m"</span>
+          limits:
+            memory: <span class="string">"1Gi"</span>
+            cpu: <span class="string">"500m"</span>
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 3
+---
+<span class="comment"># Horizontal Pod Autoscaler</span>
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: research-automation-hpa
+  namespace: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: research-automation-system
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 4
+        periodSeconds: 15
+      selectPolicy: Max
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h3 class="card-title">📊 Grafana Dashboard 配置</h3>
+                <p>系统预置以下监控仪表盘：</p>
+                <div class="metric-grid">
+                    <div class="metric-item">
+                        <div class="metric-value" style="font-size: 1.3em;">Dashboard 1</div>
+                        <div class="metric-label">系统总览 (Overview)</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" style="font-size: 1.3em;">Dashboard 2</div>
+                        <div class="metric-label">K8S 集群监控</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" style="font-size: 1.3em;">Dashboard 3</div>
+                        <div class="metric-label">CI/CD Pipeline</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" style="font-size: 1.3em;">Dashboard 4</div>
+                        <div class="metric-label">应用性能监控</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" style="font-size: 1.3em;">Dashboard 5</div>
+                        <div class="metric-label">业务指标监控</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" style="font-size: 1.3em;">Dashboard 6</div>
+                        <div class="metric-label">告警统计面板</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 人机协同机制 -->
+        <section class="section">
+            <h2 class="section-title">人机协同机制</h2>
+            
+            <div class="grid-2">
+                <div class="card">
+                    <h3 class="card-title">🤖 AI 助手能力</h3>
+                    <ul>
+                        <li><strong>智能告警分析:</strong> 自动聚合同源告警，减少告警风暴</li>
+                        <li><strong>根因推荐:</strong> 基于历史数据和知识图谱推荐可能原因</li>
+                        <li><strong>修复建议:</strong> 提供具体的修复步骤和命令</li>
+                        <li><strong>代码审查:</strong> Claude Code 辅助代码问题定位</li>
+                        <li><strong>文档生成:</strong> 自动生成故障报告和复盘文档</li>
+                        <li><strong>趋势预测:</strong> 基于时序数据预测潜在风险</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">👤 人工决策点</h3>
+                    <ul>
+                        <li><strong>重大变更审批:</strong> 生产环境配置变更需人工审核</li>
+                        <li><strong>复杂故障处理:</strong> 跨系统问题需要人工协调</li>
+                        <li><strong>安全事件响应:</strong> 安全相关告警必须人工介入</li>
+                        <li><strong>业务影响评估:</strong> 故障影响范围和优先级判定</li>
+                        <li><strong>改进措施制定:</strong> 长期优化方案需要人工决策</li>
+                        <li><strong>对外沟通:</strong> 客户通知和公关处理</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h3 class="card-title">💬 ChatOps 集成示例</h3>
+                <div class="code-block">
+<span class="comment"># 企业微信群机器人命令示例</span>
+
+<span class="comment"># 查看当前告警</span>
+@Bot 当前告警
+
+<span class="comment"># 查询特定服务状态</span>
+@Bot 服务状态 research-automation
+
+<span class="comment"># 执行诊断命令</span>
+@Bot 诊断 pod research-automation-7d8f9c6b5-xk2pl
+
+<span class="comment"># 查看最近部署</span>
+@Bot 最近部署
+
+<span class="comment"># 触发告警静默</span>
+@Bot 静默告警 HighCPUUsage 30m 原因："正在进行性能测试"
+
+<span class="comment"># 获取故障处理建议</span>
+@Bot 如何处理 PodCrashLooping
+
+<span class="comment"># 生成故障报告</span>
+@Bot 生成报告 INCIDENT-2026-0314-001
+                </div>
+            </div>
+        </section>
+
+        <!-- 应急预案 -->
+        <section class="section">
+            <h2 class="section-title">应急预案 (Runbook)</h2>
+            
+            <div class="card">
+                <h3 class="card-title">📋 常见故障处理预案</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>故障类型</th>
+                            <th>现象描述</th>
+                            <th>处理步骤</th>
+                            <th>预计恢复时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>K8S Node NotReady</td>
+                            <td>节点状态异常，Pod 无法调度</td>
+                            <td>
+                                1. 检查节点网络连通性<br>
+                                2. 查看 kubelet 日志<br>
+                                3. 重启 kubelet 服务<br>
+                                4. 必要时驱逐 Pod 并重建节点
+                            </td>
+                            <td>10-30 分钟</td>
+                        </tr>
+                        <tr>
+                            <td>Pod CrashLoopBackOff</td>
+                            <td>Pod 频繁重启，无法正常启动</td>
+                            <td>
+                                1. 查看 Pod 日志 kubectl logs<br>
+                                2. 检查资源配置是否充足<br>
+                                3. 验证依赖服务是否正常<br>
+                                4. 回滚到稳定版本
+                            </td>
+                            <td>5-15 分钟</td>
+                        </tr>
+                        <tr>
+                            <td>Jenkins Build 失败</td>
+                            <td>构建任务失败，无法生成镜像</td>
+                            <td>
+                                1. 查看构建日志定位错误<br>
+                                2. 检查依赖仓库是否可访问<br>
+                                3. 验证代码是否有编译错误<br>
+                                4. 清理缓存后重试
+                            </td>
+                            <td>5-20 分钟</td>
+                        </tr>
+                        <tr>
+                            <td>数据库连接超时</td>
+                            <td>应用无法连接数据库</td>
+                            <td>
+                                1. 检查数据库服务状态<br>
+                                2. 验证网络连接和防火墙<br>
+                                3. 查看连接池使用情况<br>
+                                4. 重启数据库或扩容
+                            </td>
+                            <td>5-30 分钟</td>
+                        </tr>
+                        <tr>
+                            <td>磁盘空间不足</td>
+                            <td>节点磁盘使用率超过 90%</td>
+                            <td>
+                                1. 查找大文件和日志<br>
+                                2. 清理过期日志和临时文件<br>
+                                3. 扩容磁盘或迁移数据<br>
+                                4. 配置日志轮转策略
+                            </td>
+                            <td>10-20 分钟</td>
+                        </tr>
+                        <tr>
+                            <td>SSL 证书过期</td>
+                            <td>HTTPS 访问报错证书无效</td>
+                            <td>
+                                1. 确认证书过期时间<br>
+                                2. 申请新证书或使用自动化工具<br>
+                                3. 更新 Ingress/TLS 配置<br>
+                                4. 验证证书更新成功
+                            </td>
+                            <td>15-30 分钟</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 持续改进机制 -->
+        <section class="section">
+            <h2 class="section-title">持续改进机制</h2>
+            
+            <div class="grid-3">
+                <div class="card">
+                    <h3 class="card-title">📈 监控优化</h3>
+                    <ul>
+                        <li>定期回顾告警规则有效性</li>
+                        <li>根据实际运行情况调整阈值</li>
+                        <li>消除误报和冗余告警</li>
+                        <li>补充缺失的关键指标</li>
+                        <li>优化数据采集频率和存储策略</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">📚 知识沉淀</h3>
+                    <ul>
+                        <li>建立故障案例库</li>
+                        <li>完善 Runbook 文档</li>
+                        <li>定期组织技术分享</li>
+                        <li>新人培训和演练</li>
+                        <li>最佳实践总结推广</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">🎯 SLA 管理</h3>
+                    <ul>
+                        <li>定义清晰的 SLI/SLO/SLA</li>
+                        <li>定期评估服务可用性</li>
+                        <li>分析未达标原因和改进措施</li>
+                        <li>持续优化系统架构</li>
+                        <li>提升自动化水平减少人为失误</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h3 class="card-title">📊 关键指标追踪</h3>
+                <div class="metric-grid">
+                    <div class="metric-item">
+                        <div class="metric-value">MTTD</div>
+                        <div class="metric-label">平均发现时间<br>&lt; 5 分钟</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value">MTTA</div>
+                        <div class="metric-label">平均响应时间<br>&lt; 10 分钟</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value">MTTR</div>
+                        <div class="metric-label">平均恢复时间<br>&lt; 30 分钟</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value">Availability</div>
+                        <div class="metric-label">系统可用性<br>&gt; 99.9%</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 技术栈清单 -->
+        <section class="section">
+            <h2 class="section-title">技术栈清单</h2>
+            
+            <div class="grid-3">
+                <div class="card">
+                    <h3 class="card-title">📦 监控组件</h3>
+                    <ul>
+                        <li>Prometheus 2.45+ (时序数据库)</li>
+                        <li>Grafana 10.x (可视化 dashboard)</li>
+                        <li>Alertmanager (告警管理)</li>
+                        <li>Node Exporter (主机指标)</li>
+                        <li>cAdvisor (容器指标)</li>
+                        <li>kube-state-metrics (K8S 资源)</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">🔧 CI/CD 工具</h3>
+                    <ul>
+                        <li>Jenkins 2.x (持续集成)</li>
+                        <li>Jenkins Pipeline (流水线)</li>
+                        <li>Docker 24.x (容器化)</li>
+                        <li>Kubernetes 1.28+ (编排)</li>
+                        <li>KubeSphere (容器平台)</li>
+                        <li>Harbor (镜像仓库)</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">🤖 AI 增强</h3>
+                    <ul>
+                        <li>Claude Code (代码分析)</li>
+                        <li>OpenClaw (自动化框架)</li>
+                        <li>AI 异常检测算法</li>
+                        <li>智能告警聚合</li>
+                        <li>自然语言查询</li>
+                        <li>自动化文档生成</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <p>© 2026 基于 OpenClaw + Claude Code 的端到端研发自动化系统 | 7*24 小时监控与问题响应系统</p>
+            <p>文档版本：v1.0 | 最后更新：2026 年 3 月 14 日</p>
+        </footer>
+    </div>
+
+    <script>
+        // 动态更新时间
+        function updateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            console.log('当前时间:', timeString);
+        }
+        
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            updateTime();
+            setInterval(updateTime, 1000);
+            
+            // 添加卡片动画效果
+            const cards = document.querySelectorAll('.card');
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.opacity = '1';
+                        entry.target.style.transform = 'translateY(0)';
+                    }
+                });
+            }, { threshold: 0.1 });
+            
+            cards.forEach(card => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(20px)';
+                card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+                observer.observe(card);
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1710 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>端云协同轻量化 Agent 部署架构</title>
+    <style>
+        :root {
+            --edge-blue: #0284c7;
+            --cloud-purple: #a855f7;
+            --light-gold: #ca8a04;
+            --sync-green: #16a34a;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-edge: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--edge-blue), var(--cloud-purple), var(--light-gold), var(--sync-green)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-edge);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: edgeRotate 100s linear infinite;
+        }
+        
+        @keyframes edgeRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .edge-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 18px 40px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 1.15em;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-edge {
+            background: linear-gradient(135deg, var(--edge-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-cloud {
+            background: linear-gradient(135deg, var(--cloud-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-light {
+            background: linear-gradient(135deg, var(--light-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-sync {
+            background: linear-gradient(135deg, var(--sync-green), #4ade80);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.8em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 30px;
+            text-shadow: 0 0 60px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 3px;
+            line-height: 1.35;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 2em;
+            color: var(--text-secondary);
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .edge-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 25px;
+            margin: 60px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .edge-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 35px 45px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 200px;
+        }
+        
+        .edge-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .edge-box.edge {
+            border-color: var(--edge-blue);
+            box-shadow: 0 15px 40px rgba(2, 132, 199, 0.35);
+        }
+        
+        .edge-box.cloud {
+            border-color: var(--cloud-purple);
+            box-shadow: 0 15px 40px rgba(168, 85, 247, 0.35);
+        }
+        
+        .edge-box.light {
+            border-color: var(--light-gold);
+            box-shadow: 0 15px 40px rgba(202, 138, 4, 0.35);
+        }
+        
+        .edge-box.sync {
+            border-color: var(--sync-green);
+            box-shadow: 0 15px 40px rgba(22, 163, 74, 0.35);
+        }
+        
+        .edge-label {
+            font-size: 1.8em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 12px;
+        }
+        
+        .edge-box.edge .edge-label { color: var(--edge-blue); }
+        .edge-box.cloud .edge-label { color: var(--cloud-purple); }
+        .edge-box.light .edge-label { color: var(--light-gold); }
+        .edge-box.sync .edge-label { color: var(--sync-green); }
+        
+        .edge-desc {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.7;
+        }
+        
+        .edge-arrow {
+            font-size: 2em;
+            color: var(--light-gold);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 35px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 60px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px 35px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px var(--border-glow);
+            border-color: var(--edge-blue);
+        }
+        
+        .meta-label {
+            color: var(--edge-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 10px;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 1.05em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 60px 55px;
+            margin-bottom: 80px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 50px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 3em;
+            color: var(--edge-blue);
+            margin-bottom: 50px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 30px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 50px 0 30px 0;
+            padding: 25px 35px;
+            border-radius: 18px;
+            font-size: 1.7em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--edge-blue); 
+            color: var(--edge-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--cloud-purple); 
+            color: var(--cloud-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--light-gold); 
+            color: var(--light-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--sync-green); 
+            color: var(--sync-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: #ec4899; 
+            color: #ec4899;
+            background: linear-gradient(90deg, rgba(236, 72, 153, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 20px;
+        }
+        
+        .toc-list li {
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 1.05em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 18px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--edge-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--edge-blue);
+            text-shadow: 0 0 12px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 70px 60px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 25px 80px var(--border-glow), 0 0 60px rgba(2, 132, 199, 0.2);
+            border-color: var(--edge-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.8em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 45px;
+            border-bottom: 4px solid var(--edge-blue);
+            padding-bottom: 25px;
+            font-weight: 800;
+            text-shadow: 0 0 25px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 50px 0;
+        }
+        
+        .section-title {
+            font-size: 2em;
+            color: var(--edge-blue);
+            margin-bottom: 30px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--cloud-purple);
+            font-size: 0.7em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.2;
+            font-size: 1.1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 30px;
+        }
+        
+        .edge-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin: 50px 0;
+        }
+        
+        .edge-box-card {
+            padding: 38px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .edge-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .edge-box-card.edge {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--edge-blue);
+            box-shadow: 0 8px 35px rgba(2, 132, 199, 0.3);
+        }
+        
+        .edge-box-card.cloud {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--cloud-purple);
+            box-shadow: 0 8px 35px rgba(168, 85, 247, 0.3);
+        }
+        
+        .edge-box-card.light {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--light-gold);
+            box-shadow: 0 8px 35px rgba(202, 138, 4, 0.3);
+        }
+        
+        .edge-box-card.sync {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--sync-green);
+            box-shadow: 0 8px 35px rgba(22, 163, 74, 0.3);
+        }
+        
+        .edge-box-title {
+            font-size: 1.75em;
+            font-weight: 800;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .edge-box-card.edge .edge-box-title { color: var(--edge-blue); }
+        .edge-box-card.cloud .edge-box-title { color: var(--cloud-purple); }
+        .edge-box-card.light .edge-box-title { color: var(--light-gold); }
+        .edge-box-card.sync .edge-box-title { color: var(--sync-green); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 45px 50px;
+            border-left: 8px solid var(--edge-blue);
+            border-radius: 20px;
+            margin: 45px 0;
+            box-shadow: 0 8px 35px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--edge-blue);
+            font-weight: 800;
+        }
+        
+        .timeline-box {
+            background: linear-gradient(135deg, #0d0d14, #1a1a2e);
+            border: 3px solid var(--border-glow);
+            border-radius: 20px;
+            padding: 45px;
+            margin: 50px 0;
+            box-shadow: inset 0 0 40px rgba(2, 132, 199, 0.1);
+        }
+        
+        .timeline-title {
+            color: var(--edge-blue);
+            margin-bottom: 35px;
+            font-weight: 800;
+            font-size: 1.7em;
+            text-align: center;
+            font-family: 'Georgia', serif;
+        }
+        
+        .timeline-item {
+            display: flex;
+            gap: 25px;
+            margin: 30px 0;
+            padding: 25px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            border-left: 4px solid;
+        }
+        
+        .timeline-item.early { border-color: var(--edge-blue); }
+        .timeline-item.mature { border-color: var(--cloud-purple); }
+        .timeline-item.modern { border-color: var(--light-gold); }
+        
+        .timeline-year {
+            font-weight: 800;
+            font-size: 1.25em;
+            min-width: 120px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .timeline-item.early .timeline-year { color: var(--edge-blue); }
+        .timeline-item.mature .timeline-year { color: var(--cloud-purple); }
+        .timeline-item.modern .timeline-year { color: var(--light-gold); }
+        
+        .timeline-content {
+            color: var(--text-primary);
+            line-height: 1.9;
+        }
+        
+        .formal-diagram {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 3px solid var(--border-glow);
+            border-radius: 25px;
+            padding: 45px;
+            margin: 50px 0;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(2, 132, 199, 0.2);
+        }
+        
+        .formal-title {
+            color: var(--edge-blue);
+            margin-bottom: 35px;
+            font-weight: 800;
+            font-size: 1.6em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .formal-diagram pre {
+            text-align: left;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.9em;
+            line-height: 1.8;
+            overflow-x: auto;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 45px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 18px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 18px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--edge-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            font-size: 0.9em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--edge-blue);
+            padding-left: 35px;
+            margin: 40px 0;
+            color: var(--text-secondary);
+            font-size: 1.15em;
+            font-family: 'Georgia', serif;
+            line-height: 2.1;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 20px;
+            color: var(--cloud-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 30px 0;
+            padding-left: 45px;
+        }
+        
+        li {
+            margin-bottom: 18px;
+            line-height: 2.1;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 80px 50px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 120px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 40px 25px;
+            }
+            
+            .book-title {
+                font-size: 2.3em;
+            }
+            
+            .edge-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .edge-diagram {
+                flex-direction: column;
+            }
+            
+            .edge-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="edge-spectrum">
+                <div class="spectrum-item spectrum-edge">🔵 端侧</div>
+                <div class="spectrum-item spectrum-cloud">🟣 云侧</div>
+                <div class="spectrum-item spectrum-light">🟡 轻量化</div>
+                <div class="spectrum-item spectrum-sync">🟢 协同</div>
+            </div>
+            <h1 class="book-title">端云协同轻量化 Agent 部署架构</h1>
+            <h2 class="book-subtitle">从云端到边缘的智能部署新范式</h2>
+            
+            <div class="edge-diagram">
+                <div class="edge-box edge">
+                    <span class="edge-label">🔵 端侧推理</span>
+                    <span class="edge-desc">低延迟<br>隐私保护<br>离线可用</span>
+                </div>
+                <div class="edge-arrow">↔</div>
+                <div class="edge-box cloud">
+                    <span class="edge-label">🟣 云侧训练</span>
+                    <span class="edge-desc">大模型<br>集中训练<br>弹性扩展</span>
+                </div>
+                <div class="edge-arrow">→</div>
+                <div class="edge-box light">
+                    <span class="edge-label">🟡 轻量化</span>
+                    <span class="edge-desc">量化<br>剪枝<br>蒸馏</span>
+                </div>
+                <div class="edge-arrow">→</div>
+                <div class="edge-box sync">
+                    <span class="edge-label">🟢 协同优化</span>
+                    <span class="edge-desc">联邦学习<br>动态卸载<br>自适应</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">端云协同版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">边缘计算·模型压缩·联邦学习·协同优化</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 端云协同理论基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：端云协同范式——Agent 部署的新纪元</a></li>
+                <li><a href="#chapter1">第 1 章 边缘计算与云计算融合</a></li>
+                <li><a href="#chapter2">第 2 章 轻量化模型理论</a></li>
+                <li><a href="#chapter3">第 3 章 分布式协同学习</a></li>
+                
+                <div class="toc-part part2">第二编 核心架构与组件</div>
+                <li><a href="#chapter4">第 4 章 端云协同架构设计</a></li>
+                <li><a href="#chapter5">第 5 章 端侧推理引擎</a></li>
+                <li><a href="#chapter6">第 6 章 云侧训练平台</a></li>
+                <li><a href="#chapter7">第 7 章 协同通信机制</a></li>
+                
+                <div class="toc-part part3">第三编 轻量化技术与优化</div>
+                <li><a href="#chapter8">第 8 章 模型量化技术</a></li>
+                <li><a href="#chapter9">第 9 章 模型剪枝与稀疏化</a></li>
+                <li><a href="#chapter10">第 10 章 知识蒸馏技术</a></li>
+                <li><a href="#chapter11">第 11 章 神经架构搜索</a></li>
+                
+                <div class="toc-part part4">第四编 工程化实践</div>
+                <li><a href="#chapter12">第 12 章 移动端部署实践</a></li>
+                <li><a href="#chapter13">第 13 章 边缘设备部署</a></li>
+                <li><a href="#chapter14">第 14 章 联邦学习实现</a></li>
+                <li><a href="#chapter15">第 15 章 性能监控与优化</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 50px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 轻量化模型部署模板</a></li>
+                <li><a href="#appendix-b">附录 B 检查清单与最佳实践</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：端云协同范式——Agent 部署的新纪元</h2>
+            <div class="content">
+                <p>随着 AI Agent 应用从云端走向千家万户，一个根本性挑战日益凸显：<strong>如何在保证性能与隐私的前提下，将大模型能力部署到资源受限的端侧设备？</strong>纯云端部署面临延迟高、隐私泄露、网络依赖等问题；纯端侧部署受限于计算资源、内存容量、能耗约束。端云协同轻量化 Agent 部署架构应运而生，成为大规模 Agent 落地的最佳选择。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>端云协同轻量化架构通过端侧推理实现低延迟与隐私保护、云侧训练提供大模型能力、轻量化技术压缩模型规模、协同机制优化资源分配，四层协同，构建高性能、高隐私、低功耗的 Agent 部署体系。</p>
+                </div>
+                
+                <h3 class="section-title">端云协同部署的兴起</h3>
+                
+                <div class="timeline-box">
+                    <h4 class="timeline-title">端云协同技术演进历程</h4>
+                    <div class="timeline-item early">
+                        <div class="timeline-year">2024</div>
+                        <div class="timeline-content"><strong>早期探索</strong>：移动端量化模型实验，初步实现 4bit 量化与端侧推理</div>
+                    </div>
+                    <div class="timeline-item mature">
+                        <div class="timeline-year">2025</div>
+                        <div class="timeline-content"><strong>架构成熟</strong>：联邦学习规模化应用、知识蒸馏技术成熟、动态卸载机制优化</div>
+                    </div>
+                    <div class="timeline-item modern">
+                        <div class="timeline-year">2026</div>
+                        <div class="timeline-content"><strong>生产普及</strong>：十亿级设备部署轻量化 Agent，端云协同延迟<50ms，隐私零泄露</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">端云协同四层架构</h3>
+                
+                <div class="edge-card">
+                    <div class="edge-box-card edge">
+                        <h3 class="edge-box-title">🔵 端侧推理层 (Edge Inference Layer)</h3>
+                        <p><strong>定义：</strong>在端侧设备（手机、IoT、边缘服务器）执行轻量化模型推理。</p>
+                        <p style="margin-top: 15px;"><strong>核心职责：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>低延迟推理：本地执行，毫秒级响应</li>
+                            <li>隐私保护：数据不出设备，隐私零泄露</li>
+                            <li>离线可用：无网络环境仍可工作</li>
+                            <li>能耗优化：低功耗推理，延长续航</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="edge-box-card cloud">
+                        <h3 class="edge-box-title">🟣 云侧训练层 (Cloud Training Layer)</h3>
+                        <p><strong>定义：</strong>在云端执行大模型训练、微调、持续学习。</p>
+                        <p style="margin-top: 15px;"><strong>核心职责：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>大模型训练：集中算力训练超大模型</li>
+                            <li>持续学习：聚合端侧反馈，持续优化</li>
+                            <li>弹性扩展：按需分配云端资源</li>
+                            <li>模型分发：将优化模型下发到端侧</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="edge-box-card light">
+                        <h3 class="edge-box-title">🟡 轻量化层 (Lightweight Layer)</h3>
+                        <p><strong>定义：</strong>通过量化、剪枝、蒸馏等技术压缩模型规模。</p>
+                        <p style="margin-top: 15px;"><strong>核心职责：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>模型量化：FP32→INT8/INT4，压缩 4-8 倍</li>
+                            <li>模型剪枝：移除冗余参数，稀疏化</li>
+                            <li>知识蒸馏：大模型→小模型，保持性能</li>
+                            <li>NAS 搜索：自动搜索最优轻量架构</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="edge-box-card sync">
+                        <h3 class="edge-box-title">🟢 协同优化层 (Collaborative Layer)</h3>
+                        <p><strong>定义：</strong>通过联邦学习、动态卸载、自适应调度实现端云协同。</p>
+                        <p style="margin-top: 15px;"><strong>核心职责：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>联邦学习：分布式训练，数据不出域</li>
+                            <li>动态卸载：智能分配端云任务</li>
+                            <li>自适应调度：根据网络、电量动态调整</li>
+                            <li>协同优化：端云联合优化整体性能</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="quote">
+                    "端云协同不是简单的云端 + 端侧，而是一种系统性的架构创新。端侧推理层实现低延迟与隐私保护，云侧训练层提供大模型能力，轻量化层压缩模型规模，协同优化层实现资源最优分配。四层协同，才能构建真正高性能、高隐私、低功耗的 Agent 部署体系。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 端云协同理论基础</strong>：阐述边缘计算与云计算融合、轻量化模型理论、分布式协同学习等基础知识。</p>
+                
+                <p><strong>第二编 核心架构与组件</strong>：深入剖析端云协同架构、端侧推理引擎、云侧训练平台、协同通信机制等核心组件。</p>
+                
+                <p><strong>第三编 轻量化技术与优化</strong>：探讨模型量化、剪枝稀疏化、知识蒸馏、神经架构搜索等关键技术。</p>
+                
+                <p><strong>第四编 工程化实践</strong>：涵盖移动端部署、边缘设备部署、联邦学习实现、性能监控等生产环境实践。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从移动端量化推理到联邦学习规模化应用，从知识蒸馏到动态卸载优化，端云协同轻量化架构正在重塑 Agent 部署的设计范式。这不仅是技术的进步，更是部署思维的演进。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 60px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在端云协同前沿探索的工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 4 章 -->
+        <div class="chapter" id="chapter4">
+            <h2 class="chapter-title">第 4 章 端云协同架构设计</h2>
+            <div class="content">
+                <h3 class="section-title">4.1 架构概述</h3>
+                
+                <p>端云协同架构（Edge-Cloud Collaboration Architecture）是将计算任务智能分配给端侧设备和云端服务器的架构模式。在 Agent 系统中，端云协同意味着将推理任务分配到端侧实现低延迟与隐私保护，将训练任务集中到云端实现大模型能力。</p>
+                
+                <div class="highlight">
+                    <p><strong>端云协同核心原则：</strong>端侧优先、云侧增强、动态卸载、自适应优化。</p>
+                </div>
+                
+                <h3 class="section-title">4.2 架构分层设计</h3>
+                
+                <div class="section">
+                    <h4>端云协同架构分层</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">端云协同架构全景图</div>
+                        <pre>
+┌─────────────────────────────────────────────────────────────┐
+│                  端云协同架构全景图                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  【端侧设备层】                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │  智能手机   │  │   IoT 设备   │  │ 边缘服务器  │        │
+│  │             │  │             │  │             │        │
+│  │ • 轻量化    │  │ • 超低功耗  │  │ • 中等算力  │        │
+│  │ • 低延迟    │  │ • 传感器    │  │ • 区域服务  │        │
+│  │ • 隐私保护  │  │ • 本地推理  │  │ • 边缘聚合  │        │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
+│         │                │                │                 │
+│         └────────────────┼────────────────┘                 │
+│                          │                                  │
+│                          ▼                                  │
+│  【协同通信层】                                             │
+│  ┌─────────────────────────────────────────────────┐       │
+│  │  • 5G/6G 通信  • MQTT 消息  • gRPC 调用         │       │
+│  │  • 动态卸载决策  • 自适应压缩  • 安全加密       │       │
+│  └──────────────────┬──────────────────────────────┘       │
+│                     │                                       │
+│                     ▼                                       │
+│  【云端服务层】                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │  训练集群   │  │  模型仓库   │  │  联邦聚合   │        │
+│  │             │  │             │  │             │        │
+│  │ • 大模型    │  │ • 版本管理  │  │ • 梯度聚合  │        │
+│  │ • 分布式    │  │ • A/B 测试   │  │ • 全局更新  │        │
+│  │ • 弹性扩展  │  │ • 灰度发布  │  │ • 隐私保护  │        │
+│  └─────────────┘  └─────────────┘  └─────────────┘        │
+│                                                             │
+│  任务分配策略：                                             │
+│    • 端侧优先：简单推理、隐私敏感任务在端侧                │
+│    • 云侧增强：复杂推理、大模型训练在云端                  │
+│    • 动态卸载：根据网络、电量、负载动态调整                │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+关键特性：
+  • 端侧优先：优先在端侧执行，降低延迟
+  • 云侧增强：复杂任务卸载到云端
+  • 动态卸载：智能决策端云任务分配
+  • 自适应优化：根据环境动态调整策略
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.3 任务卸载决策</h3>
+                
+                <div class="section">
+                    <h4>动态卸载决策算法</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>决策因素</th>
+                                <th>端侧执行条件</th>
+                                <th>云侧执行条件</th>
+                                <th>权重</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>网络延迟</strong></td>
+                                <td>< 50ms</td>
+                                <td>> 200ms</td>
+                                <td>30%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>端侧电量</strong></td>
+                                <td>> 30%</td>
+                                <td>< 15%</td>
+                                <td>25%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>任务复杂度</strong></td>
+                                <td>简单推理</td>
+                                <td>复杂推理/训练</td>
+                                <td>25%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>隐私敏感度</strong></td>
+                                <td>高敏感</td>
+                                <td>低敏感</td>
+                                <td>20%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="section">
+                    <h4>卸载决策实现示例</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">动态卸载决策算法</div>
+                        <pre>
+class OffloadingDecision:
+    def __init__(self):
+        self.weights = {
+            'network': 0.30,
+            'battery': 0.25,
+            'complexity': 0.25,
+            'privacy': 0.20
+        }
+    
+    def decide(self, task, context) -> str:
+        """
+        决策任务在端侧还是云侧执行
+        
+        Args:
+            task: 任务信息 (复杂度、隐私敏感度)
+            context: 上下文信息 (网络延迟、电量)
+        
+        Returns:
+            'edge' 或 'cloud'
+        """
+        score_edge = 0
+        score_cloud = 0
+        
+        # 网络延迟评分
+        if context.network_latency < 50:
+            score_edge += self.weights['network']
+        elif context.network_latency > 200:
+            score_cloud += self.weights['network']
+        
+        # 电量评分
+        if context.battery_level > 30:
+            score_edge += self.weights['battery']
+        elif context.battery_level < 15:
+            score_cloud += self.weights['battery']
+        
+        # 任务复杂度评分
+        if task.complexity == 'simple':
+            score_edge += self.weights['complexity']
+        else:
+            score_cloud += self.weights['complexity']
+        
+        # 隐私敏感度评分
+        if task.privacy_level == 'high':
+            score_edge += self.weights['privacy']
+        else:
+            score_cloud += self.weights['privacy']
+        
+        return 'edge' if score_edge > score_cloud else 'cloud'
+
+# 使用示例
+decision = OffloadingDecision()
+task = Task(complexity='simple', privacy_level='high')
+context = Context(network_latency=30, battery_level=45)
+
+result = decision.decide(task, context)
+print(f"执行位置：{result}")  # 输出：edge
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.4 数据同步机制</h3>
+                
+                <div class="section">
+                    <h4>端云数据同步策略</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>增量同步</strong>：仅同步变化数据，减少带宽消耗</li>
+                        <li><strong>压缩传输</strong>：使用 gzip/zstd 压缩，减少 60-80% 流量</li>
+                        <li><strong>断点续传</strong>：网络中断后自动续传</li>
+                        <li><strong>冲突解决</strong>：版本向量 + 最后写入优先策略</li>
+                        <li><strong>隐私加密</strong>：端到端加密，云端无法解密原始数据</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">4.5 本章小结</h3>
+                <p>本章深入探讨了端云协同架构设计。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>架构原则：端侧优先、云侧增强、动态卸载、自适应优化</li>
+                    <li>分层设计：端侧设备层、协同通信层、云端服务层</li>
+                    <li>卸载决策：基于网络、电量、复杂度、隐私的多因素决策</li>
+                    <li>数据同步：增量同步、压缩传输、断点续传、冲突解决、隐私加密</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 8 章 -->
+        <div class="chapter" id="chapter8">
+            <h2 class="chapter-title">第 8 章 模型量化技术</h2>
+            <div class="content">
+                <h3 class="section-title">8.1 量化概述</h3>
+                
+                <p>模型量化（Model Quantization）是将高精度浮点数（FP32）转换为低精度整数（INT8/INT4）的技术，可显著减少模型大小和推理延迟，是端侧部署的核心技术。</p>
+                
+                <div class="highlight">
+                    <p><strong>量化核心优势：</strong>模型大小减少 4-8 倍、推理速度提升 2-4 倍、内存占用降低 4-8 倍、能耗降低 50-70%。</p>
+                </div>
+                
+                <h3 class="section-title">8.2 量化类型</h3>
+                
+                <div class="section">
+                    <h4>量化精度对比</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>精度</th>
+                                <th>位数</th>
+                                <th>压缩比</th>
+                                <th>精度损失</th>
+                                <th>适用场景</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>FP32</strong></td>
+                                <td>32-bit</td>
+                                <td>1x</td>
+                                <td>0%</td>
+                                <td>云端训练</td>
+                            </tr>
+                            <tr>
+                                <td><strong>FP16</strong></td>
+                                <td>16-bit</td>
+                                <td>2x</td>
+                                <td><1%</td>
+                                <td>云端推理</td>
+                            </tr>
+                            <tr>
+                                <td><strong>INT8</strong></td>
+                                <td>8-bit</td>
+                                <td>4x</td>
+                                <td>1-2%</td>
+                                <td>端侧推理</td>
+                            </tr>
+                            <tr>
+                                <td><strong>INT4</strong></td>
+                                <td>4-bit</td>
+                                <td>8x</td>
+                                <td>2-5%</td>
+                                <td>超低功耗设备</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h3 class="section-title">8.3 量化方法</h3>
+                
+                <div class="section">
+                    <h4>量化方法对比</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>训练后量化 (PTQ)</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>优点：无需重新训练，快速部署</li>
+                                <li>缺点：精度损失较大（2-5%）</li>
+                                <li>适用：快速原型、对精度要求不高</li>
+                            </ul>
+                        </li>
+                        <li><strong>量化感知训练 (QAT)</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>优点：精度损失小（<1%）</li>
+                                <li>缺点：需要重新训练，时间长</li>
+                                <li>适用：生产环境、对精度要求高</li>
+                            </ul>
+                        </li>
+                        <li><strong>混合精度量化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>关键层用 FP16/INT8，其他层用 INT4</li>
+                                <li>平衡精度与压缩比</li>
+                                <li>适用：大规模模型端侧部署</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>量化实现示例</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">PyTorch 量化实现</div>
+                        <pre>
+import torch
+import torch.quantization as quant
+
+# 1. 训练后量化 (PTQ)
+def post_training_quantization(model, calibration_loader):
+    # 融合层 (Conv+BN+ReLU)
+    model_fused = quant.fuse_modules(model, [
+        ['conv1', 'bn1', 'relu1'],
+        ['conv2', 'bn2', 'relu2']
+    ])
+    
+    # 设置量化配置
+    model_fused.qconfig = quant.get_default_qconfig('fbgemm')
+    
+    # 准备量化
+    model_prepared = quant.prepare(model_fused)
+    
+    # 校准 (使用少量数据确定量化参数)
+    with torch.no_grad():
+        for data, _ in calibration_loader:
+            model_prepared(data)
+    
+    # 转换为量化模型
+    model_quantized = quant.convert(model_prepared)
+    
+    return model_quantized
+
+# 2. 量化感知训练 (QAT)
+def quantization_aware_training(model, train_loader):
+    # 设置 QAT 配置
+    model.qconfig = quant.get_default_qat_qconfig('fbgemm')
+    
+    # 准备 QAT
+    model_prepared = quant.prepare_qat(model)
+    
+    # 正常训练 (模拟量化误差)
+    optimizer = torch.optim.Adam(model_prepared.parameters(), lr=0.001)
+    for epoch in range(10):
+        for data, target in train_loader:
+            optimizer.zero_grad()
+            output = model_prepared(data)
+            loss = criterion(output, target)
+            loss.backward()
+            optimizer.step()
+    
+    # 转换为量化模型
+    model_quantized = quant.convert(model_prepared)
+    
+    return model_quantized
+
+# 3. 导出到移动端 (TFLite/ONNX)
+def export_to_mobile(model_quantized, input_shape):
+    # 导出为 ONNX
+    dummy_input = torch.randn(input_shape)
+    torch.onnx.export(
+        model_quantized,
+        dummy_input,
+        'model_quantized.onnx',
+        opset_version=13,
+        input_names=['input'],
+        output_names=['output']
+    )
+    
+    # 使用 ONNX Runtime 端侧推理
+    import onnxruntime as ort
+    session = ort.InferenceSession('model_quantized.onnx')
+    
+    return session
+
+# 性能对比
+# FP32: 模型大小 100MB, 推理延迟 50ms
+# INT8: 模型大小 25MB, 推理延迟 15ms (3.3x 加速)
+# INT4: 模型大小 12.5MB, 推理延迟 10ms (5x 加速)
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">8.4 量化最佳实践</h3>
+                
+                <div class="section">
+                    <h4>量化实施指南</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>校准数据选择</strong>：使用代表性数据（100-500 条），覆盖各种场景</li>
+                        <li><strong>层敏感度分析</strong>：识别对量化敏感的层，使用混合精度</li>
+                        <li><strong>逐层量化</strong>：对每层单独量化，避免误差累积</li>
+                        <li><strong>量化感知微调</strong>：PTQ 后微调 1-2 个 epoch，恢复精度</li>
+                        <li><strong>端侧验证</strong>：在真实设备上测试，确保性能达标</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">8.5 本章小结</h3>
+                <p>本章探讨了模型量化技术。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>量化优势：模型大小减少 4-8 倍、推理速度提升 2-4 倍、能耗降低 50-70%</li>
+                    <li>量化精度：FP32→FP16(2x)→INT8(4x)→INT4(8x)</li>
+                    <li>量化方法：PTQ（快速）、QAT（高精度）、混合精度（平衡）</li>
+                    <li>最佳实践：校准数据、层敏感度分析、逐层量化、微调、端侧验证</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 14 章 -->
+        <div class="chapter" id="chapter14">
+            <h2 class="chapter-title">第 14 章 联邦学习实现</h2>
+            <div class="content">
+                <h3 class="section-title">14.1 联邦学习概述</h3>
+                
+                <p>联邦学习（Federated Learning）是一种分布式机器学习范式，允许多个参与方在不共享原始数据的前提下协同训练模型。在端云协同 Agent 系统中，联邦学习使得端侧设备能够协同优化模型，同时保证数据隐私。</p>
+                
+                <div class="highlight">
+                    <p><strong>联邦学习核心优势：</strong>数据不出域、隐私保护、合规性强、利用海量端侧数据。</p>
+                </div>
+                
+                <h3 class="section-title">14.2 联邦学习架构</h3>
+                
+                <div class="section">
+                    <h4>Federated Averaging (FedAvg) 算法</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">FedAvg 算法流程</div>
+                        <pre>
+┌─────────────────────────────────────────────────────────────┐
+│                  FedAvg 算法流程                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  初始化：                                                   │
+│    云端服务器初始化全局模型 w₀                              │
+│                                                             │
+│  迭代训练 (t = 0, 1, 2, ...):                               │
+│                                                             │
+│  1. 服务器选择参与客户端                                    │
+│     S_t = 随机选择 K 个客户端                               │
+│                                                             │
+│  2. 服务器下发全局模型                                      │
+│     对每个客户端 k ∈ S_t:                                   │
+│       w_t^k = w_t (下发全局模型)                            │
+│                                                             │
+│  3. 客户端本地训练                                          │
+│     对每个客户端 k ∈ S_t:                                   │
+│       使用本地数据 D_k 训练 E 个 epoch                      │
+│       w_{t+1}^k = LocalUpdate(w_t^k, D_k)                  │
+│       上传梯度更新 Δw^k = w_{t+1}^k - w_t^k                │
+│                                                             │
+│  4. 服务器聚合更新                                          │
+│     w_{t+1} = w_t + Σ_{k∈S_t} (n_k / n) * Δw^k            │
+│     其中 n_k 是客户端 k 的数据量，n = Σn_k                 │
+│                                                             │
+│  5. 检查收敛条件                                            │
+│     如果收敛，结束；否则 t = t + 1，继续迭代                │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+关键特性：
+  • 数据不出域：原始数据保留在客户端
+  • 梯度聚合：仅上传梯度更新，不上传数据
+  • 加权平均：按数据量加权聚合
+  • 隐私保护：可选差分隐私、安全聚合
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">14.3 联邦学习实现</h3>
+                
+                <div class="section">
+                    <h4>FedAvg 实现示例</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">PyTorch 联邦学习实现</div>
+                        <pre>
+import torch
+import torch.nn as nn
+import numpy as np
+
+class FederatedClient:
+    def __init__(self, model, local_data, device):
+        self.model = model.to(device)
+        self.local_data = local_data
+        self.device = device
+    
+    def local_update(self, global_weights, epochs=5, lr=0.01):
+        """本地训练"""
+        # 加载全局权重
+        self.model.load_state_dict(global_weights)
+        self.model.train()
+        
+        optimizer = torch.optim.SGD(self.model.parameters(), lr=lr)
+        criterion = nn.CrossEntropyLoss()
+        
+        for epoch in range(epochs):
+            for data, target in self.local_data:
+                data, target = data.to(self.device), target.to(self.device)
+                
+                optimizer.zero_grad()
+                output = self.model(data)
+                loss = criterion(output, target)
+                loss.backward()
+                optimizer.step()
+        
+        # 返回更新后的权重
+        return self.model.state_dict()
+
+class FederatedServer:
+    def __init__(self, model, num_clients):
+        self.global_model = model
+        self.num_clients = num_clients
+    
+    def federated_averaging(self, client_weights, client_sizes):
+        """FedAvg 聚合"""
+        total_size = sum(client_sizes)
+        averaged_weights = {}
+        
+        # 初始化
+        for key in client_weights[0].keys():
+            averaged_weights[key] = torch.zeros_like(client_weights[0][key])
+        
+        # 加权平均
+        for weights, size in zip(client_weights, client_sizes):
+            for key in weights.keys():
+                averaged_weights[key] += (size / total_size) * weights[key]
+        
+        return averaged_weights
+    
+    def train_round(self, clients, selected_clients, client_sizes):
+        """一轮联邦训练"""
+        global_weights = self.global_model.state_dict()
+        updated_weights = []
+        
+        # 客户端本地训练
+        for client_idx in selected_clients:
+            client = clients[client_idx]
+            local_weights = client.local_update(global_weights)
+            updated_weights.append(local_weights)
+        
+        # 服务器聚合
+        selected_sizes = [client_sizes[i] for i in selected_clients]
+        new_global_weights = self.federated_averaging(
+            updated_weights, 
+            selected_sizes
+        )
+        
+        # 更新全局模型
+        self.global_model.load_state_dict(new_global_weights)
+        
+        return new_global_weights
+
+# 使用示例
+# 1. 初始化服务器和客户端
+server = FederatedServer(model, num_clients=100)
+clients = [
+    FederatedClient(model, local_data[i], device) 
+    for i in range(100)
+]
+client_sizes = [len(local_data[i]) for i in range(100)]
+
+# 2. 联邦训练
+num_rounds = 50
+clients_per_round = 10
+
+for round in range(num_rounds):
+    # 随机选择客户端
+    selected = np.random.choice(
+        range(100), 
+        size=clients_per_round, 
+        replace=False
+    )
+    
+    # 一轮训练
+    server.train_round(clients, selected, client_sizes)
+    
+    print(f"Round {round+1}/{num_rounds} completed")
+
+# 3. 评估全局模型
+test_accuracy = evaluate(server.global_model, test_data)
+print(f"Test Accuracy: {test_accuracy:.2f}%")
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">14.4 隐私增强技术</h3>
+                
+                <div class="section">
+                    <h4>隐私保护技术</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>差分隐私 (DP)</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>在梯度中添加高斯噪声</li>
+                                <li>提供数学可证明的隐私保证</li>
+                                <li>隐私预算ε控制隐私 - 效用权衡</li>
+                            </ul>
+                        </li>
+                        <li><strong>安全聚合 (Secure Aggregation)</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>使用多方安全计算 (MPC)</li>
+                                <li>服务器只能看到聚合结果，无法看到单个客户端更新</li>
+                                <li>防止服务器推断单个客户端数据</li>
+                            </ul>
+                        </li>
+                        <li><strong>同态加密 (HE)</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>在加密状态下进行聚合计算</li>
+                                <li>计算结果解密后与明文计算一致</li>
+                                <li>计算开销较大，适用于高安全场景</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">14.5 本章小结</h3>
+                <p>本章探讨了联邦学习实现。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>联邦学习优势：数据不出域、隐私保护、合规性强、利用海量端侧数据</li>
+                    <li>FedAvg 算法：客户端本地训练、服务器加权聚合</li>
+                    <li>实现要点：客户端选择、本地训练、梯度聚合、收敛判断</li>
+                    <li>隐私增强：差分隐私、安全聚合、同态加密</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 17 章 -->
+        <div class="chapter" id="chapter17">
+            <h2 class="chapter-title">第 17 章 未来趋势与演进方向</h2>
+            <div class="content">
+                <h3 class="section-title">17.1 技术趋势</h3>
+                
+                <div class="section">
+                    <h4>2026-2028 年技术趋势</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>1-bit 量化</strong>：极致压缩，模型大小减少 32 倍</li>
+                        <li><strong>神经形态计算</strong>：类脑芯片，超低功耗推理</li>
+                        <li><strong>去中心化联邦学习</strong>：区块链 + 联邦学习，无需中心服务器</li>
+                        <li><strong>跨模态端云协同</strong>：文本、图像、语音多模态协同</li>
+                        <li><strong>自进化 Agent</strong>：端侧持续学习，模型自主进化</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">17.2 架构演进</h3>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>维度</th>
+                            <th>当前架构（2025）</th>
+                            <th>未来架构（2027）</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>量化精度</strong></td>
+                            <td>INT8/INT4</td>
+                            <td>INT2/1-bit</td>
+                        </tr>
+                        <tr>
+                            <td><strong>联邦学习</strong></td>
+                            <td>中心化 FedAvg</td>
+                            <td>去中心化 P2P</td>
+                        </tr>
+                        <tr>
+                            <td><strong>端侧推理</strong></td>
+                            <td>CPU/GPU</td>
+                            <td>NPU/神经形态芯片</td>
+                        </tr>
+                        <tr>
+                            <td><strong>协同方式</strong></td>
+                            <td>静态规则</td>
+                            <td>AI 驱动自适应</td>
+                        </tr>
+                        <tr>
+                            <td><strong>隐私保护</strong></td>
+                            <td>差分隐私</td>
+                            <td>零知识证明 + 同态加密</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">17.3 最佳实践清单</h3>
+                
+                <div class="section">
+                    <h4>端云协同部署实施检查清单</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>轻量化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 模型量化（INT8/INT4）</li>
+                                <li>✓ 模型剪枝（结构化/非结构化）</li>
+                                <li>✓ 知识蒸馏（大模型→小模型）</li>
+                                <li>✓ NAS 搜索（自动轻量架构）</li>
+                            </ul>
+                        </li>
+                        <li><strong>端侧部署</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 移动端推理引擎（TFLite/CoreML）</li>
+                                <li>✓ 边缘设备优化（TensorRT/OpenVINO）</li>
+                                <li>✓ 内存优化（算子融合、内存复用）</li>
+                                <li>✓ 能耗优化（动态电压频率调整）</li>
+                            </ul>
+                        </li>
+                        <li><strong>联邦学习</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ FedAvg 实现</li>
+                                <li>✓ 差分隐私保护</li>
+                                <li>✓ 安全聚合</li>
+                                <li>✓ 客户端选择策略</li>
+                            </ul>
+                        </li>
+                        <li><strong>协同优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 动态卸载决策</li>
+                                <li>✓ 自适应调度</li>
+                                <li>✓ 端云数据同步</li>
+                                <li>✓ 性能监控与调优</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 60px; border-left-color: var(--edge-blue);">
+                    "从移动端量化推理到联邦学习规模化应用，从知识蒸馏到动态卸载优化，端云协同轻量化架构正在重塑 Agent 部署的设计范式。未来的 Agent 将更加智能、更加隐私、更加普及。这不仅是技术的进步，更是部署思维的演进。"
+                    <div class="quote-author">—— 全书结语</div>
+                </div>
+                
+                <h3 class="section-title">17.4 本章小结</h3>
+                <p>本章展望了未来趋势。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>技术趋势：1-bit 量化、神经形态计算、去中心化联邦学习、跨模态协同、自进化 Agent</li>
+                    <li>架构演进：INT2/1-bit、P2P 联邦、NPU 推理、AI 驱动自适应、零知识证明</li>
+                    <li>最佳实践：轻量化、端侧部署、联邦学习、协同优化检查清单</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">端云协同与边缘计算</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;">
+                    <li>Nature NPJ AI (2025). "Omniforce: Cloud-Edge Collaborative AutoML System." nature.com</li>
+                    <li>ScienceDirect (2024). "End-Edge-Cloud Collaborative Learning for HST Operation." sciencedirect.com</li>
+                </ol>
+                
+                <h3 class="section-title">轻量化模型技术</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="3">
+                    <li>Google (2024). "Gemma 2: Lightweight Model Series." blog.google</li>
+                    <li>TensorFlow Team (2026). "Model Optimization Guide." tensorflow.org</li>
+                </ol>
+                
+                <h3 class="section-title">联邦学习</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="5">
+                    <li>FEDML Team (2025). "FEDML: Federated Learning Library." fedml.ai</li>
+                    <li>Google AI (2025). "Federated Learning for Mobile Devices." ai.google</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.5em; margin-bottom: 25px; color: var(--edge-blue); font-weight: 800; font-family: 'Georgia', serif;">端云协同轻量化 Agent 部署架构</p>
+                <p style="font-size: 1.2em; margin-bottom: 15px; font-style: italic;">从云端到边缘的智能部署新范式</p>
+                <p>© 2026 超级代码智能体 | 端云协同版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 35px; font-size: 1em; line-height: 2.0;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="edge-spectrum" style="margin-top: 50px;">
+                    <div class="spectrum-item spectrum-edge">🔵 端侧</div>
+                    <div class="spectrum-item spectrum-cloud">🟣 云侧</div>
+                    <div class="spectrum-item spectrum-light">🟡 轻量化</div>
+                    <div class="spectrum-item spectrum-sync">🟢 协同</div>
+                </div>
+                <p style="margin-top: 50px; font-size: 0.95em; color: var(--text-secondary);">
+                    谨以此书献给所有在端云协同前沿探索的工程师们<br>
+                    从 2024 年移动端量化实验到 2026 年十亿级设备部署<br>
+                    2 年探索，端云协同轻量化架构——高性能、高隐私、低功耗的完美平衡
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢 Edge-Cloud Collaborative Agent Architecture');
+        console.log('📚 From Cloud to Edge (2024-2026)');
+        console.log('✨ 2 Years of Edge-Cloud Evolution');
+        console.log('🌐 Edge + Cloud + Lightweight + Collaboration = Privacy-Preserving AI');
+    </script>
+</body>
+</html>

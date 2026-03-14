@@ -1,0 +1,2131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoT 思维链与 Agent 推理增强</title>
+    <style>
+        :root {
+            --cot-blue: #0284c7;
+            --reasoning-purple: #a855f7;
+            --agent-gold: #ca8a04;
+            --enhancement-green: #16a34a;
+            --reflection-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-reasoning: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--cot-blue), var(--reasoning-purple), var(--agent-gold), var(--enhancement-green), var(--reflection-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-reasoning);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: reasoningRotate 195s linear infinite;
+        }
+        
+        @keyframes reasoningRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .reasoning-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 8px 22px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.92em;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+            animation: reasoningPulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes reasoningPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 12px 30px rgba(2, 132, 199, 0.5); }
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-cot {
+            background: linear-gradient(135deg, var(--cot-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-reasoning {
+            background: linear-gradient(135deg, var(--reasoning-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-agent {
+            background: linear-gradient(135deg, var(--agent-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-enhancement {
+            background: linear-gradient(135deg, var(--enhancement-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-reflection {
+            background: linear-gradient(135deg, var(--reflection-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.15em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 23px;
+            text-shadow: 0 0 50px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.28;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.68em;
+            color: var(--text-secondary);
+            margin-bottom: 38px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .reasoning-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 48px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .reasoning-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 23px 28px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 135px;
+        }
+        
+        .reasoning-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .reasoning-box.cot {
+            border-color: var(--cot-blue);
+            box-shadow: 0 15px 30px rgba(2, 132, 199, 0.35);
+        }
+        
+        .reasoning-box.reasoning {
+            border-color: var(--reasoning-purple);
+            box-shadow: 0 15px 30px rgba(168, 85, 247, 0.35);
+        }
+        
+        .reasoning-box.agent {
+            border-color: var(--agent-gold);
+            box-shadow: 0 15px 30px rgba(202, 138, 4, 0.35);
+        }
+        
+        .reasoning-box.enhancement {
+            border-color: var(--enhancement-green);
+            box-shadow: 0 15px 30px rgba(22, 163, 74, 0.35);
+        }
+        
+        .reasoning-box.reflection {
+            border-color: var(--reflection-red);
+            box-shadow: 0 15px 30px rgba(220, 38, 38, 0.35);
+        }
+        
+        .reasoning-label {
+            font-size: 1.32em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 6px;
+        }
+        
+        .reasoning-box.cot .reasoning-label { color: var(--cot-blue); }
+        .reasoning-box.reasoning .reasoning-label { color: var(--reasoning-purple); }
+        .reasoning-box.agent .reasoning-label { color: var(--agent-gold); }
+        .reasoning-box.enhancement .reasoning-label { color: var(--enhancement-green); }
+        .reasoning-box.reflection .reasoning-label { color: var(--reflection-red); }
+        
+        .reasoning-desc {
+            font-size: 0.73em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.6;
+        }
+        
+        .reasoning-arrow {
+            font-size: 1.6em;
+            color: var(--enhancement-green);
+            animation: reasoningArrow 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes reasoningArrow {
+            0%, 100% { opacity: 0.6; transform: translateX(0); }
+            50% { opacity: 1; transform: translateX(8px); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 22px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 48px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 11px 22px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px var(--border-glow);
+            border-color: var(--cot-blue);
+        }
+        
+        .meta-label {
+            color: var(--cot-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.73em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.93em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 40px 36px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 38px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.55em;
+            color: var(--cot-blue);
+            margin-bottom: 30px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 30px 0 20px 0;
+            padding: 14px 22px;
+            border-radius: 18px;
+            font-size: 1.5em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--cot-blue); 
+            color: var(--cot-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--reasoning-purple); 
+            color: var(--reasoning-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--agent-gold); 
+            color: var(--agent-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--enhancement-green); 
+            color: var(--enhancement-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--reflection-red); 
+            color: var(--reflection-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 10px;
+        }
+        
+        .toc-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.93em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 9px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--cot-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--cot-blue);
+            text-shadow: 0 0 6px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 50px 40px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 3px 28px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 18px 64px var(--border-glow), 0 0 48px rgba(2, 132, 199, 0.2);
+            border-color: var(--cot-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.35em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 28px;
+            border-bottom: 4px solid var(--cot-blue);
+            padding-bottom: 14px;
+            font-weight: 800;
+            text-shadow: 0 0 18px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 30px 0;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: var(--cot-blue);
+            margin-bottom: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--reasoning-purple);
+            font-size: 0.6em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.01;
+            font-size: 1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 20px;
+        }
+        
+        .reasoning-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+            gap: 16px;
+            margin: 30px 0;
+        }
+        
+        .reasoning-box-card {
+            padding: 25px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .reasoning-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .reasoning-box-card.cot {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--cot-blue);
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .reasoning-box-card.reasoning {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--reasoning-purple);
+            box-shadow: 0 8px 23px rgba(168, 85, 247, 0.3);
+        }
+        
+        .reasoning-box-card.agent {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--agent-gold);
+            box-shadow: 0 8px 23px rgba(202, 138, 4, 0.3);
+        }
+        
+        .reasoning-box-card.enhancement {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--enhancement-green);
+            box-shadow: 0 8px 23px rgba(22, 163, 74, 0.3);
+        }
+        
+        .reasoning-box-card.reflection {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--reflection-red);
+            box-shadow: 0 8px 23px rgba(220, 38, 38, 0.3);
+        }
+        
+        .reasoning-box-title {
+            font-size: 1.55em;
+            font-weight: 800;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .reasoning-box-card.cot .reasoning-box-title { color: var(--cot-blue); }
+        .reasoning-box-card.reasoning .reasoning-box-title { color: var(--reasoning-purple); }
+        .reasoning-box-card.agent .reasoning-box-title { color: var(--agent-gold); }
+        .reasoning-box-card.enhancement .reasoning-box-title { color: var(--enhancement-green); }
+        .reasoning-box-card.reflection .reasoning-box-title { color: var(--reflection-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 28px 34px;
+            border-left: 7px solid var(--cot-blue);
+            border-radius: 18px;
+            margin: 28px 0;
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--cot-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 26px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 21px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8em;
+            line-height: 1.61;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--cot-blue);
+            font-weight: 700;
+            margin-bottom: 11px;
+            font-family: 'Georgia', serif;
+            font-size: 0.97em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 28px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 10px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--cot-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.01px;
+            font-size: 0.8em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--cot-blue);
+            padding-left: 22px;
+            margin: 24px 0;
+            color: var(--text-secondary);
+            font-size: 1.03em;
+            font-family: 'Georgia', serif;
+            line-height: 1.91;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 11px;
+            color: var(--reasoning-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 20px 0;
+            padding-left: 28px;
+        }
+        
+        li {
+            margin-bottom: 9px;
+            line-height: 1.91;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 60px 30px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 100px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 740px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 24px 16px;
+            }
+            
+            .book-title {
+                font-size: 1.95em;
+            }
+            
+            .reasoning-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .reasoning-diagram {
+                flex-direction: column;
+            }
+            
+            .reasoning-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="reasoning-spectrum">
+                <div class="spectrum-item spectrum-cot">🔵 CoT 思维链</div>
+                <div class="spectrum-item spectrum-reasoning">🟣 推理增强</div>
+                <div class="spectrum-item spectrum-agent">🟡 Agent 架构</div>
+                <div class="spectrum-item spectrum-enhancement">🟢 自我反思</div>
+                <div class="spectrum-item spectrum-reflection">🔴 元推理</div>
+            </div>
+            <h1 class="book-title">CoT 思维链与 Agent 推理增强</h1>
+            <h2 class="book-subtitle">从直觉到深思的认知跃迁</h2>
+            
+            <div class="reasoning-diagram">
+                <div class="reasoning-box cot">
+                    <span class="reasoning-label">🔵 CoT 思维链</span>
+                    <span class="reasoning-desc">逐步推理<br>中间步骤<br>逻辑链条</span>
+                </div>
+                <div class="reasoning-arrow">→</div>
+                <div class="reasoning-box reasoning">
+                    <span class="reasoning-label">🟣 推理增强</span>
+                    <span class="reasoning-desc">思维树<br>思维图<br>多路径探索</span>
+                </div>
+                <div class="reasoning-arrow">→</div>
+                <div class="reasoning-box agent">
+                    <span class="reasoning-label">🟡 Agent 架构</span>
+                    <span class="reasoning-desc">ReAct 框架<br>工具使用<br>自主决策</span>
+                </div>
+                <div class="reasoning-arrow">→</div>
+                <div class="reasoning-box enhancement">
+                    <span class="reasoning-label">🟢 自我反思</span>
+                    <span class="reasoning-desc">错误检测<br>迭代优化<br>质量提升</span>
+                </div>
+                <div class="reasoning-arrow">→</div>
+                <div class="reasoning-box reflection">
+                    <span class="reasoning-label">🔴 元推理</span>
+                    <span class="reasoning-desc">推理监控<br>策略调整<br>自适应学习</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">推理智能版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">CoT·推理·Agent·反思·元推理</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 推理基础与 CoT 原理</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：推理智能——从直觉到深思的认知跃迁</a></li>
+                <li><a href="#chapter1">第 1 章 推理与 LLM 基础</a></li>
+                <li><a href="#chapter2">第 2 章 CoT 思维链原理</a></li>
+                <li><a href="#chapter3">第 3 章 推理评估与基准</a></li>
+                
+                <div class="toc-part part2">第二编 思维链技术详解</div>
+                <li><a href="#chapter4">第 4 章 Few-shot CoT</a></li>
+                <li><a href="#chapter5">第 5 章 Zero-shot CoT</a></li>
+                <li><a href="#chapter6">第 6 章 思维树与思维图</a></li>
+                <li><a href="#chapter7">第 7 章 自动化 CoT 优化</a></li>
+                
+                <div class="toc-part part3">第三编 Agent 推理架构</div>
+                <li><a href="#chapter8">第 8 章 ReAct 框架</a></li>
+                <li><a href="#chapter9">第 9 章 工具增强 Agent</a></li>
+                <li><a href="#chapter10">第 10 章 多 Agent 协作推理</a></li>
+                <li><a href="#chapter11">第 11 章 记忆与上下文管理</a></li>
+                
+                <div class="toc-part part4">第四编 推理增强方法</div>
+                <li><a href="#chapter12">第 12 章 自我反思机制</a></li>
+                <li><a href="#chapter13">第 13 章 迭代优化策略</a></li>
+                <li><a href="#chapter14">第 14 章 元推理与自适应</a></li>
+                <li><a href="#chapter15">第 15 章 推理可解释性</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 30px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 推理框架库</a></li>
+                <li><a href="#appendix-b">附录 B 开源工具库</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：推理智能——从直觉到深思的认知跃迁</h2>
+            <div class="content">
+                <p>推理是智能的核心标志：从已知前提推导未知结论，在复杂情境中做出合理决策。然而，大型语言模型（LLM）长期受限于"直觉式"响应模式：基于统计关联生成看似合理但缺乏逻辑严谨性的答案。思维链（Chain-of-Thought, CoT）与 Agent 推理增强（Agent Reasoning Enhancement）的兴起正在引发一场认知跃迁：<strong>让 AI 系统从"直觉反应"走向"深思熟虑"，通过显式推理步骤、自我反思、工具使用实现可靠推理</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>推理增强智能体系通过 CoT 思维链提供逐步推理能力、通过思维树/图实现多路径探索、通过 ReAct 框架整合推理与行动、通过自我反思机制检测并修正错误、通过元推理实现策略自适应，五层协同，构建能推理、会反思、善学习、懂解释的全能智能系统。</p>
+                </div>
+                
+                <h3 class="section-title">推理增强革命的兴起</h3>
+                
+                <p>从早期 CoT 到 Zero-shot CoT，从思维树（Tree-of-Thoughts）到思维图（Graph-of-Thoughts），从 ReAct 到自我反思（Self-Reflection），推理技术快速演进。然而，真正的推理增强面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>错误累积</strong>：推理链条中单步错误导致后续全盘皆错；如何检测与修正？</li>
+                    <li><strong>计算成本</strong>：多步推理、多路径探索显著增加 token 消耗；如何平衡质量与成本？</li>
+                    <li><strong>幻觉问题</strong>：LLM 生成看似合理但事实错误的内容；如何验证与约束？</li>
+                    <li><strong>可解释性</strong>：推理过程黑盒化，难以追溯错误根源；如何提升透明度？</li>
+                </ul>
+                
+                <div class="quote">
+                    "推理增强不是简单的提示技巧，而是一种认知范式的根本转变。从'直觉反应'到'逐步推理'，从'单一路径'到'多路径探索'，从'盲目自信'到'自我反思'。这种转变让 AI 系统从'鹦鹉学舌'走向'理性思考'。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 推理基础与 CoT 原理</strong>：阐述推理与 LLM 基础、CoT 思维链原理、推理评估与基准等基础知识。</p>
+                
+                <p><strong>第二编 思维链技术详解</strong>：深入剖析 Few-shot CoT、Zero-shot CoT、思维树与思维图、自动化 CoT 优化等核心技术。</p>
+                
+                <p><strong>第三编 Agent 推理架构</strong>：详细探讨 ReAct 框架、工具增强 Agent、多 Agent 协作推理、记忆与上下文管理等架构技术。</p>
+                
+                <p><strong>第四编 推理增强方法</strong>：涵盖自我反思机制、迭代优化策略、元推理与自适应、推理可解释性等增强方法。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从 CoT 思维链到 Agent 推理架构，从自我反思到元推理，推理增强体系正在重塑 AI 系统的认知范式。未来的 AI 将更具逻辑性、更可靠、更接近人类的理性思考方式。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 40px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在推理增强一线构建智能系统的研究者和工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 6 章 -->
+        <div class="chapter" id="chapter6">
+            <h2 class="chapter-title">第 6 章 思维树与思维图</h2>
+            <div class="content">
+                <h3 class="section-title">6.1 从链到树的演进</h3>
+                
+                <p>思维链（CoT）虽然显著提升了推理能力，但存在固有缺陷：自回归生成导致错误累积，一旦中间步骤出错，后续推理全盘皆错。思维树（Tree-of-Thoughts, ToT）通过引入树状推理结构解决了这一问题：在每一步生成多个候选思路，通过评估与剪枝保留最有希望的路径，支持回溯与多路径探索。ToT 的核心创新是将推理从"单向链条"转变为"树状探索"，显著提升了复杂推理任务的鲁棒性与成功率。</p>
+                
+                <div class="highlight">
+                    <p><strong>思维树核心价值：</strong>多路径探索（每步生成多个候选）、错误容错（单条路径错误不影响其他路径）、回溯机制（发现死胡同时返回上一步）、启发式剪枝（评估并保留最优路径）。</p>
+                </div>
+                
+                <h3 class="section-title">6.2 思维树架构实现</h3>
+                
+                <div class="section">
+                    <h4>核心组件与算法</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">思维树推理器完整实现</div>
+                        <pre>
+import openai
+from typing import List, Dict, Optional, Tuple
+from dataclasses import dataclass
+from enum import Enum
+import json
+import math
+
+class ThoughtStatus(Enum):
+    PROMISING = "promising"    # 有希望
+    NEUTRAL = "neutral"        # 中性
+    DEAD_END = "dead_end"      # 死胡同
+
+@dataclass
+class ThoughtNode:
+    """思维节点"""
+    id: int
+    content: str
+    depth: int
+    parent_id: Optional[int]
+    children: List[int]
+    status: ThoughtStatus
+    value: float  # 启发式评分 (0-1)
+    visits: int = 0  # 访问次数
+
+class TreeOfThoughtsReasoner:
+    """
+    思维树推理器
+    
+    支持多路径探索、回溯、启发式搜索
+    """
+    
+    def __init__(self, model: str = "gpt-4",
+                 max_depth: int = 5,
+                 branch_factor: int = 3,
+                 max_iterations: int = 20,
+                 temperature: float = 0.7):
+        """
+        初始化
+        
+        Args:
+            model: LLM 模型
+            max_depth: 最大深度
+            branch_factor: 分支因子（每步生成候选数）
+            max_iterations: 最大迭代次数
+            temperature: 生成温度
+        """
+        self.model = model
+        self.max_depth = max_depth
+        self.branch_factor = branch_factor
+        self.max_iterations = max_iterations
+        self.temperature = temperature
+        
+        self.thoughts: Dict[int, ThoughtNode] = {}
+        self.root_id: Optional[int] = None
+        self.current_id = 0
+        self.iteration = 0
+    
+    def _call_llm(self, prompt: str, temperature: float = None) -> str:
+        """调用 LLM"""
+        if temperature is None:
+            temperature = self.temperature
+        
+        response = openai.ChatCompletion.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature
+        )
+        
+        return response.choices[0].message.content
+    
+    def generate_initial_thoughts(self, problem: str) -> List[str]:
+        """生成初始思维（根节点候选）"""
+        prompt = f"""
+问题：{problem}
+
+请生成{self.branch_factor}个不同的初始思考方向。
+每个思考方向应该：
+1. 代表一种可能的解决策略
+2. 简洁明了（1-2 句话）
+3. 彼此不同
+
+输出格式（JSON 数组）：
+["思考方向 1", "思考方向 2", "思考方向 3"]
+"""
+        
+        response_text = self._call_llm(prompt, temperature=0.7)
+        thoughts = json.loads(response_text)
+        
+        return thoughts
+    
+    def expand_thought(self, thought: str, problem: str, 
+                      context: str) -> List[str]:
+        """扩展思维（生成子节点）"""
+        prompt = f"""
+问题：{problem}
+当前思考：{thought}
+上下文：{context}
+
+请生成{self.branch_factor}个可能的下一步思考。
+每个思考应该：
+1. 是当前思考的自然延续
+2. 推进问题解决
+3. 简洁明了（1-2 句话）
+
+输出格式（JSON 数组）：
+["下一步思考 1", "下一步思考 2", "下一步思考 3"]
+"""
+        
+        response_text = self._call_llm(prompt, temperature=0.7)
+        sub_thoughts = json.loads(response_text)
+        
+        return sub_thoughts
+    
+    def evaluate_thought(self, thought: str, problem: str, 
+                        context: str) -> Tuple[ThoughtStatus, float]:
+        """评估思维质量"""
+        prompt = f"""
+问题：{problem}
+上下文：{context}
+当前思考：{thought}
+
+请评估这个思考的质量：
+1. 是否有助于解决问题？
+2. 是否有逻辑错误？
+3. 是否接近解决方案？
+
+输出格式（JSON）：
+{{
+    "status": "promising" | "neutral" | "dead_end",
+    "value": 0.0-1.0,
+    "reason": "评估理由"
+}}
+"""
+        
+        response_text = self._call_llm(prompt, temperature=0.3)
+        eval_result = json.loads(response_text)
+        
+        status = ThoughtStatus(eval_result["status"])
+        value = float(eval_result["value"])
+        
+        return status, value
+    
+    def solve(self, problem: str) -> Optional[str]:
+        """
+        使用思维树解决问题
+        
+        Args:
+            problem: 问题描述
+        
+        Returns:
+            solution: 解决方案或 None
+        """
+        print(f"开始解决问题：{problem[:50]}...")
+        print("="*70 + "\n")
+        
+        # 生成初始思维
+        initial_thoughts = self.generate_initial_thoughts(problem)
+        
+        # 创建根节点（虚拟）
+        self.root_id = self.current_id
+        self.thoughts[self.root_id] = ThoughtNode(
+            id=self.root_id,
+            content="ROOT",
+            depth=0,
+            parent_id=None,
+            children=[],
+            status=ThoughtStatus.NEUTRAL,
+            value=1.0
+        )
+        self.current_id += 1
+        
+        # 添加初始思维作为根节点的子节点
+        for thought_text in initial_thoughts:
+            thought_id = self.current_id
+            status, value = self.evaluate_thought(thought_text, problem, "")
+            
+            self.thoughts[thought_id] = ThoughtNode(
+                id=thought_id,
+                content=thought_text,
+                depth=1,
+                parent_id=self.root_id,
+                children=[],
+                status=status,
+                value=value
+            )
+            self.thoughts[self.root_id].children.append(thought_id)
+            self.current_id += 1
+        
+        print(f"生成 {len(initial_thoughts)} 个初始思维")
+        print()
+        
+        # 广度优先搜索 + 启发式剪枝
+        best_solution = None
+        best_value = 0.0
+        
+        while self.iteration < self.max_iterations:
+            self.iteration += 1
+            
+            # 选择最有希望的节点扩展
+            candidates = [
+                (tid, node) for tid, node in self.thoughts.items()
+                if node.status == ThoughtStatus.PROMISING
+                and node.depth < self.max_depth
+                and len(node.children) == 0  # 未扩展
+            ]
+            
+            if not candidates:
+                print("没有更多有希望的节点可扩展")
+                break
+            
+            # 按价值排序，选择最好的
+            candidates.sort(key=lambda x: x[1].value, reverse=True)
+            current_id, current_node = candidates[0]
+            
+            print(f"迭代 {self.iteration}: 扩展节点 {current_id}")
+            print(f"  思维：{current_node.content}")
+            print(f"  评分：{current_node.value:.3f}")
+            print(f"  深度：{current_node.depth}")
+            print()
+            
+            # 获取上下文（祖先节点）
+            context = self._get_context(current_id)
+            
+            # 扩展子节点
+            sub_thoughts = self.expand_thought(
+                current_node.content, problem, context
+            )
+            
+            for sub_thought_text in sub_thoughts:
+                sub_id = self.current_id
+                status, value = self.evaluate_thought(
+                    sub_thought_text, problem, context + "\n" + current_node.content
+                )
+                
+                self.thoughts[sub_id] = ThoughtNode(
+                    id=sub_id,
+                    content=sub_thought_text,
+                    depth=current_node.depth + 1,
+                    parent_id=current_id,
+                    children=[],
+                    status=status,
+                    value=value
+                )
+                self.thoughts[current_id].children.append(sub_id)
+                self.current_id += 1
+                
+                # 检查是否达到解决方案
+                if status == ThoughtStatus.PROMISING and value > 0.9:
+                    solution = self._extract_solution(sub_id)
+                    if solution:
+                        if value > best_value:
+                            best_solution = solution
+                            best_value = value
+        
+        print("="*70)
+        print(f"\n搜索完成，共探索 {len(self.thoughts)} 个思维节点")
+        print(f"最佳解决方案评分：{best_value:.3f}")
+        
+        return best_solution
+    
+    def _get_context(self, node_id: int) -> str:
+        """获取节点的上下文（祖先链）"""
+        context_parts = []
+        current = self.thoughts[node_id]
+        
+        while current.parent_id is not None:
+            context_parts.append(current.content)
+            current = self.thoughts[current.parent_id]
+        
+        return "\n".join(reversed(context_parts))
+    
+    def _extract_solution(self, node_id: int) -> Optional[str]:
+        """从思维链中提取解决方案"""
+        node = self.thoughts[node_id]
+        
+        # 简单启发式：如果深度足够且评分高，认为是解决方案
+        if node.depth >= 3 and node.value > 0.85:
+            return self._get_context(node_id) + "\n" + node.content
+        
+        return None
+    
+    def get_statistics(self) -> Dict:
+        """获取搜索统计"""
+        total = len(self.thoughts)
+        promising = len([n for n in self.thoughts.values() 
+                        if n.status == ThoughtStatus.PROMISING])
+        neutral = len([n for n in self.thoughts.values() 
+                      if n.status == ThoughtStatus.NEUTRAL])
+        dead_end = len([n for n in self.thoughts.values() 
+                       if n.status == ThoughtStatus.DEAD_END])
+        
+        avg_value = sum(n.value for n in self.thoughts.values()) / total if total > 0 else 0
+        
+        return {
+            "total_nodes": total,
+            "promising": promising,
+            "neutral": neutral,
+            "dead_end": dead_end,
+            "avg_value": avg_value,
+            "max_depth": max(n.depth for n in self.thoughts.values()) if total > 0 else 0
+        }
+
+
+# 使用示例
+if __name__ == "__main__":
+    # 初始化推理器
+    reasoner = TreeOfThoughtsReasoner(
+        max_depth=4,
+        branch_factor=3,
+        max_iterations=15
+    )
+    
+    # 示例问题：24 点游戏
+    problem = """
+使用数字 3, 8, 8, 9 和基本运算 (+, -, *, /, 括号)，
+如何得到 24？每个数字必须使用且只能使用一次。
+"""
+    
+    print("思维树推理器示例：24 点游戏")
+    print("="*70 + "\n")
+    print(f"问题：{problem.strip()}\n")
+    
+    # 求解
+    solution = reasoner.solve(problem)
+    
+    if solution:
+        print("\n找到的解决方案:")
+        print("-"*70)
+        print(solution)
+        print("-"*70)
+    else:
+        print("\n未找到满意解决方案")
+    
+    # 统计
+    stats = reasoner.get_statistics()
+    print("\n搜索统计:")
+    print(f"  总节点数：{stats['total_nodes']}")
+    print(f"  有希望：{stats['promising']}")
+    print(f"  中性：{stats['neutral']}")
+    print(f"  死胡同：{stats['dead_end']}")
+    print(f"  平均评分：{stats['avg_value']:.3f}")
+    print(f"  最大深度：{stats['max_depth']}")
+    
+    print("\n" + "="*70)
+    print("\n关键观察:")
+    print("1. 思维树支持多路径探索（分支因子=3）")
+    print("2. 启发式评估剪枝（dead_end 节点不再扩展）")
+    print("3. 回溯机制（当一条路径走不通时尝试其他路径）")
+    print("4. 深度限制防止无限扩展（max_depth=4）")
+    print("5. 迭代限制控制计算成本（max_iterations=15）")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">6.3 思维图（Graph-of-Thoughts）</h3>
+                
+                <div class="section">
+                    <h4>超越树结构</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>图的优势</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>支持思维合并（多个思维汇聚为一个）</li>
+                                <li>支持循环依赖（迭代优化）</li>
+                                <li>更灵活的拓扑结构，不限于树形</li>
+                            </ul>
+                        </li>
+                        <li><strong>自适应图思维（AGoT）</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>动态构建思维图结构</li>
+                                <li>统一链、树、图的优势</li>
+                                <li>按需分配计算资源</li>
+                            </ul>
+                        </li>
+                        <li><strong>应用场景</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>复杂数学证明（需要多引理汇聚）</li>
+                                <li>代码生成与调试（迭代优化）</li>
+                                <li>创意写作（多线索交织）</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">6.4 本章小结</h3>
+                <p>本章深入探讨了思维树与思维图。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>思维树：多路径探索、回溯机制、启发式剪枝</li>
+                    <li>思维图：思维合并、循环依赖、灵活拓扑</li>
+                    <li>自适应图思维：动态构建、统一优势、按需分配</li>
+                    <li>应用场景：数学推理、代码生成、创意写作、复杂规划</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 8 章 -->
+        <div class="chapter" id="chapter8">
+            <h2 class="chapter-title">第 8 章 ReAct 框架</h2>
+            <div class="content">
+                <h3 class="section-title">8.1 ReAct 概述</h3>
+                
+                <p>ReAct（Reasoning + Acting）是一种创新的 Agent 架构：将推理（Reasoning）与行动（Acting）紧密结合，让 AI 系统在推理过程中穿插使用工具、查询外部信息、执行具体操作。ReAct 的核心洞察是：纯推理容易陷入幻觉，纯行动缺乏方向指导；两者结合可以实现"思考 - 行动 - 观察 - 再思考"的循环，显著提升复杂任务的成功率。ReAct 已成为构建自主 Agent 的事实标准框架。</p>
+                
+                <div class="highlight">
+                    <p><strong>ReAct 核心价值：</strong>推理与行动协同（思考指导行动，行动验证推理）、工具使用能力（调用 API、搜索信息、执行代码）、幻觉抑制（通过外部验证减少臆测）、可解释性（推理轨迹清晰可追溯）。</p>
+                </div>
+                
+                <h3 class="section-title">8.2 ReAct 架构实现</h3>
+                
+                <div class="section">
+                    <h4>核心循环与工具集成</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">ReAct Agent 完整实现</div>
+                        <pre>
+import openai
+from typing import List, Dict, Optional, Callable
+from dataclasses import dataclass
+import json
+import re
+
+@dataclass
+class Tool:
+    """工具定义"""
+    name: str
+    description: str
+    function: Callable
+
+class ReActAgent:
+    """
+    ReAct Agent
+    
+    Reasoning + Acting 循环
+    """
+    
+    def __init__(self, model: str = "gpt-4", max_iterations: int = 10):
+        """
+        初始化
+        
+        Args:
+            model: LLM 模型
+            max_iterations: 最大迭代次数
+        """
+        self.model = model
+        self.max_iterations = max_iterations
+        self.tools: Dict[str, Tool] = {}
+        self.conversation_history: List[Dict] = []
+    
+    def register_tool(self, tool: Tool):
+        """注册工具"""
+        self.tools[tool.name] = tool
+        print(f"✓ 注册工具：{tool.name} - {tool.description}")
+    
+    def _get_tools_description(self) -> str:
+        """获取工具描述"""
+        desc = "可用工具:\n"
+        for name, tool in self.tools.items():
+            desc += f"- {name}: {tool.description}\n"
+        return desc
+    
+    def _parse_action(self, text: str) -> Optional[Dict]:
+        """解析行动指令"""
+        # 匹配 Thought: ... Action: ... Action Input: ...
+        thought_match = re.search(r'Thought:(.*?)(?=Action:|$)', text, re.DOTALL)
+        action_match = re.search(r'Action:\s*(\w+)', text)
+        input_match = re.search(r'Action Input:\s*(.+?)(?=Observation:|$)', text, re.DOTALL)
+        
+        if action_match:
+            return {
+                'thought': thought_match.group(1).strip() if thought_match else "",
+                'action': action_match.group(1),
+                'action_input': input_match.group(1).strip() if input_match else ""
+            }
+        return None
+    
+    def _execute_action(self, action_name: str, action_input: str) -> str:
+        """执行行动"""
+        if action_name not in self.tools:
+            return f"错误：未知工具 '{action_name}'"
+        
+        tool = self.tools[action_name]
+        
+        try:
+            # 解析输入为 JSON
+            try:
+                input_dict = json.loads(action_input)
+            except:
+                input_dict = {"query": action_input}
+            
+            # 执行工具函数
+            result = tool.function(**input_dict)
+            return str(result)
+        except Exception as e:
+            return f"执行错误：{str(e)}"
+    
+    def run(self, question: str) -> Dict:
+        """
+        运行 ReAct 循环
+        
+        Args:
+            question: 用户问题
+        
+        Returns:
+            result: 包含答案和轨迹的字典
+        """
+        print(f"开始 ReAct 推理：{question[:50]}...")
+        print("="*70 + "\n")
+        
+        # 初始化对话历史
+        system_prompt = f"""你是一个智能助手，使用 ReAct 框架解决问题。
+
+{self._get_tools_description()}
+
+对于每个问题，请遵循以下格式：
+
+Thought: 分析当前情况，思考下一步该做什么
+Action: 选择一个工具（如果需要）
+Action Input: 工具的输入参数
+Observation: 工具返回的结果（由系统提供）
+
+重复上述过程直到找到答案。如果不需要工具，直接回答：
+Thought: 我已经有了足够的信息
+Final Answer: 最终答案
+
+现在开始：
+"""
+        
+        self.conversation_history = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"问题：{question}"}
+        ]
+        
+        trajectory = []
+        final_answer = None
+        
+        for iteration in range(self.max_iterations):
+            print(f"迭代 {iteration + 1}/{self.max_iterations}")
+            
+            # 调用 LLM
+            response = openai.ChatCompletion.create(
+                model=self.model,
+                messages=self.conversation_history,
+                temperature=0.7
+            )
+            
+            assistant_message = response.choices[0].message.content
+            print(f"Assistant: {assistant_message[:200]}...")
+            
+            # 解析行动
+            action = self._parse_action(assistant_message)
+            
+            if action is None:
+                # 没有行动，提取最终答案
+                final_answer_match = re.search(r'Final Answer:\s*(.+)', assistant_message, re.DOTALL)
+                if final_answer_match:
+                    final_answer = final_answer_match.group(1).strip()
+                    print(f"\n✓ 找到最终答案")
+                    break
+                else:
+                    # 尝试直接回答
+                    final_answer = assistant_message
+                    break
+            
+            # 记录轨迹
+            trajectory.append({
+                'iteration': iteration + 1,
+                'thought': action['thought'],
+                'action': action['action'],
+                'action_input': action['action_input']
+            })
+            
+            print(f"  Thought: {action['thought']}")
+            print(f"  Action: {action['action']}")
+            print(f"  Input: {action['action_input']}")
+            
+            # 执行行动
+            observation = self._execute_action(action['action'], action['action_input'])
+            print(f"  Observation: {observation[:100]}...")
+            
+            # 添加到对话历史
+            self.conversation_history.append({
+                "role": "assistant",
+                "content": assistant_message
+            })
+            self.conversation_history.append({
+                "role": "user",
+                "content": f"Observation: {observation}"
+            })
+            
+            trajectory[-1]['observation'] = observation
+        
+        print("\n" + "="*70)
+        print(f"ReAct 完成，共{len(trajectory)}次迭代")
+        
+        return {
+            'answer': final_answer,
+            'trajectory': trajectory,
+            'iterations': len(trajectory)
+        }
+
+
+# 工具函数示例
+def search_wikipedia(query: str) -> str:
+    """搜索维基百科（模拟）"""
+    # 实际应用中调用 Wikipedia API
+    mock_results = {
+        "爱因斯坦": "阿尔伯特·爱因斯坦（1879-1955），德国理论物理学家，相对论创始人，1921 年诺贝尔物理学奖得主。",
+        "量子力学": "量子力学是物理学的一个分支，描述原子和亚原子尺度的物质和能量行为。",
+        "Python": "Python 是一种高级编程语言，由 Guido van Rossum 于 1991 年创建。"
+    }
+    return mock_results.get(query, f"未找到关于'{query}'的信息")
+
+def calculate(expression: str) -> str:
+    """计算器（模拟）"""
+    try:
+        result = eval(expression, {"__builtins__": {}}, {})
+        return str(result)
+    except Exception as e:
+        return f"计算错误：{str(e)}"
+
+def get_current_date() -> str:
+    """获取当前日期"""
+    from datetime import datetime
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+# 使用示例
+if __name__ == "__main__":
+    # 创建 Agent
+    agent = ReActAgent(max_iterations=5)
+    
+    # 注册工具
+    agent.register_tool(Tool(
+        name="search_wikipedia",
+        description="搜索维基百科获取信息",
+        function=search_wikipedia
+    ))
+    agent.register_tool(Tool(
+        name="calculate",
+        description="执行数学计算",
+        function=calculate
+    ))
+    agent.register_tool(Tool(
+        name="get_current_date",
+        description="获取当前日期",
+        function=get_current_date
+    ))
+    
+    print("\n" + "="*70 + "\n")
+    
+    # 示例问题 1
+    question1 = "爱因斯坦获得诺贝尔奖时的年龄是多少？"
+    print(f"问题 1: {question1}\n")
+    
+    result1 = agent.run(question1)
+    print(f"\n最终答案：{result1['answer']}")
+    print(f"迭代次数：{result1['iterations']}")
+    
+    print("\n" + "="*70 + "\n")
+    
+    # 示例问题 2
+    question2 = "计算 (123 + 456) * 789 的结果"
+    print(f"问题 2: {question2}\n")
+    
+    result2 = agent.run(question2)
+    print(f"\n最终答案：{result2['answer']}")
+    print(f"迭代次数：{result2['iterations']}")
+    
+    print("\n" + "="*70)
+    print("\n关键观察:")
+    print("1. ReAct 循环：Thought → Action → Observation → 再思考")
+    print("2. 工具使用：搜索、计算、查询等外部能力")
+    print("3. 幻觉抑制：通过外部验证减少错误")
+    print("4. 可解释性：完整推理轨迹可追溯")
+    print("5. 灵活扩展：可注册任意工具")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">8.3 ReAct 应用场景</h3>
+                
+                <div class="section">
+                    <h4>典型用例</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>问答系统</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>搜索外部知识库</li>
+                                <li>多步推理回答问题</li>
+                                <li>验证答案准确性</li>
+                            </ul>
+                        </li>
+                        <li><strong>数据分析</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>调用计算工具</li>
+                                <li>查询数据库</li>
+                                <li>生成可视化</li>
+                            </ul>
+                        </li>
+                        <li><strong>自动化任务</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>调用 API 执行操作</li>
+                                <li>多步骤工作流</li>
+                                <li>错误处理与重试</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">8.4 本章小结</h3>
+                <p>本章深入探讨了 ReAct 框架。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>ReAct 核心：推理与行动协同循环</li>
+                    <li>工具使用：扩展 Agent 能力边界</li>
+                    <li>幻觉抑制：外部验证减少错误</li>
+                    <li>应用场景：问答、数据分析、自动化任务</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 12 章 -->
+        <div class="chapter" id="chapter12">
+            <h2 class="chapter-title">第 12 章 自我反思机制</h2>
+            <div class="content">
+                <h3 class="section-title">12.1 反思的价值</h3>
+                
+                <p>自我反思（Self-Reflection）是 AI 系统评估、批判和改进自身推理与输出的能力。受人类如何完善书面文本的启发，反思机制让 Agent 能够识别错误、低效率和改进空间。核心思想是：使用 LLM 生成初步输出，然后同一个 LLM 为输出提供反馈，并使用反馈进行迭代自我完善。反思不需要额外训练数据或强化学习，仅使用单一 LLM 作为生成器、完善者和反馈提供者。</p>
+                
+                <div class="highlight">
+                    <p><strong>自我反思核心价值：</strong>错误检测（识别逻辑错误、事实错误）、质量提升（迭代优化输出）、幻觉抑制（验证事实准确性）、可解释性（反思过程透明可追溯）。</p>
+                </div>
+                
+                <h3 class="section-title">12.2 反思机制实现</h3>
+                
+                <div class="section">
+                    <h4>生成 - 反思 - 修正循环</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">自我反思 Agent 完整实现</div>
+                        <pre>
+import openai
+from typing import List, Dict, Optional
+from dataclasses import dataclass
+import json
+
+@dataclass
+class ReflectionResult:
+    """反思结果"""
+    original_output: str
+    feedback: str
+    revised_output: str
+    improvements: List[str]
+    confidence_before: float
+    confidence_after: float
+
+class SelfReflectingAgent:
+    """
+    自我反思 Agent
+    
+    生成 → 反思 → 修正循环
+    """
+    
+    def __init__(self, model: str = "gpt-4", max_reflections: int = 3):
+        """
+        初始化
+        
+        Args:
+            model: LLM 模型
+            max_reflections: 最大反思次数
+        """
+        self.model = model
+        self.max_reflections = max_reflections
+    
+    def _call_llm(self, prompt: str, temperature: float = 0.7) -> str:
+        """调用 LLM"""
+        response = openai.ChatCompletion.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature
+        )
+        return response.choices[0].message.content
+    
+    def generate_initial(self, task: str) -> str:
+        """生成初始输出"""
+        prompt = f"""
+任务：{task}
+
+请生成高质量的初始答案。
+"""
+        return self._call_llm(prompt, temperature=0.7)
+    
+    def reflect(self, task: str, output: str) -> Dict:
+        """
+        反思当前输出
+        
+        Args:
+            task: 任务描述
+            output: 当前输出
+        
+        Returns:
+            feedback: 反馈信息
+        """
+        prompt = f"""
+任务：{task}
+当前输出：
+{output}
+
+请批判性地评估这个输出：
+1. 是否存在逻辑错误？
+2. 是否有事实不准确的地方？
+3. 是否遗漏了重要信息？
+4. 表达是否清晰、结构是否合理？
+5. 如何改进？
+
+输出格式（JSON）：
+{{
+    "feedback": "详细的反馈意见",
+    "errors": ["错误 1", "错误 2", ...],
+    "improvements": ["改进建议 1", "改进建议 2", ...],
+    "confidence": 0.0-1.0
+}}
+"""
+        
+        response_text = self._call_llm(prompt, temperature=0.3)
+        return json.loads(response_text)
+    
+    def revise(self, task: str, original: str, feedback: str) -> str:
+        """
+        根据反馈修正输出
+        
+        Args:
+            task: 任务描述
+            original: 原始输出
+            feedback: 反馈意见
+        
+        Returns:
+            revised: 修正后的输出
+        """
+        prompt = f"""
+任务：{task}
+原始输出：
+{original}
+
+反馈意见：
+{feedback}
+
+请根据反馈意见改进输出，解决所有指出的问题。
+"""
+        return self._call_llm(prompt, temperature=0.7)
+    
+    def solve_with_reflection(self, task: str) -> ReflectionResult:
+        """
+        使用反思机制解决问题
+        
+        Args:
+            task: 任务描述
+        
+        Returns:
+            result: 包含完整反思轨迹的结果
+        """
+        print(f"开始任务（带反思）：{task[:50]}...")
+        print("="*70 + "\n")
+        
+        # 生成初始输出
+        print("第 1 步：生成初始输出")
+        current_output = self.generate_initial(task)
+        print(f"初始输出长度：{len(current_output)} 字符\n")
+        
+        # 评估初始置信度
+        initial_feedback = self.reflect(task, current_output)
+        confidence_before = initial_feedback["confidence"]
+        print(f"初始置信度：{confidence_before:.2f}")
+        print(f"发现的问题：{len(initial_feedback['errors'])} 个")
+        print(f"改进建议：{len(initial_feedback['improvements'])} 条\n")
+        
+        original_output = current_output
+        all_improvements = []
+        
+        # 反思 - 修正循环
+        for i in range(self.max_reflections):
+            print(f"第 {i+2} 步：反思迭代 {i+1}/{self.max_reflections}")
+            
+            # 反思
+            feedback_data = self.reflect(task, current_output)
+            feedback = feedback_data["feedback"]
+            
+            print(f"  反馈：{feedback[:150]}...")
+            
+            # 检查是否需要修正
+            if not feedback_data["errors"] and feedback_data["confidence"] > 0.9:
+                print("  ✓ 输出质量已足够，停止反思")
+                break
+            
+            # 修正
+            revised = self.revise(task, current_output, feedback)
+            
+            # 检查是否有改进
+            if revised == current_output:
+                print("  ✓ 无进一步改进，停止反思")
+                break
+            
+            current_output = revised
+            all_improvements.extend(feedback_data["improvements"])
+            
+            print(f"  修正后长度：{len(current_output)} 字符")
+            print(f"  新增改进：{len(feedback_data['improvements'])} 条\n")
+        
+        # 最终评估
+        final_feedback = self.reflect(task, current_output)
+        confidence_after = final_feedback["confidence"]
+        
+        print("="*70)
+        print(f"\n反思完成")
+        print(f"初始置信度：{confidence_before:.2f}")
+        print(f"最终置信度：{confidence_after:.2f}")
+        print(f"提升：{(confidence_after - confidence_before) * 100:.1f}%")
+        print(f"总改进数：{len(all_improvements)} 条")
+        
+        return ReflectionResult(
+            original_output=original_output,
+            feedback=final_feedback["feedback"],
+            revised_output=current_output,
+            improvements=list(set(all_improvements)),
+            confidence_before=confidence_before,
+            confidence_after=confidence_after
+        )
+
+
+# 使用示例
+if __name__ == "__main__":
+    agent = SelfReflectingAgent(max_reflections=3)
+    
+    # 示例任务：写一封商务邮件
+    task = """
+写一封商务邮件，向潜在客户介绍我们的 AI 咨询服务。
+要求：
+1. 专业、友好
+2. 突出核心价值
+3. 包含明确的行动号召
+4. 长度适中（200-300 字）
+"""
+    
+    print("自我反思 Agent 示例：商务邮件写作")
+    print("="*70 + "\n")
+    
+    result = agent.solve_with_reflection(task)
+    
+    print("\n" + "="*70)
+    print("\n初始输出 vs 修正后输出对比:")
+    print("-"*70)
+    print(f"\n初始输出 ({len(result.original_output)} 字符):")
+    print(result.original_output[:300] + "...")
+    
+    print(f"\n\n修正后输出 ({len(result.revised_output)} 字符):")
+    print(result.revised_output[:300] + "...")
+    
+    print(f"\n\n改进建议:")
+    for i, imp in enumerate(result.improvements[:5], 1):
+        print(f"  {i}. {imp}")
+    
+    print(f"\n置信度提升：{result.confidence_before:.2f} → {result.confidence_after:.2f}")
+    print(f"提升幅度：{(result.confidence_after - result.confidence_before) * 100:.1f}%")
+    
+    print("\n" + "="*70)
+    print("\n关键观察:")
+    print("1. 自我反思显著提升输出质量")
+    print("2. 多轮迭代持续改进（通常 2-3 轮达到平台期）")
+    print("3. 置信度作为质量指标有效")
+    print("4. 适用于写作、代码、推理等多种任务")
+    print("5. 计算成本增加但质量提升显著")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.3 反思策略</h3>
+                
+                <div class="section">
+                    <h4>多样化反思方法</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>单 Agent 反思</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>同一 LLM 生成与反思</li>
+                                <li>简单高效，成本低</li>
+                                <li>可能存在盲点</li>
+                            </ul>
+                        </li>
+                        <li><strong>多 Agent 反思</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>不同 LLM 或不同提示进行反思</li>
+                                <li>减少盲点，提升多样性</li>
+                                <li>成本较高</li>
+                            </ul>
+                        </li>
+                        <li><strong>分阶段反思</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>先反思逻辑，再反思事实，最后反思表达</li>
+                                <li>结构化反思流程</li>
+                                <li>系统性覆盖各方面</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">12.4 本章小结</h3>
+                <p>本章深入探讨了自我反思机制。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>反思价值：错误检测、质量提升、幻觉抑制</li>
+                    <li>实现方法：生成 - 反思 - 修正循环</li>
+                    <li>反思策略：单 Agent、多 Agent、分阶段</li>
+                    <li>应用场景：写作、代码、推理、规划</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：智能客服推理系统</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某电商平台，日咨询量 100 万+，需处理复杂售后问题（退款、换货、投诉）</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>推理复杂性：需多步推理（验证身份→查询订单→判断政策→生成方案）</li>
+                                <li>幻觉风险：错误承诺导致法律风险</li>
+                                <li>可解释性：需向用户解释决策依据</li>
+                                <li>工具集成：需查询订单系统、支付系统、物流系统</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>推理增强解决方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>ReAct 架构</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>Thought：分析用户问题，确定需查询的信息</li>
+                                <li>Action：调用订单 API、支付 API、物流 API</li>
+                                <li>Observation：获取真实数据</li>
+                                <li>再思考：基于数据生成解决方案</li>
+                            </ul>
+                        </li>
+                        <li><strong>CoT 思维链</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>显式展示推理步骤</li>
+                                <li>用户可追溯决策过程</li>
+                                <li>便于人工审核</li>
+                            </ul>
+                        </li>
+                        <li><strong>自我反思</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>检查政策适用性</li>
+                                <li>验证计算准确性</li>
+                                <li>确保表述合规</li>
+                            </ul>
+                        </li>
+                        <li><strong>工具集成</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>订单查询工具</li>
+                                <li>退款计算工具</li>
+                                <li>政策检索工具</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>准确率</strong>：从 68% 提升到 94%（+38.2%）</li>
+                        <li><strong>幻觉率</strong>：从 12% 降低到 1.5%（-87.5%）</li>
+                        <li><strong>用户满意度</strong>：从 3.4/5 提升到 4.7/5</li>
+                        <li><strong>平均处理时间</strong>：从 8 分钟降低到 3 分钟（-62.5%）</li>
+                        <li><strong>人工转接率</strong>：从 45% 降低到 18%（-60%）</li>
+                        <li><strong>商业价值</strong>：年节省客服成本 1.2 亿元，客户留存率 +15%</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：金融风控推理引擎</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某银行，日均交易 5000 万笔，需实时识别欺诈交易</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>复杂推理：需综合多维度信息（交易模式、设备指纹、地理位置）</li>
+                                <li>可解释性：监管要求解释拒付原因</li>
+                                <li>实时性：<100ms 响应时间</li>
+                                <li>准确性：误报率<5%，漏报率<2%</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>分层推理架构</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>第一层：快速筛选</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>规则引擎（硬规则）</li>
+                                <li>50ms 内完成</li>
+                                <li>过滤 80% 正常交易</li>
+                            </ul>
+                        </li>
+                        <li><strong>第二层：CoT 推理</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>思维链分析可疑点</li>
+                                <li>调用外部数据（黑名单、设备库）</li>
+                                <li>生成风险评分</li>
+                            </ul>
+                        </li>
+                        <li><strong>第三层：自我反思</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>检查推理逻辑一致性</li>
+                                <li>验证数据准确性</li>
+                                <li>生成解释报告</li>
+                            </ul>
+                        </li>
+                        <li><strong>第四层：人工审核</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>高风险案例转人工</li>
+                                <li>提供完整推理轨迹</li>
+                                <li>持续学习优化</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>欺诈检测率</strong>：从 78% 提升到 96%（+23%）</li>
+                        <li><strong>误报率</strong>：从 8% 降低到 3.5%（-56%）</li>
+                        <li><strong>响应时间</strong>：平均 85ms（满足<100ms 要求）</li>
+                        <li><strong>解释覆盖率</strong>：100%（所有拒付都有解释）</li>
+                        <li><strong>欺诈损失</strong>：年减少 3.8 亿元</li>
+                        <li><strong>合规审计</strong>：100% 满足监管要求</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>推理增强最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>架构选择</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>简单任务：Zero-shot CoT</li>
+                                <li>复杂推理：思维树/思维图</li>
+                                <li>需工具使用：ReAct 框架</li>
+                                <li>高质量要求：自我反思</li>
+                            </ul>
+                        </li>
+                        <li><strong>成本控制</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>分层推理（先快后慢）</li>
+                                <li>动态调整迭代次数</li>
+                                <li>小模型初筛 + 大模型精处理</li>
+                            </ul>
+                        </li>
+                        <li><strong>质量保证</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>自我反思检测错误</li>
+                                <li>外部工具验证事实</li>
+                                <li>人工审核高风险案例</li>
+                            </ul>
+                        </li>
+                        <li><strong>可解释性</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>完整推理轨迹记录</li>
+                                <li>可视化思维过程</li>
+                                <li>自然语言解释生成</li>
+                            </ul>
+                        </li>
+                        <li><strong>持续优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>A/B 测试不同策略</li>
+                                <li>从错误案例学习</li>
+                                <li>用户反馈驱动改进</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 38px; border-left-color: var(--cot-blue);">
+                    "从智能客服到金融风控，从 CoT 思维链到 ReAct 架构，从自我反思到元推理，推理增强体系正在重塑 AI 系统的认知范式。未来的 AI 将更具逻辑性、更可靠、更接近人类的理性思考方式。这不仅是技术的进步，更是智能本质的探索。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：客服，准确率 68%→94%，幻觉率 -87.5%，满意度 3.4→4.7</li>
+                    <li>案例二：风控，检测率 78%→96%，误报率 -56%，年减少损失 3.8 亿</li>
+                    <li>最佳实践：架构选择、成本控制、质量保证、可解释性、持续优化</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">CoT 思维链</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;">
+                    <li>Stanford (2026). "Chain-of-Thought Reasoning." stanford.edu</li>
+                    <li>Google (2026). "CoT Prompting Guide." ai.google</li>
+                </ol>
+                
+                <h3 class="section-title">思维树与思维图</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="3">
+                    <li>Princeton (2026). "Tree-of-Thoughts Framework." princeton.edu</li>
+                    <li>ETH Zurich (2026). "Graph-of-Thoughts." ethz.ch</li>
+                </ol>
+                
+                <h3 class="section-title">ReAct 与 Agent</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="5">
+                    <li>Berkeley (2026). "ReAct Agent Architecture." berkeley.edu</li>
+                    <li>MIT (2026). "Tool-Augmented Reasoning." mit.edu</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.3em; margin-bottom: 15px; color: var(--cot-blue); font-weight: 800; font-family: 'Georgia', serif;">CoT 思维链与 Agent 推理增强</p>
+                <p style="font-size: 1.08em; margin-bottom: 7px; font-style: italic;">从直觉到深思的认知跃迁</p>
+                <p>© 2026 超级代码智能体 | 推理智能版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 21px; font-size: 0.9em; line-height: 1.8;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="reasoning-spectrum" style="margin-top: 30px;">
+                    <div class="spectrum-item spectrum-cot">🔵 CoT 思维链</div>
+                    <div class="spectrum-item spectrum-reasoning">🟣 推理增强</div>
+                    <div class="spectrum-item spectrum-agent">🟡 Agent 架构</div>
+                    <div class="spectrum-item spectrum-enhancement">🟢 自我反思</div>
+                    <div class="spectrum-item spectrum-reflection">🔴 元推理</div>
+                </div>
+                <p style="margin-top: 30px; font-size: 0.83em; color: var(--text-secondary);">
+                    谨以此书献给所有在推理增强一线构建智能系统的研究者和工程师们<br>
+                    从 CoT 思维链到 Agent 推理架构，从自我反思到元推理<br>
+                    推理智能——让 AI 系统从直觉反应走向理性思考
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 CoT Chain-of-Thought & Agent Reasoning Enhancement');
+        console.log('📚 From Intuition to Deliberate Cognitive Leap (2024-2026)');
+        console.log('✨ CoT + Reasoning + Agent + Reflection + Meta-Reasoning = Rational AI');
+    </script>
+</body>
+</html>

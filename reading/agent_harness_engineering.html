@@ -1,0 +1,2077 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Harness Engineering：AI Agent 执行管控与安全沙箱 原理与最佳实践</title>
+    <style>
+        :root {
+            --primary-color: #00f5ff;
+            --secondary-color: #7b2cbf;
+            --accent-color: #ff006e;
+            --bg-dark: #0a0a0f;
+            --bg-medium: #12121a;
+            --bg-light: #1a1a2e;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --border-color: #2a2a3e;
+            --glow-color: rgba(0, 245, 255, 0.3);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-medium) 50%, var(--bg-light) 100%);
+            color: var(--text-primary);
+            line-height: 1.8;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        .book-header {
+            text-align: center;
+            padding: 60px 20px;
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.2), rgba(0, 245, 255, 0.1));
+            border: 2px solid var(--primary-color);
+            border-radius: 20px;
+            margin-bottom: 40px;
+            box-shadow: 0 0 40px var(--glow-color);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .book-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, var(--glow-color) 0%, transparent 70%);
+            animation: pulse 4s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.1); }
+        }
+        
+        .book-title {
+            font-size: 3em;
+            font-weight: bold;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px var(--glow-color);
+            position: relative;
+            z-index: 1;
+        }
+        
+        .book-subtitle {
+            font-size: 1.5em;
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px 25px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+        }
+        
+        .meta-label {
+            color: var(--primary-color);
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            padding: 40px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        
+        .chapter:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px var(--glow-color);
+            border-color: var(--primary-color);
+        }
+        
+        .chapter-title {
+            font-size: 2em;
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--secondary-color);
+            padding-bottom: 10px;
+        }
+        
+        .section {
+            margin: 30px 0;
+        }
+        
+        .section-title {
+            font-size: 1.5em;
+            color: var(--accent-color);
+            margin-bottom: 15px;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2;
+        }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.3), rgba(0, 245, 255, 0.2));
+            padding: 20px;
+            border-left: 4px solid var(--primary-color);
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .code-block {
+            background: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 20px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            margin: 20px 0;
+        }
+        
+        .code-block code {
+            color: var(--primary-color);
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .toc-title {
+            font-size: 2em;
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .toc-list {
+            list-style: none;
+        }
+        
+        .toc-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .toc-list a:hover {
+            color: var(--primary-color);
+        }
+        
+        .toc-part {
+            font-weight: bold;
+            color: var(--accent-color);
+            margin-top: 20px;
+        }
+        
+        .author-note {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(123, 44, 191, 0.1));
+            border: 2px solid var(--primary-color);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 40px 0;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 40px;
+            border-top: 2px solid var(--border-color);
+            margin-top: 60px;
+            color: var(--text-secondary);
+        }
+        
+        .diagram {
+            background: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 30px 0;
+            text-align: center;
+        }
+        
+        .diagram-title {
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: rgba(255, 255, 255, 0.02);
+        }
+        
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            text-align: left;
+        }
+        
+        th {
+            background: rgba(0, 245, 255, 0.1);
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+        
+        tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .warning {
+            background: rgba(255, 0, 110, 0.1);
+            border-left: 4px solid var(--accent-color);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .best-practice {
+            background: rgba(0, 245, 255, 0.1);
+            border-left: 4px solid var(--primary-color);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-header">
+            <h1 class="book-title">Agent Harness Engineering</h1>
+            <h2 class="book-subtitle">AI Agent 执行管控与安全沙箱 原理与最佳实践</h2>
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span>超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span>第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span>2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">语言</span>
+                    <span>中文</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">目录</h2>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：AI Agent 时代的到来</a></li>
+                <li><a href="#introduction">引言：为什么需要 Agent Harness</a></li>
+                
+                <li class="toc-part">第一部分 基础原理篇</li>
+                <li><a href="#chapter1">第 1 章 AI Agent 基础概念</a></li>
+                <li><a href="#chapter2">第 2 章 执行管控的核心挑战</a></li>
+                <li><a href="#chapter3">第 3 章 安全沙箱技术演进</a></li>
+                <li><a href="#chapter4">第 4 章 Harness 架构设计哲学</a></li>
+                
+                <li class="toc-part">第二部分 架构设计篇</li>
+                <li><a href="#chapter5">第 5 章 Agent Harness 核心组件</a></li>
+                <li><a href="#chapter6">第 6 章 调度器与执行引擎</a></li>
+                <li><a href="#chapter7">第 7 章 监控与可观测性系统</a></li>
+                <li><a href="#chapter8">第 8 章 资源管理与弹性伸缩</a></li>
+                
+                <li class="toc-part">第三部分 安全管控篇</li>
+                <li><a href="#chapter9">第 9 章 隔离技术深度解析</a></li>
+                <li><a href="#chapter10">第 10 章 权限控制与访问管理</a></li>
+                <li><a href="#chapter11">第 11 章 威胁检测与防御机制</a></li>
+                <li><a href="#chapter12">第 12 章 审计与合规性设计</a></li>
+                
+                <li class="toc-part">第四部分 最佳实践篇</li>
+                <li><a href="#chapter13">第 13 章 生产环境部署指南</a></li>
+                <li><a href="#chapter14">第 14 章 性能优化策略</a></li>
+                <li><a href="#chapter15">第 15 章 故障排查与应急响应</a></li>
+                <li><a href="#chapter16">第 16 章 未来演进方向</a></li>
+                
+                <li class="toc-part">附录</li>
+                <li><a href="#appendix-a">附录 A 术语表</a></li>
+                <li><a href="#appendix-b">附录 B 工具与框架对比</a></li>
+                <li><a href="#appendix-c">附录 C 代码示例集</a></li>
+                <li><a href="#references">参考文献</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：AI Agent 时代的到来</h2>
+            <div class="content">
+                <p>我们正站在人工智能历史的转折点上。2025 年至 2026 年，AI Agent 技术从实验室走向大规模生产应用，标志着人工智能进入了一个全新的纪元。根据最新统计，仅 Cursor 一款 AI 编程助手每天就生成近 10 亿行代码，而全球 AI Agent 系统每天执行的自主任务数量已超过百亿级别。</p>
+                
+                <div class="highlight">
+                    <p><strong>核心洞察：</strong>AI Agent 不再是未来的概念，而是当下正在重塑各行各业的核心技术。从自动化客服到智能投顾，从代码生成到医疗诊断，Agent 系统正在以前所未有的速度渗透到我们生活的方方面面。</p>
+                </div>
+                
+                <p>然而，随着 AI Agent 能力的不断增强，一个根本性的问题日益凸显：<strong>如何安全、可靠地执行这些具有自主决策能力的智能体？</strong></p>
+                
+                <p>传统软件执行模型建立在确定性逻辑之上——输入确定，输出即可预测。但 AI Agent 不同，它们基于概率模型做出决策，可能产生幻觉、执行恶意代码、泄露敏感数据，甚至在极端情况下对生产系统造成不可逆的损害。2026 年初曝光的 RoguePilot 漏洞事件就是一个警示：攻击者通过在 GitHub issue 中注入恶意指令，成功控制了多个 Codespaces 环境并窃取了 GITHUB_TOKEN。</p>
+                
+                <p>这正是本书要解决的核心问题。我们提出<strong>"Agent Harness"</strong>（AI Agent 执行管控框架）这一概念——一套完整的方法论、架构模式和工程实践，用于安全、高效、可观测地执行和管理 AI Agent。</p>
+                
+                <div class="author-note">
+                    <h3>本书的愿景</h3>
+                    <p>本书旨在成为 AI Agent 工程领域的经典参考著作，如同《设计模式》之于面向对象编程，《UNIX 编程艺术》之于系统编程。我们不仅讲解技术细节，更希望传递一种工程哲学：</p>
+                    <ul style="margin-left: 20px; margin-top: 10px;">
+                        <li><strong>安全不是事后补救，而是设计之初的核心原则</strong></li>
+                        <li><strong>可观测性不是可选功能，而是生产系统的必备要素</strong></li>
+                        <li><strong>弹性不是奢侈品，而是大规模部署的基本要求</strong></li>
+                        <li><strong>标准化不是束缚创新，而是加速生态繁荣的基础</strong></li>
+                    </ul>
+                </div>
+                
+                <p>本书基于 2026 年最新的技术实践，深入分析了 Northflank、E2B、Modal、Daytona、Arrakis 等领先平台的技术架构，结合了微软 Azure 的 Scheduler-Agent-Supervisor 模式、Google 的 gVisor 沙箱技术、AWS Firecracker 微虚拟机等业界最佳实践。同时，我们也融入了作者在构建大规模 Agent 基础设施过程中的实战经验。</p>
+                
+                <p>无论你是正在构建 Agent 系统的工程师、负责技术选型的架构师，还是研究 AI 安全的学者，本书都将为你提供系统性、可落地的知识体系。</p>
+                
+                <p style="text-align: right; margin-top: 40px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月</p>
+            </div>
+        </div>
+
+        <!-- 引言 -->
+        <div class="chapter" id="introduction">
+            <h2 class="chapter-title">引言：为什么需要 Agent Harness</h2>
+            <div class="content">
+                <p>在深入技术细节之前，让我们先回答一个根本问题：<strong>为什么 AI Agent 需要专门的执行管控框架？</strong>直接使用容器、虚拟机或云函数执行 Agent 生成的代码不就够了吗？</p>
+                
+                <h3 class="section-title">1. AI Agent 的独特风险</h3>
+                <p>AI Agent 与传统软件有着本质区别，这些区别带来了独特的安全挑战：</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>特征</th>
+                            <th>传统软件</th>
+                            <th>AI Agent</th>
+                            <th>风险影响</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>行为确定性</td>
+                            <td>完全确定</td>
+                            <td>概率性输出</td>
+                            <td>无法通过测试覆盖所有场景</td>
+                        </tr>
+                        <tr>
+                            <td>代码来源</td>
+                            <td>人工编写</td>
+                            <td>模型生成</td>
+                            <td>可能包含未知漏洞或恶意代码</td>
+                        </tr>
+                        <tr>
+                            <td>执行路径</td>
+                            <td>预定义流程</td>
+                            <td>动态决策</td>
+                            <td>可能执行未授权操作</td>
+                        </tr>
+                        <tr>
+                            <td>数据访问</td>
+                            <td>显式授权</td>
+                            <td>隐式学习</td>
+                            <td>可能泄露训练数据或敏感信息</td>
+                        </tr>
+                        <tr>
+                            <td>错误模式</td>
+                            <td>可预测异常</td>
+                            <td>幻觉与误导</td>
+                            <td>难以检测和纠正</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div class="warning">
+                    <h4>⚠️ 真实案例：2026 年 RoguePilot 漏洞</h4>
+                    <p>2026 年 2 月，安全公司 Orca Security 披露了一个名为 RoguePilot 的严重漏洞。攻击者通过在 GitHub issue 中注入精心构造的恶意指令，成功控制了 GitHub Codespaces 环境，窃取了 GITHUB_TOKEN 并访问了私有仓库。这一事件凸显了 AI Agent 执行环境面临的真实威胁。</p>
+                </div>
+                
+                <h3 class="section-title">2. 传统执行模型的局限性</h3>
+                <p>传统的代码执行模型在面对 AI Agent 时显得力不从心：</p>
+                
+                <div class="section">
+                    <h4>2.1 容器的不足</h4>
+                    <p>Docker 等容器技术虽然提供了进程隔离，但共享内核的特性使其容易受到内核漏洞的攻击。对于执行完全不受信任的 AI 生成代码，容器隔离强度不够。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>2.2 虚拟机的开销</h4>
+                    <p>传统虚拟机提供了强隔离，但启动时间长（通常数十秒）、资源开销大，难以满足 AI Agent 快速弹性伸缩的需求。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>2.3 云函数的限制</h4>
+                    <p>AWS Lambda 等云函数虽然弹性好，但执行时长受限（通常最多 15 分钟），无法支持需要长时间运行的 Agent 工作流。</p>
+                </div>
+                
+                <h3 class="section-title">3. Agent Harness 的核心价值</h3>
+                <p>Agent Harness 是专门为 AI Agent 设计的执行管控框架，它提供以下核心价值：</p>
+                
+                <div class="best-practice">
+                    <h4>✓ 安全隔离</h4>
+                    <p>采用微虚拟机（MicroVM）、gVisor 等强隔离技术，确保 AI 生成代码无法逃逸到宿主环境。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <h4>✓ 弹性伸缩</h4>
+                    <p>支持毫秒级冷启动和自动扩缩容，能够应对 Agent 工作负载的突发波动。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <h4>✓ 可观测性</h4>
+                    <p>提供细粒度的日志、指标和追踪能力，实时监控 Agent 的行为和资源使用。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <h4>✓ 状态管理</h4>
+                    <p>支持长时间运行的会话和状态持久化，允许 Agent 在多次交互中保持上下文。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <h4>✓ 网络控制</h4>
+                    <p>精细的出入站网络策略，防止 Agent 访问未授权的外部资源。</p>
+                </div>
+                
+                <h3 class="section-title">4. 本书结构概览</h3>
+                <p>本书分为四个部分，循序渐进地讲解 Agent Harness 工程的各个方面：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>第一部分 基础原理篇</strong>：建立对 AI Agent、执行管控和安全沙箱的基础认知</li>
+                    <li><strong>第二部分 架构设计篇</strong>：深入讲解 Agent Harness 的核心组件和系统设计</li>
+                    <li><strong>第三部分 安全管控篇</strong>：全面探讨隔离、权限、威胁检测和合规性</li>
+                    <li><strong>第四部分 最佳实践篇</strong>：提供生产环境部署、优化和故障排查的实战指南</li>
+                </ul>
+                
+                <p>现在，让我们开始这段技术探索之旅。</p>
+            </div>
+        </div>
+
+        <!-- 第一部分 基础原理篇 -->
+        <div class="chapter" id="chapter1">
+            <h2 class="chapter-title">第 1 章 AI Agent 基础概念</h2>
+            <div class="content">
+                <h3 class="section-title">1.1 什么是 AI Agent</h3>
+                <p>根据 Russell 和 Norvig 在《人工智能：一种现代方法》中的经典定义：</p>
+                
+                <div class="highlight">
+                    <p><strong>"Agent 是任何可以被视为通过传感器感知环境，并通过执行器作用于该环境的实体。"</strong></p>
+                </div>
+                
+                <p>对于 LLM-based AI Agent，这个定义可以具体化为：</p>
+                <ul style="margin-left: 20px;">
+                    <li><strong>传感器</strong>：用户输入、API 响应、文件内容、网络数据等</li>
+                    <li><strong>大脑</strong>：大型语言模型（LLM）进行推理和决策</li>
+                    <li><strong>执行器</strong>：代码执行、API 调用、文件操作、网络请求等</li>
+                </ul>
+                
+                <h3 class="section-title">1.2 AI Agent 的核心能力</h3>
+                <p>现代 AI Agent 具备以下关键能力：</p>
+                
+                <div class="section">
+                    <h4>1.2.1 感知与理解</h4>
+                    <p>Agent 能够理解自然语言指令、解析多模态输入（文本、图像、代码），并从中提取意图和上下文信息。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>1.2.2 推理与规划</h4>
+                    <p>通过 Chain-of-Thought（CoT）、Tree-of-Thought（ToT）等技术，Agent 能够进行逻辑推理、任务分解和路径规划。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>1.2.3 工具使用</h4>
+                    <p>Agent 可以调用外部工具（计算器、搜索引擎、数据库、API）来弥补 LLM 在数学计算、实时信息获取等方面的不足。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>1.2.4 记忆与学习</h4>
+                    <p>通过 RAG（检索增强生成）和向量数据库，Agent 能够访问长期记忆，实现跨会话的上下文保持。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>1.2.5 自主执行</h4>
+                    <p>从被动响应到主动执行，Agent 能够自主完成多步骤任务，如编写代码、部署应用、数据分析等。</p>
+                </div>
+                
+                <h3 class="section-title">1.3 AI Agent 的分类</h3>
+                <p>根据自主程度和执行能力，AI Agent 可以分为以下类型：</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>类型</th>
+                            <th>自主程度</th>
+                            <th>典型应用</th>
+                            <th>管控需求</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>对话式 Agent</td>
+                            <td>低</td>
+                            <td>客服机器人、问答系统</td>
+                            <td>内容过滤、数据脱敏</td>
+                        </tr>
+                        <tr>
+                            <td>工具增强型 Agent</td>
+                            <td>中</td>
+                            <td>代码助手、数据分析</td>
+                            <td>代码沙箱、API 限流</td>
+                        </tr>
+                        <tr>
+                            <td>工作流 Agent</td>
+                            <td>高</td>
+                            <td>自动化运维、CI/CD</td>
+                            <td>权限隔离、审计日志</td>
+                        </tr>
+                        <tr>
+                            <td>完全自主 Agent</td>
+                            <td>极高</td>
+                            <td>自动驾驶、量化交易</td>
+                            <td>强隔离、实时监控、紧急制动</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">1.4 Agent 执行生命周期</h3>
+                <p>理解 Agent 的执行生命周期对于设计 Harness 至关重要。一个典型的 Agent 执行周期包括以下阶段：</p>
+                
+                <div class="diagram">
+                    <div class="diagram-title">Agent 执行生命周期模型</div>
+                    <pre style="text-align: left; color: var(--text-primary);">
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   初始化    │───>│   感知输入  │───>│   推理决策  │
+│  Initialize │    │  Perception │    │  Reasoning  │
+└─────────────┘    └─────────────┘    └─────────────┘
+       ^                                      │
+       │                                      v
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   终止/     │<───│   结果输出  │<───│   执行动作  │
+│  Cleanup    │    │   Output    │    │   Action    │
+└─────────────┘    └─────────────┘    └─────────────┘
+                    </pre>
+                </div>
+                
+                <ol style="margin-left: 20px;">
+                    <li><strong>初始化（Initialization）</strong>：加载模型、配置工具、设置环境</li>
+                    <li><strong>感知输入（Perception）</strong>：接收用户指令、读取上下文</li>
+                    <li><strong>推理决策（Reasoning）</strong>：分析任务、规划步骤、选择工具</li>
+                    <li><strong>执行动作（Action）</strong>：调用工具、执行代码、访问资源</li>
+                    <li><strong>结果输出（Output）</strong>：生成响应、更新状态、持久化记忆</li>
+                    <li><strong>终止/清理（Termination/Cleanup）</strong>：释放资源、保存日志、清理临时文件</li>
+                </ol>
+                
+                <p>Agent Harness 需要在每个生命周期阶段提供相应的管控能力，这正是后续章节要详细探讨的内容。</p>
+            </div>
+        </div>
+
+        <div class="chapter" id="chapter2">
+            <h2 class="chapter-title">第 2 章 执行管控的核心挑战</h2>
+            <div class="content">
+                <h3 class="section-title">2.1 安全隔离挑战</h3>
+                <p>AI Agent 可能生成恶意或错误的代码，如何确保这些代码不会危害宿主系统？</p>
+                
+                <div class="warning">
+                    <h4>真实威胁场景</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>代码注入攻击：Agent 被提示注入攻击诱导执行恶意代码</li>
+                        <li>资源耗尽：无限循环或 Fork 炸弹消耗所有 CPU/内存</li>
+                        <li>数据泄露：读取敏感文件并外传到攻击者服务器</li>
+                        <li>容器逃逸：利用内核漏洞突破容器隔离</li>
+                        <li>供应链攻击：安装恶意依赖包植入后门</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">2.2 资源管理挑战</h3>
+                <p>如何公平、高效地分配计算资源，防止单个 Agent 占用过多资源？</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>CPU 限制</strong>：防止计算密集型任务独占 CPU</li>
+                    <li><strong>内存限制</strong>：防止内存泄漏或故意占用导致 OOM</li>
+                    <li><strong>磁盘配额</strong>：限制文件写入空间，防止磁盘写满</li>
+                    <li><strong>网络带宽</strong>：控制网络流量，防止 DDoS 或数据外泄</li>
+                    <li><strong>并发限制</strong>：限制进程/线程数量，防止 Fork 炸弹</li>
+                </ul>
+                
+                <h3 class="section-title">2.3 会话管理挑战</h3>
+                <p>AI Agent 可能需要长时间运行（数小时甚至数天），如何管理会话状态？</p>
+                
+                <div class="highlight">
+                    <p><strong>关键问题：</strong>E2B 等平台限制会话最长 24 小时，Vercel Sandbox 限制 45 分钟到 5 小时。但实际生产中，Agent 可能需要维护数天甚至数周的状态（如长期监控任务、持续学习场景）。</p>
+                </div>
+                
+                <h3 class="section-title">2.4 可观测性挑战</h3>
+                <p>如何实时监控 Agent 的行为，及时发现异常？</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>执行追踪</strong>：记录每一步代码执行和工具调用</li>
+                    <li><strong>性能指标</strong>：监控 CPU、内存、网络使用率</li>
+                    <li><strong>安全审计</strong>：记录所有敏感操作（文件访问、网络请求）</li>
+                    <li><strong>异常检测</strong>：识别异常行为模式（如频繁失败、异常网络访问）</li>
+                </ul>
+                
+                <h3 class="section-title">2.5 网络控制挑战</h3>
+                <p>如何平衡 Agent 的网络访问需求和安全性？</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>控制维度</th>
+                            <th>策略选项</th>
+                            <th>适用场景</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>出站访问</td>
+                            <td>完全禁止/白名单/黑名单</td>
+                            <td>数据处理 Agent 通常禁止外网访问</td>
+                        </tr>
+                        <tr>
+                            <td>入站访问</td>
+                            <td>端口映射/隧道代理</td>
+                            <td>需要外部回调的 Webhook 场景</td>
+                        </tr>
+                        <tr>
+                            <td>协议限制</td>
+                            <td>仅允许 HTTP/HTTPS/特定端口</td>
+                            <td>防止 DNS 隧道等隐蔽通道</td>
+                        </tr>
+                        <tr>
+                            <td>流量监控</td>
+                            <td>深度包检测/流量分析</td>
+                            <td>高安全等级场景</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="chapter" id="chapter3">
+            <h2 class="chapter-title">第 3 章 安全沙箱技术演进</h2>
+            <div class="content">
+                <h3 class="section-title">3.1 沙箱技术分类</h3>
+                <p>根据隔离强度，沙箱技术可以分为三个层级：</p>
+                
+                <div class="section">
+                    <h4>3.1.1 容器隔离（Container Isolation）</h4>
+                    <p><strong>技术代表</strong>：Docker、containerd、CRI-O</p>
+                    <p><strong>隔离机制</strong>：Linux Namespaces、Cgroups、Capabilities</p>
+                    <p><strong>优点</strong>：启动快（秒级）、开销小、生态成熟</p>
+                    <p><strong>缺点</strong>：共享内核，存在容器逃逸风险</p>
+                    <p><strong>适用场景</strong>：受信任代码、开发环境、快速迭代</p>
+                </div>
+                
+                <div class="section">
+                    <h4>3.1.2 用户态内核隔离（User-space Kernel Isolation）</h4>
+                    <p><strong>技术代表</strong>：Google gVisor、OpenSeccomp</p>
+                    <p><strong>隔离机制</strong>：在用户态拦截系统调用，模拟内核行为</p>
+                    <p><strong>优点</strong>：比容器更安全、兼容性好、性能适中</p>
+                    <p><strong>缺点</strong>：某些系统调用不支持、性能开销（10-20%）</p>
+                    <p><strong>适用场景</strong>：半受信任代码、多租户 SaaS</p>
+                </div>
+                
+                <div class="section">
+                    <h4>3.1.3 微虚拟机隔离（MicroVM Isolation）</h4>
+                    <p><strong>技术代表</strong>：AWS Firecracker、Kata Containers、Cloud Hypervisor</p>
+                    <p><strong>隔离机制</strong>：每个工作负载运行在独立的轻量级 VM 中，拥有独立内核</p>
+                    <p><strong>优点</strong>：最强隔离、VM 级别安全、启动快（百毫秒级）</p>
+                    <p><strong>缺点</strong>：资源开销略高于容器、需要硬件虚拟化支持</p>
+                    <p><strong>适用场景</strong>：不受信任代码、高安全等级场景、多租户生产环境</p>
+                </div>
+                
+                <div class="diagram">
+                    <div class="diagram-title">隔离技术对比图</div>
+                    <pre style="text-align: left; color: var(--text-primary);">
+隔离强度：容器 < gVisor < 微虚拟机
+启动速度：容器 > gVisor > 微虚拟机
+资源开销：容器 < gVisor < 微虚拟机
+安全性：    容器 < gVisor < 微虚拟机
+
+推荐选择：
+- 受信任代码 → 容器
+- 半受信任代码 → gVisor
+- 不受信任代码 → 微虚拟机（强烈推荐）
+                    </pre>
+                </div>
+                
+                <h3 class="section-title">3.2 2026 年主流沙箱平台对比</h3>
+                <p>基于最新市场调研，以下是 2026 年主流 AI Agent 沙箱平台的对比：</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>平台</th>
+                            <th>隔离技术</th>
+                            <th>冷启动</th>
+                            <th>最大会话</th>
+                            <th>BYOC</th>
+                            <th>最佳场景</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Northflank</strong></td>
+                            <td>Kata/gVisor</td>
+                            <td>秒级</td>
+                            <td>无限制</td>
+                            <td>支持</td>
+                            <td>企业级生产环境</td>
+                        </tr>
+                        <tr>
+                            <td><strong>E2B</strong></td>
+                            <td>Firecracker</td>
+                            <td>~150ms</td>
+                            <td>24 小时</td>
+                            <td>实验性</td>
+                            <td>AI Agent SDK</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Modal</strong></td>
+                            <td>gVisor</td>
+                            <td>亚秒级</td>
+                            <td>可配置</td>
+                            <td>不支持</td>
+                            <td>Python ML 工作流</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Daytona</strong></td>
+                            <td>Docker/Kata</td>
+                            <td>~90ms</td>
+                            <td>有状态</td>
+                            <td>不支持</td>
+                            <td>快速迭代</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Arrakis</strong></td>
+                            <td>Cloud Hypervisor</td>
+                            <td>秒级</td>
+                            <td>无限制</td>
+                            <td>自托管</td>
+                            <td>自托管沙箱</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">3.3 技术选型建议</h3>
+                <div class="best-practice">
+                    <h4>✓ 生产环境首选微虚拟机</h4>
+                    <p>对于生产环境中的 AI Agent 执行，强烈推荐使用微虚拟机（Firecracker、Kata Containers）提供最强隔离。Northflank 和 E2B 是优秀选择。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <h4>✓ 考虑 BYOC 需求</h4>
+                    <p>如果涉及敏感数据或合规要求，选择支持 BYOC（Bring Your Own Cloud）的平台，如 Northflank，可以在自己的 VPC 中运行沙箱。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <h4>✓ 评估会话时长需求</h4>
+                    <p>如果 Agent 需要长时间运行（超过 24 小时），避免选择 E2B（24 小时限制）或 Vercel（45 分钟 -5 小时限制），选择 Northflank 或 Arrakis 等无限制平台。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <h4>✓ 自托管 vs 托管服务</h4>
+                    <p>自托管（如 Arrakis）提供完全控制权，但需要自己维护基础设施。托管服务（如 Northflank、E2B）降低运维负担，但可能受限于平台功能。</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="chapter" id="chapter4">
+            <h2 class="chapter-title">第 4 章 Harness 架构设计哲学</h2>
+            <div class="content">
+                <h3 class="section-title">4.1 核心设计原则</h3>
+                <p>设计 Agent Harness 时，应遵循以下核心原则：</p>
+                
+                <div class="section">
+                    <h4>4.1.1 零信任原则（Zero Trust）</h4>
+                    <p><strong>核心理念</strong>：永远不要信任 AI Agent 生成的代码，始终假设它是恶意的。</p>
+                    <p><strong>实践指导</strong>：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>默认拒绝所有权限，按需授予最小权限</li>
+                        <li>所有外部访问必须经过显式授权</li>
+                        <li>所有操作必须记录审计日志</li>
+                        <li>定期进行安全扫描和漏洞评估</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>4.1.2 纵深防御（Defense in Depth）</h4>
+                    <p><strong>核心理念</strong>：不依赖单一安全措施，构建多层防御体系。</p>
+                    <p><strong>防御层次</strong>：</p>
+                    <ol style="margin-left: 20px;">
+                        <li>网络层：防火墙、网络策略、DDoS 防护</li>
+                        <li>主机层：内核加固、系统调用过滤</li>
+                        <li>容器/VM 层：隔离边界、资源限制</li>
+                        <li>应用层：代码审查、运行时监控</li>
+                        <li>数据层：加密、脱敏、访问控制</li>
+                    </ol>
+                </div>
+                
+                <div class="section">
+                    <h4>4.1.3 故障安全（Fail-Safe）</h4>
+                    <p><strong>核心理念</strong>：当系统发生故障时，应自动进入安全状态。</p>
+                    <p><strong>实践指导</strong>：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>超时自动终止：长时间运行的任务自动杀死</li>
+                        <li>资源超限保护：CPU/内存超限时自动限制</li>
+                        <li>异常行为熔断：检测到异常行为时自动停止</li>
+                        <li>紧急制动机制：人工干预的紧急停止按钮</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>4.1.4 可观测性优先（Observability First）</h4>
+                    <p><strong>核心理念</strong>：无法观测的系统无法信任。</p>
+                    <p><strong>实践指导</strong>：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>所有操作必须可追踪（Trace）</li>
+                        <li>所有指标必须可监控（Metric）</li>
+                        <li>所有事件必须可日志（Log）</li>
+                        <li>提供实时仪表盘和告警机制</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">4.2 Scheduler-Agent-Supervisor 模式</h3>
+                <p>微软 Azure 提出的 Scheduler-Agent-Supervisor 模式是构建可靠分布式系统的经典架构，同样适用于 Agent Harness 设计。</p>
+                
+                <div class="diagram">
+                    <div class="diagram-title">Scheduler-Agent-Supervisor 架构</div>
+                    <pre style="text-align: left; color: var(--text-primary);">
+┌─────────────────────────────────────────────────────────┐
+│                      Supervisor                         │
+│  (监控状态、检测超时、触发恢复、协调多个 Scheduler)     │
+└────────────────────┬────────────────────────────────────┘
+                     │ 定期检查状态
+                     v
+┌─────────────────────────────────────────────────────────┐
+│                     Scheduler                           │
+│  (编排工作流、记录状态、调用 Agent、管理任务生命周期)   │
+└────────────────────┬────────────────────────────────────┘
+                     │ 异步消息
+                     v
+┌─────────────────────────────────────────────────────────┐
+│                       Agent                             │
+│  (封装远程服务调用、实现重试逻辑、执行具体任务)         │
+└─────────────────────────────────────────────────────────┘
+                     │
+                     v
+┌─────────────────────────────────────────────────────────┐
+│                     State Store                         │
+│  (持久化任务状态、支持故障恢复、审计日志)               │
+└─────────────────────────────────────────────────────────┘
+                    </pre>
+                </div>
+                
+                <div class="section">
+                    <h4>组件职责</h4>
+                    <ul style="margin-left: 20px;">
+                        <li><strong>Scheduler（调度器）</strong>：负责任务编排、状态管理、Agent 调用</li>
+                        <li><strong>Agent（执行器）</strong>：封装具体执行逻辑、实现重试和错误处理</li>
+                        <li><strong>Supervisor（监督器）</strong>：监控任务状态、检测超时、触发恢复</li>
+                        <li><strong>State Store（状态存储）</strong>：持久化任务状态、支持故障恢复</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>在 Agent Harness 中的应用</h4>
+                    <p>将这一模式应用到 Agent Harness：</p>
+                    <ul style="margin-left: 20px;">
+                        <li><strong>Scheduler</strong>：管理 Agent 会话生命周期、分配资源、编排多步骤任务</li>
+                        <li><strong>Agent</strong>：在沙箱中执行 AI 生成的代码、调用外部工具</li>
+                        <li><strong>Supervisor</strong>：监控沙箱健康状态、检测异常行为、自动恢复故障</li>
+                        <li><strong>State Store</strong>：记录所有执行历史、支持审计和回溯</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">4.3 状态机设计</h3>
+                <p>Agent 执行过程可以用状态机精确描述，这对于实现可靠的 Harness 至关重要。</p>
+                
+                <div class="diagram">
+                    <div class="diagram-title">Agent 执行状态机</div>
+                    <pre style="text-align: left; color: var(--text-primary);">
+                    ┌──────────┐
+                    │  Pending │
+                    └────┬─────┘
+                         │ 开始执行
+                         v
+                    ┌──────────┐
+         ┌─────────│ Running  │─────────┐
+         │         └────┬─────┘         │
+         │              │               │
+    超时/失败           │ 完成          │ 严重错误
+         │              │               │
+         v              v               v
+    ┌──────────┐  ┌──────────┐   ┌──────────┐
+    │ Retrying │  │ Success  │   │  Failed  │
+    └────┬─────┘  └──────────┘   └──────────┘
+         │
+         │ 重试成功
+         v
+    ┌──────────┐
+    │ Success  │
+    └──────────┘
+                    </pre>
+                </div>
+                
+                <p>每个状态转换都应记录详细日志，支持事后审计和故障分析。</p>
+                
+                <h3 class="section-title">4.4 幂等性设计</h3>
+                <div class="highlight">
+                    <p><strong>幂等性（Idempotency）</strong>：同一操作执行多次与执行一次的效果相同。</p>
+                </div>
+                
+                <p>在 Agent Harness 中，由于网络故障、超时重试等原因，同一任务可能被执行多次。因此，必须确保：</p>
+                <ul style="margin-left: 20px;">
+                    <li>Agent 执行逻辑是幂等的</li>
+                    <li>状态更新是原子操作</li>
+                    <li>使用唯一 ID 进行去重</li>
+                    <li>实现补偿事务（Compensating Transaction）支持回滚</li>
+                </ul>
+                
+                <h3 class="section-title">4.5 本章小结</h3>
+                <p>本章介绍了 Agent Harness 的核心设计哲学，包括零信任、纵深防御、故障安全、可观测性优先等原则，以及 Scheduler-Agent-Supervisor 模式、状态机设计、幂等性设计等关键概念。这些理念将贯穿全书，指导后续的技术实现。</p>
+            </div>
+        </div>
+
+        <!-- 由于篇幅限制，后续章节将精简呈现核心内容 -->
+        <!-- 第二部分 架构设计篇 -->
+        <div class="chapter" id="chapter5">
+            <h2 class="chapter-title">第 5 章 Agent Harness 核心组件</h2>
+            <div class="content">
+                <h3 class="section-title">5.1 组件总览</h3>
+                <p>一个完整的 Agent Harness 系统包含以下核心组件：</p>
+                
+                <div class="diagram">
+                    <div class="diagram-title">Agent Harness 架构总览</div>
+                    <pre style="text-align: left; color: var(--text-primary);">
+┌────────────────────────────────────────────────────────────┐
+│                      API Gateway                           │
+│            (请求路由、认证授权、限流熔断)                  │
+└─────────────────────┬──────────────────────────────────────┘
+                      │
+┌─────────────────────▼──────────────────────────────────────┐
+│                   Control Plane                            │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐          │
+│  │ Scheduler  │  │ Supervisor │  │  Resource  │          │
+│  │  Manager   │  │  Service   │  │  Manager   │          │
+│  └────────────┘  └────────────┘  └────────────┘          │
+└─────────────────────┬──────────────────────────────────────┘
+                      │
+┌─────────────────────▼──────────────────────────────────────┐
+│                    Data Plane                              │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐          │
+│  │  Sandbox   │  │  Sandbox   │  │  Sandbox   │          │
+│  │ Instance   │  │ Instance   │  │ Instance   │  ...     │
+│  │ (MicroVM)  │  │ (gVisor)   │  │ (Container)│          │
+│  └────────────┘  └────────────┘  └────────────┘          │
+└────────────────────────────────────────────────────────────┘
+                      │
+┌─────────────────────▼──────────────────────────────────────┐
+│                  Supporting Services                       │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐          │
+│  │   State    │  │   Audit    │  │  Monitoring│          │
+│  │   Store    │  │   Logger   │  │   System   │          │
+│  └────────────┘  └────────────┘  └────────────┘          │
+└────────────────────────────────────────────────────────────┘
+                    </pre>
+                </div>
+                
+                <h3 class="section-title">5.2 API Gateway</h3>
+                <p>作为系统入口，负责：</p>
+                <ul style="margin-left: 20px;">
+                    <li>请求路由和负载均衡</li>
+                    <li>身份认证和授权（JWT、OAuth2、API Key）</li>
+                    <li>限流和熔断（防止 DDoS 和过载）</li>
+                    <li>请求/响应转换和协议适配</li>
+                </ul>
+                
+                <h3 class="section-title">5.3 Control Plane</h3>
+                <p>控制平面是系统的大脑，包含：</p>
+                <ul style="margin-left: 20px;">
+                    <li><strong>Scheduler Manager</strong>：管理 Agent 任务调度、资源分配</li>
+                    <li><strong>Supervisor Service</strong>：监控健康状态、故障检测和恢复</li>
+                    <li><strong>Resource Manager</strong>：管理计算、存储、网络资源</li>
+                </ul>
+                
+                <h3 class="section-title">5.4 Data Plane</h3>
+                <p>数据平面是实际执行 Agent 代码的地方，包含多个隔离的沙箱实例：</p>
+                <ul style="margin-left: 20px;">
+                    <li>MicroVM 实例（Firecracker、Kata Containers）</li>
+                    <li>gVisor 沙箱</li>
+                    <li>容器实例（用于受信任场景）</li>
+                </ul>
+                
+                <h3 class="section-title">5.5 Supporting Services</h3>
+                <p>支撑服务提供基础设施能力：</p>
+                <ul style="margin-left: 20px;">
+                    <li><strong>State Store</strong>：持久化任务状态（Redis、PostgreSQL）</li>
+                    <li><strong>Audit Logger</strong>：记录所有操作日志（ELK、Loki）</li>
+                    <li><strong>Monitoring System</strong>：指标收集和告警（Prometheus、Grafana）</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="chapter" id="chapter6">
+            <h2 class="chapter-title">第 6 章 调度器与执行引擎</h2>
+            <div class="content">
+                <h3 class="section-title">6.1 调度器设计</h3>
+                <p>调度器负责将 Agent 任务分配到合适的沙箱实例执行。</p>
+                
+                <div class="section">
+                    <h4>调度策略</h4>
+                    <ul style="margin-left: 20px;">
+                        <li><strong>轮询（Round Robin）</strong>：简单公平，适合负载均匀场景</li>
+                        <li><strong>最少连接（Least Connections）</strong>：优先分配给负载最低的实例</li>
+                        <li><strong>资源感知（Resource-Aware）</strong>：根据 CPU/内存余量调度</li>
+                        <li><strong>亲和性（Affinity）</strong>：同一用户的任务尽量分配到同一实例（利用缓存）</li>
+                    </ul>
+                </div>
+                
+                <div class="code-block">
+                    <code>
+# 调度器伪代码示例
+class AgentScheduler:
+    def schedule(self, task: AgentTask) -> SandboxInstance:
+        # 1. 检查任务优先级
+        priority = self.get_priority(task)
+        
+        # 2. 过滤可用沙箱实例
+        available = self.filter_available_instances(task.requirements)
+        
+        # 3. 根据调度策略选择最优实例
+        if self.strategy == "least_loaded":
+            instance = min(available, key=lambda x: x.load)
+        elif self.strategy == "affinity":
+            instance = self.find_affinity_instance(task.user_id, available)
+        else:
+            instance = self.round_robin_select(available)
+        
+        # 4. 锁定实例并返回
+        self.lock_instance(instance, task)
+        return instance
+                    </code>
+                </div>
+                
+                <h3 class="section-title">6.2 执行引擎</h3>
+                <p>执行引擎负责在沙箱中实际运行 Agent 代码。</p>
+                
+                <div class="section">
+                    <h4>关键功能</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>代码注入：将 AI 生成的代码安全地传入沙箱</li>
+                        <li>环境配置：设置运行时环境变量、依赖包</li>
+                        <li>执行监控：实时跟踪执行进度和资源使用</li>
+                        <li>结果收集：捕获输出、错误、返回值</li>
+                        <li>超时处理：强制终止超时任务</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">6.3 并发控制</h3>
+                <p>高并发场景下，需要精细的并发控制机制：</p>
+                <ul style="margin-left: 20px;">
+                    <li>使用分布式锁（Redis Lock、etcd）防止重复执行</li>
+                    <li>实现请求队列和背压机制</li>
+                    <li>设置并发上限，防止系统过载</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="chapter" id="chapter7">
+            <h2 class="chapter-title">第 7 章 监控与可观测性系统</h2>
+            <div class="content">
+                <h3 class="section-title">7.1 可观测性三大支柱</h3>
+                <div class="section">
+                    <h4>7.1.1 指标（Metrics）</h4>
+                    <p>量化系统状态的时间序列数据：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>系统指标：CPU 使用率、内存使用率、磁盘 IO</li>
+                        <li>业务指标：任务成功率、平均执行时间、并发数</li>
+                        <li>安全指标：异常行为次数、权限拒绝次数</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>7.1.2 日志（Logs）</h4>
+                    <p>结构化的事件记录：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>访问日志：API 请求、用户操作</li>
+                        <li>执行日志：代码执行、工具调用</li>
+                        <li>安全日志：权限检查、异常检测</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>7.1.3 追踪（Traces）</h4>
+                    <p>跨服务的请求链路追踪：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>使用 OpenTelemetry 标准</li>
+                        <li>记录 Span（操作单元）和 Context（上下文）</li>
+                        <li>支持分布式追踪和性能分析</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">7.2 实时监控仪表盘</h3>
+                <p>使用 Grafana 等工具构建实时监控仪表盘，展示：</p>
+                <ul style="margin-left: 20px;">
+                    <li>系统健康状态概览</li>
+                    <li>资源使用趋势图</li>
+                    <li>任务执行统计</li>
+                    <li>安全事件告警</li>
+                </ul>
+                
+                <h3 class="section-title">7.3 告警策略</h3>
+                <div class="warning">
+                    <h4>关键告警场景</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>沙箱逃逸尝试检测</li>
+                        <li>资源使用超限（CPU>90%、内存>85%）</li>
+                        <li>异常网络访问（连接黑名单 IP）</li>
+                        <li>任务失败率突增（>10%）</li>
+                        <li>长时间无心跳（>5 分钟）</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="chapter" id="chapter8">
+            <h2 class="chapter-title">第 8 章 资源管理与弹性伸缩</h2>
+            <div class="content">
+                <h3 class="section-title">8.1 资源配额管理</h3>
+                <p>为每个 Agent 会话设置资源配额：</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>资源类型</th>
+                            <th>限制方式</th>
+                            <th>典型值</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>CPU</td>
+                            <td>Cgroups CPU Quota</td>
+                            <td>0.5-4 vCPU</td>
+                        </tr>
+                        <tr>
+                            <td>内存</td>
+                            <td>Cgroups Memory Limit</td>
+                            <td>512MB-8GB</td>
+                        </tr>
+                        <tr>
+                            <td>磁盘</td>
+                            <td>OverlayFS Quota</td>
+                            <td>1-50GB</td>
+                        </tr>
+                        <tr>
+                            <td>网络带宽</td>
+                            <td>Traffic Control (tc)</td>
+                            <td>10Mbps-1Gbps</td>
+                        </tr>
+                        <tr>
+                            <td>进程数</td>
+                            <td>PIDs Cgroup</td>
+                            <td>50-500</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">8.2 弹性伸缩策略</h3>
+                <div class="section">
+                    <h4>水平伸缩（Horizontal Scaling）</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>基于负载自动增减沙箱实例</li>
+                        <li>使用 Kubernetes HPA 或自定义控制器</li>
+                        <li>预热实例池减少冷启动延迟</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>垂直伸缩（Vertical Scaling）</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>动态调整单个沙箱的资源配额</li>
+                        <li>支持在线扩容（需内核支持）</li>
+                        <li>缩容时注意不要影响正在执行的任务</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">8.3 成本优化</h3>
+                <div class="best-practice">
+                    <h4>✓ 使用 Spot 实例</h4>
+                    <p>对于可中断的任务，使用云厂商的 Spot 实例降低成本（可达 70%）。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <h4>✓ 实例复用</h4>
+                    <p>在安全允许的前提下，复用沙箱实例减少启动开销。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <h4>✓ 自动休眠</h4>
+                    <p>空闲沙箱自动休眠，需要时快速唤醒。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 第三部分 安全管控篇 -->
+        <div class="chapter" id="chapter9">
+            <h2 class="chapter-title">第 9 章 隔离技术深度解析</h2>
+            <div class="content">
+                <h3 class="section-title">9.1 Linux Namespaces</h3>
+                <p>容器隔离的基础，提供以下命名空间：</p>
+                <ul style="margin-left: 20px;">
+                    <li><strong>PID</strong>：进程 ID 隔离</li>
+                    <li><strong>Network</strong>：网络设备、协议栈隔离</li>
+                    <li><strong>Mount</strong>：文件系统挂载点隔离</li>
+                    <li><strong>UTS</strong>：主机名和域名隔离</li>
+                    <li><strong>IPC</strong>：信号量、消息队列隔离</li>
+                    <li><strong>User</strong>：用户和组 ID 隔离</li>
+                </ul>
+                
+                <h3 class="section-title">9.2 Cgroups 资源限制</h3>
+                <p>Control Groups 用于限制、记录和隔离进程组的资源使用。</p>
+                
+                <div class="code-block">
+                    <code>
+# Cgroups v2 示例配置
+mkdir /sys/fs/cgroup/agent-sandbox
+echo "100000" > /sys/fs/cgroup/agent-sandbox/cpu.max  # CPU 限制
+echo "2G" > /sys/fs/cgroup/agent-sandbox/memory.max   # 内存限制
+echo "500" > /sys/fs/cgroup/agent-sandbox/pids.max    # 进程数限制
+                    </code>
+                </div>
+                
+                <h3 class="section-title">9.3 Seccomp 系统调用过滤</h3>
+                <p>Secure Computing Mode 限制进程可使用的系统调用。</p>
+                
+                <div class="code-block">
+                    <code>
+# Docker Seccomp 配置文件示例
+{
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "syscalls": [
+    {
+      "names": ["read", "write", "open", "close"],
+      "action": "SCMP_ACT_ALLOW"
+    }
+  ]
+}
+                    </code>
+                </div>
+                
+                <h3 class="section-title">9.4 gVisor 架构</h3>
+                <p>Google 开发的用户态内核，通过拦截系统调用提供强隔离。</p>
+                
+                <div class="diagram">
+                    <div class="diagram-title">gVisor 架构</div>
+                    <pre style="text-align: left; color: var(--text-primary);">
+┌─────────────────────────────────────┐
+│         Application                 │
+├─────────────────────────────────────┤
+│         gVisor (Sentry)             │  ← 用户态内核
+│    (拦截并处理系统调用)              │
+├─────────────────────────────────────┤
+│         Host Kernel                 │  ← 宿主机内核
+└─────────────────────────────────────┘
+                    </pre>
+                </div>
+                
+                <h3 class="section-title">9.5 Firecracker 微虚拟机</h3>
+                <p>AWS 开发的轻量级 VMM（Virtual Machine Manager），专为无服务器计算设计。</p>
+                
+                <div class="section">
+                    <h4>核心特性</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>启动时间 < 125ms</li>
+                        <li>内存开销 < 5MB</li>
+                        <li>使用 KVM 硬件虚拟化</li>
+                        <li>最小化攻击面（仅必要设备模拟）</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="chapter" id="chapter10">
+            <h2 class="chapter-title">第 10 章 权限控制与访问管理</h2>
+            <div class="content">
+                <h3 class="section-title">10.1 最小权限原则</h3>
+                <p>每个 Agent 只授予完成其任务所必需的最小权限。</p>
+                
+                <div class="section">
+                    <h4>权限分级模型</h4>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>级别</th>
+                                <th>权限范围</th>
+                                <th>适用场景</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>L0</td>
+                                <td>无网络、只读文件系统、无外部工具</td>
+                                <td>纯计算任务</td>
+                            </tr>
+                            <tr>
+                                <td>L1</td>
+                                <td>受限网络（白名单）、临时文件系统</td>
+                                <td>数据查询 Agent</td>
+                            </tr>
+                            <tr>
+                                <td>L2</td>
+                                <td>有限网络、可写临时目录、部分工具</td>
+                                <td>代码执行 Agent</td>
+                            </tr>
+                            <tr>
+                                <td>L3</td>
+                                <td>完全网络、持久化存储、所有工具</td>
+                                <td>受信任的管理 Agent</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h3 class="section-title">10.2 基于角色的访问控制（RBAC）</h3>
+                <div class="code-block">
+                    <code>
+# RBAC 策略示例
+roles:
+  code_executor:
+    permissions:
+      - execute_code
+      - read_temp_files
+      - write_temp_files
+    resources:
+      - sandbox:*
+      
+  data_analyst:
+    permissions:
+      - read_database
+      - execute_query
+      - export_results
+    resources:
+      - database:analytics
+      - storage:exports
+                    </code>
+                </div>
+                
+                <h3 class="section-title">10.3 能力-based 安全（Capability-based Security）</h3>
+                <p>使用能力（Capability）而非身份进行授权。</p>
+                
+                <div class="highlight">
+                    <p><strong>能力（Capability）</strong>：一个不可伪造的令牌，持有者可以使用它访问特定资源。</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="chapter" id="chapter11">
+            <h2 class="chapter-title">第 11 章 威胁检测与防御机制</h2>
+            <div class="content">
+                <h3 class="section-title">11.1 常见攻击向量</h3>
+                <div class="warning">
+                    <h4>高危攻击场景</h4>
+                    <ul style="margin-left: 20px;">
+                        <li><strong>提示注入（Prompt Injection）</strong>：诱导 Agent 执行恶意操作</li>
+                        <li><strong>代码注入</strong>：生成包含后门的代码</li>
+                        <li><strong>数据投毒</strong>：污染训练数据或 RAG 知识库</li>
+                        <li><strong>模型窃取</strong>：通过查询推断模型参数</li>
+                        <li><strong>拒绝服务</strong>：消耗所有资源使系统瘫痪</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">11.2 异常检测算法</h3>
+                <div class="section">
+                    <h4>基于规则的检测</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>检测敏感系统调用（ptrace、mount）</li>
+                        <li>监控异常网络连接（连接已知恶意 IP）</li>
+                        <li>识别危险命令（rm -rf、chmod 777）</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>基于机器学习的检测</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>训练正常行为基线模型</li>
+                        <li>实时检测偏离基线的异常行为</li>
+                        <li>使用孤立森林（Isolation Forest）、自编码器等算法</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">11.3 自动响应机制</h3>
+                <div class="best-practice">
+                    <h4>✓ 分级响应策略</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>低风险：记录日志、发送告警</li>
+                        <li>中风险：限制资源、暂停执行</li>
+                        <li>高风险：终止任务、隔离沙箱、通知管理员</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="chapter" id="chapter12">
+            <h2 class="chapter-title">第 12 章 审计与合规性设计</h2>
+            <div class="content">
+                <h3 class="section-title">12.1 审计日志要求</h3>
+                <p>合规性要求（如 SOC2、GDPR、HIPAA）通常要求：</p>
+                <ul style="margin-left: 20px;">
+                    <li>记录所有用户操作和系统事件</li>
+                    <li>日志不可篡改（WORM 存储）</li>
+                    <li>保留期限符合要求（通常 1-7 年）</li>
+                    <li>支持快速检索和导出</li>
+                </ul>
+                
+                <h3 class="section-title">12.2 审计日志内容</h3>
+                <div class="code-block">
+                    <code>
+{
+  "timestamp": "2026-03-09T12:34:56.789Z",
+  "event_type": "code_execution",
+  "user_id": "user_12345",
+  "agent_id": "agent_67890",
+  "sandbox_id": "sandbox_abcde",
+  "action": "execute_python",
+  "resource": "sandbox:abcde",
+  "result": "success",
+  "duration_ms": 1234,
+  "metadata": {
+    "code_hash": "sha256:...",
+    "output_size": 1024,
+    "network_connections": ["api.example.com:443"]
+  }
+}
+                    </code>
+                </div>
+                
+                <h3 class="section-title">12.3 数据隐私保护</h3>
+                <div class="section">
+                    <h4>GDPR 合规要点</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>数据最小化：只收集必要数据</li>
+                        <li>目的限制：数据仅用于声明的目的</li>
+                        <li>存储限制：到期自动删除</li>
+                        <li>用户权利：支持访问、更正、删除请求</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 第四部分 最佳实践篇 -->
+        <div class="chapter" id="chapter13">
+            <h2 class="chapter-title">第 13 章 生产环境部署指南</h2>
+            <div class="content">
+                <h3 class="section-title">13.1 部署架构选择</h3>
+                <div class="section">
+                    <h4>单区域部署</h4>
+                    <p>适合初期或低可用性要求场景，成本低但存在单点故障风险。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>多区域部署</h4>
+                    <p>跨多个地理区域部署，提供高可用性和灾难恢复能力。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>混合云部署</h4>
+                    <p>结合公有云和私有云，敏感数据在私有云，弹性计算在公有云。</p>
+                </div>
+                
+                <h3 class="section-title">13.2 高可用设计</h3>
+                <div class="best-practice">
+                    <h4>✓ 多副本部署</h4>
+                    <p>关键组件（Scheduler、Supervisor）至少部署 3 个副本，使用 Leader Election 避免脑裂。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <h4>✓ 健康检查</h4>
+                    <p>实现多层次健康检查（进程级、服务级、业务级）。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <h4>✓ 自动故障转移</h4>
+                    <p>检测到故障时自动切换到备用实例。</p>
+                </div>
+                
+                <h3 class="section-title">13.3 灰度发布策略</h3>
+                <ul style="margin-left: 20px;">
+                    <li>金丝雀发布：先部署 1% 流量，逐步增加</li>
+                    <li>蓝绿部署：准备两套环境，切换流量</li>
+                    <li>功能开关：通过配置开关控制新功能</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="chapter" id="chapter14">
+            <h2 class="chapter-title">第 14 章 性能优化策略</h2>
+            <div class="content">
+                <h3 class="section-title">14.1 冷启动优化</h3>
+                <div class="section">
+                    <h4>预热实例池</h4>
+                    <p>维护一个预热的沙箱实例池，新任务可以直接使用，避免冷启动延迟。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>快照恢复</h4>
+                    <p>使用 MicroVM 快照技术，从快照恢复比从头启动快 10 倍以上。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>镜像优化</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>减小镜像体积（移除不必要组件）</li>
+                        <li>使用分层镜像和共享基础层</li>
+                        <li>预安装常用依赖包</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">14.2 资源利用优化</h3>
+                <div class="best-practice">
+                    <h4>✓ 超卖策略</h4>
+                    <p>基于统计复用，适当超卖资源（如 CPU 超卖比 2:1）。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <h4>✓ 动态资源调整</h4>
+                    <p>根据实际负载动态调整资源配额，避免浪费。</p>
+                </div>
+                
+                <h3 class="section-title">14.3 网络优化</h3>
+                <ul style="margin-left: 20px;">
+                    <li>使用 VPC 内网通信，减少公网延迟</li>
+                    <li>实现连接池复用，避免频繁建立连接</li>
+                    <li>使用 CDN 加速静态资源分发</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="chapter" id="chapter15">
+            <h2 class="chapter-title">第 15 章 故障排查与应急响应</h2>
+            <div class="content">
+                <h3 class="section-title">15.1 常见故障模式</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>故障类型</th>
+                            <th>症状</th>
+                            <th>排查方法</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>沙箱启动失败</td>
+                            <td>任务卡在 Pending 状态</td>
+                            <td>检查资源余量、镜像完整性、KVM 支持</td>
+                        </tr>
+                        <tr>
+                            <td>任务执行超时</td>
+                            <td>任务状态长时间为 Running</td>
+                            <td>检查代码死循环、资源限制、网络延迟</td>
+                        </tr>
+                        <tr>
+                            <td>内存泄漏</td>
+                            <td>内存使用持续增长</td>
+                            <td>分析内存 Profiling、检查未释放资源</td>
+                        </tr>
+                        <tr>
+                            <td>网络中断</td>
+                            <td>无法访问外部服务</td>
+                            <td>检查网络策略、DNS 配置、防火墙规则</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">15.2 调试工具</h3>
+                <div class="section">
+                    <h4>沙箱内调试</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>SSH/VNC 接入沙箱</li>
+                        <li>使用 strace 跟踪系统调用</li>
+                        <li>使用 tcpdump 抓包分析网络</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>日志分析</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>使用 ELK/Loki 集中查询日志</li>
+                        <li>设置告警规则自动发现异常</li>
+                        <li>关联 Trace ID 追踪完整链路</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">15.3 应急响应流程</h3>
+                <div class="warning">
+                    <h4>紧急事件处理流程</h4>
+                    <ol style="margin-left: 20px;">
+                        <li><strong>检测</strong>：监控系统触发告警</li>
+                        <li><strong>评估</strong>：判断事件等级和影响范围</li>
+                        <li><strong>遏制</strong>：隔离受影响的沙箱/服务</li>
+                        <li><strong>根除</strong>：修复漏洞或配置问题</li>
+                        <li><strong>恢复</strong>：逐步恢复服务</li>
+                        <li><strong>总结</strong>：事后分析和改进</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 未来演进方向</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 技术趋势</h3>
+                <div class="section">
+                    <h4>16.1.1 硬件辅助隔离</h4>
+                    <p>Intel SGX、AMD SEV 等可信执行环境（TEE）将提供更强的硬件级隔离。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>16.1.2 AI 原生安全</h4>
+                    <p>使用 AI 检测 AI 攻击，如用 LLM 分析代码安全性、用异常检测模型识别恶意行为。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>16.1.3 标准化进程</h4>
+                    <p>行业将形成统一的 Agent Harness 标准，包括 API 规范、安全基线、互操作性协议。</p>
+                </div>
+                
+                <h3 class="section-title">16.2 研究热点</h3>
+                <ul style="margin-left: 20px;">
+                    <li>形式化验证：用数学方法证明沙箱隔离的正确性</li>
+                    <li>零知识证明：在不泄露数据的前提下验证 Agent 行为</li>
+                    <li>联邦学习：多组织协作训练 Agent 而不共享数据</li>
+                    <li>量子安全：抗量子计算攻击的加密算法</li>
+                </ul>
+                
+                <h3 class="section-title">16.3 生态展望</h3>
+                <p>到 2030 年，我们预计：</p>
+                <ul style="margin-left: 20px;">
+                    <li>90% 的企业 AI 应用将使用 Agent Harness</li>
+                    <li>出现 3-5 个主导的开源 Harness 框架</li>
+                    <li>形成完整的工具链和生态系统</li>
+                    <li>Agent Harness 工程师成为热门职业</li>
+                </ul>
+                
+                <div class="author-note">
+                    <h3>结语</h3>
+                    <p>AI Agent 技术正在重塑软件世界，而 Agent Harness 是确保这一变革安全、可靠、可持续的关键基础设施。本书所讲述的原理和实践，只是这个激动人心领域的起点。</p>
+                    <p>未来属于那些能够驾驭 AI 力量，同时保持对安全和可靠性敬畏的工程师。希望本书能成为你探索这一领域的指南针和工具箱。</p>
+                    <p style="text-align: right; margin-top: 20px;">—— 作者</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 附录 -->
+        <div class="chapter" id="appendix-a">
+            <h2 class="chapter-title">附录 A 术语表</h2>
+            <div class="content">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>术语</th>
+                            <th>英文</th>
+                            <th>解释</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Agent Harness</td>
+                            <td>Agent Harness</td>
+                            <td>AI Agent 执行管控框架，提供安全隔离、资源管理、监控等能力</td>
+                        </tr>
+                        <tr>
+                            <td>沙箱</td>
+                            <td>Sandbox</td>
+                            <td>隔离的执行环境，限制代码对系统资源的访问</td>
+                        </tr>
+                        <tr>
+                            <td>微虚拟机</td>
+                            <td>MicroVM</td>
+                            <td>轻量级虚拟机，启动快、开销小、隔离强</td>
+                        </tr>
+                        <tr>
+                            <td>提示注入</td>
+                            <td>Prompt Injection</td>
+                            <td>通过精心构造的输入诱导 LLM 执行非预期操作</td>
+                        </tr>
+                        <tr>
+                            <td>零信任</td>
+                            <td>Zero Trust</td>
+                            <td>安全模型，默认不信任任何实体，始终验证</td>
+                        </tr>
+                        <tr>
+                            <td>幂等性</td>
+                            <td>Idempotency</td>
+                            <td>操作执行多次与执行一次效果相同</td>
+                        </tr>
+                        <tr>
+                            <td>BYOC</td>
+                            <td>Bring Your Own Cloud</td>
+                            <td>在用户自己的云环境中部署服务</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="chapter" id="appendix-b">
+            <h2 class="chapter-title">附录 B 工具与框架对比</h2>
+            <div class="content">
+                <h3 class="section-title">B.1 沙箱平台对比</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>平台</th>
+                            <th>类型</th>
+                            <th>隔离</th>
+                            <th>价格</th>
+                            <th>适用场景</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Northflank</td>
+                            <td>托管</td>
+                            <td>Kata/gVisor</td>
+                            <td>$$</td>
+                            <td>企业生产</td>
+                        </tr>
+                        <tr>
+                            <td>E2B</td>
+                            <td>托管</td>
+                            <td>Firecracker</td>
+                            <td>$$$</td>
+                            <td>AI Agent SDK</td>
+                        </tr>
+                        <tr>
+                            <td>Arrakis</td>
+                            <td>自托管</td>
+                            <td>Cloud Hypervisor</td>
+                            <td>免费</td>
+                            <td>自托管需求</td>
+                        </tr>
+                        <tr>
+                            <td>Modal</td>
+                            <td>托管</td>
+                            <td>gVisor</td>
+                            <td>$$</td>
+                            <td>Python ML</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">B.2 监控工具对比</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>工具</th>
+                            <th>类型</th>
+                            <th>优势</th>
+                            <th>劣势</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Prometheus</td>
+                            <td>指标</td>
+                            <td>云原生、生态丰富</td>
+                            <td>学习曲线陡</td>
+                        </tr>
+                        <tr>
+                            <td>Grafana</td>
+                            <td>可视化</td>
+                            <td>仪表盘强大、支持多数据源</td>
+                            <td>配置复杂</td>
+                        </tr>
+                        <tr>
+                            <td>ELK Stack</td>
+                            <td>日志</td>
+                            <td>功能全面、搜索强大</td>
+                            <td>资源消耗大</td>
+                        </tr>
+                        <tr>
+                            <td>Loki</td>
+                            <td>日志</td>
+                            <td>轻量、与 Grafana 集成</td>
+                            <td>功能相对简单</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="chapter" id="appendix-c">
+            <h2 class="chapter-title">附录 C 代码示例集</h2>
+            <div class="content">
+                <h3 class="section-title">C.1 使用 Northflank SDK 创建沙箱</h3>
+                <div class="code-block">
+                    <code>
+from northflank import Client
+
+client = Client(api_key="nf_xxx")
+
+# 创建沙箱项目
+project = client.create_project(
+    name="agent-sandbox",
+    region="us-east-1"
+)
+
+# 部署沙箱服务
+service = project.create_service(
+    name="agent-executor",
+    image="python:3.11-slim",
+    resources={
+        "cpu": "1",
+        "memory": "2Gi"
+    },
+    isolation="kata-containers"
+)
+
+# 执行代码
+result = service.execute(
+    code="print('Hello from sandbox!')",
+    timeout=30
+)
+
+print(result.output)
+                    </code>
+                </div>
+                
+                <h3 class="section-title">C.2 使用 E2B SDK</h3>
+                <div class="code-block">
+                    <code>
+from e2b import Sandbox
+
+# 创建沙箱
+sandbox = Sandbox(template="python3")
+
+# 执行代码
+execution = sandbox.run_code(
+    "import numpy as np; print(np.random.rand())"
+)
+
+print(execution.text)
+
+# 上传文件
+sandbox.files.write("/data/input.txt", "test data")
+
+# 下载文件
+content = sandbox.files.read("/data/output.txt")
+
+# 清理
+sandbox.close()
+                    </code>
+                </div>
+                
+                <h3 class="section-title">C.3 使用 Arrakis Python SDK</h3>
+                <div class="code-block">
+                    <code>
+from py_arrakis import SandboxManager
+
+# 连接 Arrakis 服务器
+manager = SandboxManager("http://localhost:7000")
+
+# 启动沙箱
+with manager.start_sandbox("agent-sandbox") as sb:
+    # 执行命令
+    result = sb.run_cmd("echo hello world")
+    print(result["output"])
+    
+    # 创建快照
+    snapshot_id = sb.snapshot("checkpoint-1")
+    
+    # 执行更多操作
+    sb.run_cmd("echo 'after snapshot' >> /tmp/test.txt")
+    
+    # 恢复到快照
+    # (在另一个沙箱实例中)
+    restored = manager.restore("agent-sandbox", snapshot_id)
+
+# 沙箱自动销毁
+                    </code>
+                </div>
+                
+                <h3 class="section-title">C.4 自定义 Scheduler 实现</h3>
+                <div class="code-block">
+                    <code>
+class AgentScheduler:
+    def __init__(self, state_store, sandbox_pool):
+        self.state_store = state_store
+        self.sandbox_pool = sandbox_pool
+        self.task_queue = asyncio.Queue()
+        
+    async def submit_task(self, task: AgentTask):
+        """提交任务到调度队列"""
+        await self.task_queue.put(task)
+        await self.state_store.save_task_state(
+            task.id, 
+            TaskState.PENDING
+        )
+        
+    async def run_scheduler(self):
+        """调度器主循环"""
+        while True:
+            task = await self.task_queue.get()
+            
+            # 选择沙箱实例
+            sandbox = await self.select_sandbox(task)
+            
+            # 更新状态
+            await self.state_store.save_task_state(
+                task.id,
+                TaskState.RUNNING,
+                sandbox_id=sandbox.id
+            )
+            
+            # 异步执行
+            asyncio.create_task(
+                self.execute_task(task, sandbox)
+            )
+            
+    async def execute_task(self, task, sandbox):
+        """执行任务"""
+        try:
+            result = await sandbox.execute(
+                task.code,
+                timeout=task.timeout
+            )
+            
+            await self.state_store.save_task_state(
+                task.id,
+                TaskState.SUCCESS,
+                result=result
+            )
+            
+        except TimeoutError:
+            await self.state_store.save_task_state(
+                task.id,
+                TaskState.TIMEOUT
+            )
+            
+        except Exception as e:
+            await self.state_store.save_task_state(
+                task.id,
+                TaskState.FAILED,
+                error=str(e)
+            )
+                    </code>
+                </div>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献</h2>
+            <div class="content">
+                <ol style="margin-left: 20px; line-height: 2;">
+                    <li>Russell, S., & Norvig, P. (2016). Artificial Intelligence: A Modern Approach (4th ed.). Pearson.</li>
+                    <li>Northflank. (2026). "What's the best code execution sandbox for AI agents in 2026?" Northflank Blog.</li>
+                    <li>Microsoft Azure. (2026). "Scheduler Agent Supervisor pattern." Azure Architecture Center.</li>
+                    <li>Abhishek Kumar. (2025). "Arrakis: Secure sandboxing for AI agent code execution." GitHub Repository.</li>
+                    <li>Google. (2025). "gVisor: Application Kernel." Open Source Project.</li>
+                    <li>AWS. (2025). "Firecracker: Lightweight Virtualization for Serverless Computing." AWS Open Source.</li>
+                    <li>E2B. (2026). "E2B Documentation: Secure AI Agent Sandboxes."</li>
+                    <li>Modal. (2026). "Modal: Serverless Cloud for ML and Data Workloads."</li>
+                    <li>Daytona. (2026). "Daytona: AI Agent Infrastructure Platform."</li>
+                    <li>Orca Security. (2026). "RoguePilot Vulnerability Disclosure."</li>
+                    <li>Microsoft Security. (2026). "Secure Agent Access with Microsoft Entra."</li>
+                    <li>Cloud Native Computing Foundation. (2025). "Kata Containers Documentation."</li>
+                    <li>OpenTelemetry. (2026). "OpenTelemetry Specification."</li>
+                    <li>NIST. (2025). "Zero Trust Architecture (SP 800-207)."</li>
+                    <li>OWASP. (2026). "Top 10 for Large Language Model Applications."</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <p>© 2026 Agent Harness Engineering | 第一版</p>
+            <p>作者：超级代码智能体</p>
+            <p>出版日期：2026 年 3 月 9 日</p>
+            <p style="margin-top: 20px; font-size: 0.9em;">
+                本书采用 CC BY-NC-SA 4.0 许可协议<br>
+                欢迎分享、改编，但请注明出处并用于非商业目的
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态年份更新
+        console.log('Agent Harness Engineering - 2026 Edition');
+        console.log('Building the future of AI Agent infrastructure...');
+    </script>
+</body>
+</html>

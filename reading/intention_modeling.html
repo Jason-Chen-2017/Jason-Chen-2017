@@ -1,0 +1,1934 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>目标驱动 Agent 的意图建模与任务理解</title>
+    <style>
+        :root {
+            --intention-gold: #ca8a04;
+            --goal-blue: #0284c7;
+            --task-green: #16a34a;
+            --gradient-theme: linear-gradient(135deg, #ca8a04, #0284c7, #16a34a);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(202, 138, 4, 0.3);
+            --shadow-intention: 0 0 60px rgba(202, 138, 4, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(202, 138, 4, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(2, 132, 199, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(22, 163, 74, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.1), rgba(2, 132, 199, 0.08), rgba(22, 163, 74, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--intention-gold), var(--goal-blue), var(--task-green)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-intention);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(202, 138, 4, 0.04) 2px,
+                    rgba(202, 138, 4, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                );
+            animation: intentionRotate 60s linear infinite;
+        }
+        
+        @keyframes intentionRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .intention-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 20px 45px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 1.25em;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-desire {
+            background: linear-gradient(135deg, #f59e0b, #fbbf24);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-intention {
+            background: linear-gradient(135deg, var(--intention-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-goal {
+            background: linear-gradient(135deg, var(--goal-blue), #38bdf8);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 4.2em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 30px;
+            text-shadow: 0 0 60px rgba(202, 138, 4, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 3px;
+            line-height: 1.35;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 2.4em;
+            color: var(--text-secondary);
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .intention-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 35px;
+            margin: 60px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .intention-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 45px 55px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 240px;
+        }
+        
+        .intention-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .intention-box.desire {
+            border-color: #f59e0b;
+            box-shadow: 0 15px 40px rgba(245, 158, 11, 0.35);
+        }
+        
+        .intention-box.intention {
+            border-color: var(--intention-gold);
+            box-shadow: 0 15px 40px rgba(202, 138, 4, 0.35);
+        }
+        
+        .intention-box.goal {
+            border-color: var(--goal-blue);
+            box-shadow: 0 15px 40px rgba(2, 132, 199, 0.35);
+        }
+        
+        .intention-label {
+            font-size: 2em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 15px;
+        }
+        
+        .intention-box.desire .intention-label { color: #f59e0b; }
+        .intention-box.intention .intention-label { color: var(--intention-gold); }
+        .intention-box.goal .intention-label { color: var(--goal-blue); }
+        
+        .intention-desc {
+            font-size: 0.95em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.8;
+        }
+        
+        .intention-arrow {
+            font-size: 2.5em;
+            color: var(--intention-gold);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 45px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 60px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 25px 45px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px var(--border-glow);
+            border-color: var(--intention-gold);
+        }
+        
+        .meta-label {
+            color: var(--intention-gold);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 1.15em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 60px 55px;
+            margin-bottom: 80px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 50px rgba(202, 138, 4, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 3.2em;
+            color: var(--intention-gold);
+            margin-bottom: 50px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 30px rgba(202, 138, 4, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 50px 0 30px 0;
+            padding: 25px 35px;
+            border-radius: 18px;
+            font-size: 1.8em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--intention-gold); 
+            color: var(--intention-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--goal-blue); 
+            color: var(--goal-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--task-green); 
+            color: var(--task-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: #a855f7; 
+            color: #a855f7;
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: #ec4899; 
+            color: #ec4899;
+            background: linear-gradient(90deg, rgba(236, 72, 153, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 20px;
+        }
+        
+        .toc-list li {
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(202, 138, 4, 0.15);
+            transition: all 0.3s ease;
+            font-size: 1.08em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 18px;
+            background: rgba(202, 138, 4, 0.08);
+            border-left: 4px solid var(--intention-gold);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--intention-gold);
+            text-shadow: 0 0 12px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(202, 138, 4, 0.2);
+            border-radius: 30px;
+            padding: 70px 60px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 25px 80px var(--border-glow), 0 0 60px rgba(202, 138, 4, 0.2);
+            border-color: var(--intention-gold);
+        }
+        
+        .chapter-title {
+            font-size: 3em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 45px;
+            border-bottom: 4px solid var(--intention-gold);
+            padding-bottom: 25px;
+            font-weight: 800;
+            text-shadow: 0 0 25px rgba(202, 138, 4, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 50px 0;
+        }
+        
+        .section-title {
+            font-size: 2.2em;
+            color: var(--intention-gold);
+            margin-bottom: 30px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--goal-blue);
+            font-size: 0.7em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.2;
+            font-size: 1.12em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 30px;
+        }
+        
+        .intention-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 28px;
+            margin: 50px 0;
+        }
+        
+        .intention-box-card {
+            padding: 42px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .intention-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .intention-box-card.desire {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(245, 158, 11, 0.08));
+            border-color: #f59e0b;
+            box-shadow: 0 8px 35px rgba(245, 158, 11, 0.3);
+        }
+        
+        .intention-box-card.intention {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--intention-gold);
+            box-shadow: 0 8px 35px rgba(202, 138, 4, 0.3);
+        }
+        
+        .intention-box-card.goal {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--goal-blue);
+            box-shadow: 0 8px 35px rgba(2, 132, 199, 0.3);
+        }
+        
+        .intention-box-title {
+            font-size: 2em;
+            font-weight: 800;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .intention-box-card.desire .intention-box-title { color: #f59e0b; }
+        .intention-box-card.intention .intention-box-title { color: var(--intention-gold); }
+        .intention-box-card.goal .intention-box-title { color: var(--goal-blue); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(2, 132, 199, 0.15));
+            padding: 45px 50px;
+            border-left: 8px solid var(--intention-gold);
+            border-radius: 20px;
+            margin: 45px 0;
+            box-shadow: 0 8px 35px rgba(202, 138, 4, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--intention-gold);
+            font-weight: 800;
+        }
+        
+        .timeline-box {
+            background: linear-gradient(135deg, #0d0d14, #1a1a2e);
+            border: 3px solid var(--border-glow);
+            border-radius: 20px;
+            padding: 45px;
+            margin: 50px 0;
+            box-shadow: inset 0 0 40px rgba(202, 138, 4, 0.1);
+        }
+        
+        .timeline-title {
+            color: var(--intention-gold);
+            margin-bottom: 35px;
+            font-weight: 800;
+            font-size: 1.8em;
+            text-align: center;
+            font-family: 'Georgia', serif;
+        }
+        
+        .timeline-item {
+            display: flex;
+            gap: 25px;
+            margin: 30px 0;
+            padding: 25px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            border-left: 4px solid;
+        }
+        
+        .timeline-item.theory { border-color: var(--intention-gold); }
+        .timeline-item.formal { border-color: var(--goal-blue); }
+        .timeline-item.application { border-color: var(--task-green); }
+        
+        .timeline-year {
+            font-weight: 800;
+            font-size: 1.3em;
+            min-width: 140px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .timeline-item.theory .timeline-year { color: var(--intention-gold); }
+        .timeline-item.formal .timeline-year { color: var(--goal-blue); }
+        .timeline-item.application .timeline-year { color: var(--task-green); }
+        
+        .timeline-content {
+            color: var(--text-primary);
+            line-height: 1.9;
+        }
+        
+        .formal-diagram {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 3px solid var(--border-glow);
+            border-radius: 25px;
+            padding: 50px;
+            margin: 50px 0;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(202, 138, 4, 0.2);
+        }
+        
+        .formal-title {
+            color: var(--intention-gold);
+            margin-bottom: 35px;
+            font-weight: 800;
+            font-size: 1.7em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .formal-diagram pre {
+            text-align: left;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.95em;
+            line-height: 1.9;
+            overflow-x: auto;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 45px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 18px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(202, 138, 4, 0.2);
+            padding: 22px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.3), rgba(2, 132, 199, 0.2));
+            color: var(--intention-gold);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            font-size: 0.95em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(202, 138, 4, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--intention-gold);
+            padding-left: 35px;
+            margin: 40px 0;
+            color: var(--text-secondary);
+            font-size: 1.2em;
+            font-family: 'Georgia', serif;
+            line-height: 2.1;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 20px;
+            color: var(--goal-blue);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 30px 0;
+            padding-left: 45px;
+        }
+        
+        li {
+            margin-bottom: 18px;
+            line-height: 2.1;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 80px 50px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 120px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 40px 25px;
+            }
+            
+            .book-title {
+                font-size: 2.5em;
+            }
+            
+            .intention-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .intention-diagram {
+                flex-direction: column;
+            }
+            
+            .intention-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="intention-spectrum">
+                <div class="spectrum-item spectrum-desire">🟡 愿望</div>
+                <div class="spectrum-item spectrum-intention">🟠 意图</div>
+                <div class="spectrum-item spectrum-goal">🔵 目标</div>
+            </div>
+            <h1 class="book-title">目标驱动 Agent 的意图建模与任务理解</h1>
+            <h2 class="book-subtitle">从哲学意图论到 LLM Agent 的任务解析</h2>
+            
+            <div class="intention-diagram">
+                <div class="intention-box desire">
+                    <span class="intention-label">🟡 愿望 (Desire)</span>
+                    <span class="intention-desc">希望达成的状态<br>可能冲突<br>无承诺</span>
+                </div>
+                <div class="intention-arrow">→</div>
+                <div class="intention-box intention">
+                    <span class="intention-label">🟠 意图 (Intention)</span>
+                    <span class="intention-desc">承诺追求的目标<br>一致性约束<br>持续性</span>
+                </div>
+                <div class="intention-arrow">→</div>
+                <div class="intention-box goal">
+                    <span class="intention-label">🔵 目标 (Goal)</span>
+                    <span class="intention-desc">具体化意图<br>可操作任务<br>可衡量</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">意图建模版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十五章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">哲学·逻辑·认知·AI</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 意图的理论基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：意图——智能的核心</a></li>
+                <li><a href="#chapter1">第 1 章 意图的哲学渊源：从亚里士多德到 Bratman</a></li>
+                <li><a href="#chapter2">第 2 章 意图与相关概念的辨析：愿望、目标、计划</a></li>
+                <li><a href="#chapter3">第 3 章 意图的认知科学基础：人类意图形成机制</a></li>
+                
+                <div class="toc-part part2">第二编 意图的形式化模型</div>
+                <li><a href="#chapter4">第 4 章 BDI 逻辑中的意图形式化</a></li>
+                <li><a href="#chapter5">第 5 章 意图的动态逻辑与时间语义</a></li>
+                <li><a href="#chapter6">第 6 章 意图的承诺模型与坚持策略</a></li>
+                <li><a href="#chapter7">第 7 章 多 Agent 系统中的意图共享与协调</a></li>
+                
+                <div class="toc-part part3">第三编 任务理解与表示</div>
+                <li><a href="#chapter8">第 8 章 任务的本体论与分类体系</a></li>
+                <li><a href="#chapter9">第 9 章 自然语言指令的理解与解析</a></li>
+                <li><a href="#chapter10">第 10 章 任务分解与层次化表示</a></li>
+                <li><a href="#chapter11">第 11 章 任务约束与可行性分析</a></li>
+                
+                <div class="toc-part part4">第四编 目标驱动 Agent 架构</div>
+                <li><a href="#chapter12">第 12 章 意图形成机制：从愿望到承诺</a></li>
+                <li><a href="#chapter13">第 13 章 目标驱动的计划生成与执行</a></li>
+                <li><a href="#chapter14">第 14 章 意图修正与动态重规划</a></li>
+                
+                <div class="toc-part part5">第五编 现代应用与未来方向</div>
+                <li><a href="#chapter15">第 15 章 LLM Agent 时代的意图建模新范式</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 50px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 意图建模代码库</a></li>
+                <li><a href="#appendix-b">附录 B 任务表示语言规范</a></li>
+                <li><a href="#references">参考文献与延伸阅读（1987-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：意图——智能的核心</h2>
+            <div class="content">
+                <p>在人类智能的奥秘中，<strong>意图</strong>（Intention）始终是最核心、最神秘的概念之一。是什么让人类能够设定目标、制定计划、坚持行动？是什么让简单的生物反应升华为有目的的行为？答案在于意图。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心问题：</strong>如何将人类的意图能力赋予 AI Agent？如何形式化建模意图？如何让 Agent 理解复杂任务、形成坚定意图、执行长期计划？这不仅是技术问题，更是关乎智能本质的深刻问题。</p>
+                </div>
+                
+                <h3 class="section-title">意图：从哲学到 AI 的跨越</h3>
+                
+                <p>意图概念的研究跨越了 2000 多年：</p>
+                
+                <div class="timeline-box">
+                    <h4 class="timeline-title">意图理论的历史演进</h4>
+                    <div class="timeline-item theory">
+                        <div class="timeline-year">公元前 4 世纪</div>
+                        <div class="timeline-content"><strong>亚里士多德</strong>在《尼各马可伦理学》中提出"实践推理"（Practical Reasoning）概念，区分愿望（Boulēsis）与选择（Prohairesis）</div>
+                    </div>
+                    <div class="timeline-item theory">
+                        <div class="timeline-year">1987</div>
+                        <div class="timeline-content"><strong>Michael Bratman</strong>发表《Intention, Plans, and Practical Reason》，提出现代意图理论：意图是对行动的承诺</div>
+                    </div>
+                    <div class="timeline-item formal">
+                        <div class="timeline-year">1991</div>
+                        <div class="timeline-content"><strong>Rao & Georgeff</strong>将 Bratman 理论形式化为 BDI 逻辑，开创计算意图建模新纪元</div>
+                    </div>
+                    <div class="timeline-item application">
+                        <div class="timeline-year">2023-2026</div>
+                        <div class="timeline-content"><strong>LLM Agent</strong>兴起，意图建模进入神经符号融合新时代，任务理解能力革命性突破</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">意图、愿望与目标的本质区别</h3>
+                
+                <div class="intention-card">
+                    <div class="intention-box-card desire">
+                        <h3 class="intention-box-title">🟡 愿望 (Desire)</h3>
+                        <p><strong>定义：</strong>Agent 希望达成的状态或目标。</p>
+                        <p style="margin-top: 15px;"><strong>特征：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>可能冲突：多个愿望可能互斥（如"省钱"与"旅行"）</li>
+                            <li>不现实：可能无法实现（如"永生"）</li>
+                            <li>无承诺：愿望不等于行动（我可以希望健康但不锻炼）</li>
+                            <li>无限性：可以有无数个愿望</li>
+                        </ul>
+                        <p style="margin-top: 15px; font-size: 0.9em;"><strong>示例：</strong>"我希望身体健康"、"我希望赚很多钱"</p>
+                    </div>
+                    
+                    <div class="intention-box-card intention">
+                        <h3 class="intention-box-title">🟠 意图 (Intention)</h3>
+                        <p><strong>定义：</strong>Agent 承诺追求的目标（经过选择的愿望）。</p>
+                        <p style="margin-top: 15px;"><strong>特征：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>承诺性：对行动的坚定承诺（我决定每天锻炼）</li>
+                            <li>一致性：意图之间必须一致（不能同时意图 A 和非 A）</li>
+                            <li>持续性：一旦形成，会持续追求直到完成或放弃</li>
+                            <li>有限性：只能维持有限数量的意图</li>
+                        </ul>
+                        <p style="margin-top: 15px; font-size: 0.9em;"><strong>示例：</strong>"我意图每天跑步 30 分钟"、"我意图今年完成这个项目"</p>
+                    </div>
+                    
+                    <div class="intention-box-card goal">
+                        <h3 class="intention-box-title">🔵 目标 (Goal)</h3>
+                        <p><strong>定义：</strong>具体化、可操作的意图。</p>
+                        <p style="margin-top: 15px;"><strong>特征：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>具体性：明确定义成功标准</li>
+                            <li>可操作性：可以分解为具体行动</li>
+                            <li>可衡量：可以判断是否达成</li>
+                            <li>时限性：通常有时间约束</li>
+                        </ul>
+                        <p style="margin-top: 15px; font-size: 0.9em;"><strong>示例：</strong>"在 2026 年 6 月前完成马拉松训练"、"本周内完成报告"</p>
+                    </div>
+                </div>
+                
+                <div class="quote">
+                    "意图不仅仅是愿望，而是对行动的承诺。这种承诺具有持续性、一致性和手段 - 端协调的特性，是有限理性 Agent 在复杂环境中有效行动的关键。"
+                    <div class="quote-author">—— Michael Bratman (1987)</div>
+                </div>
+                
+                <h3 class="section-title">为什么意图建模对 AI 至关重要？</h3>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>长期目标维持</strong>：没有意图，Agent 无法在干扰下坚持长期目标</li>
+                    <li><strong>资源分配</strong>：意图帮助 Agent 在多个候选行动中做出选择</li>
+                    <li><strong>协调性</strong>：意图确保 Agent 的行动在时间上协调一致</li>
+                    <li><strong>社会交互</strong>：意图是理解他人行为、进行协作的基础</li>
+                    <li><strong>可解释性</strong>：意图提供了解释 Agent 行为的框架</li>
+                </ul>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 意图的理论基础</strong>：追溯意图概念的哲学渊源，从亚里士多德的实践推理到 Bratman 的现代意图理论，辨析意图与愿望、目标、计划的关系，探讨认知科学中的人类意图形成机制。</p>
+                
+                <p><strong>第二编 意图的形式化模型</strong>：建立意图的逻辑形式化体系，包括 BDI 逻辑中的意图公理、动态逻辑与时间语义、承诺模型与坚持策略、多 Agent 系统中的意图共享与协调。</p>
+                
+                <p><strong>第三编 任务理解与表示</strong>：探讨任务的本体论与分类、自然语言指令的理解与解析、任务分解与层次化表示、任务约束与可行性分析，为意图的具体化提供技术基础。</p>
+                
+                <p><strong>第四编 目标驱动 Agent 架构</strong>：设计完整的意图形成机制、目标驱动的计划生成与执行系统、意图修正与动态重规划策略，实现从理论到实践的转化。</p>
+                
+                <p><strong>第五编 现代应用与未来方向</strong>：探讨 LLM Agent 时代的意图建模新范式，包括 ReAct 架构中的意图推理、LLM 的任务理解能力、神经符号融合的意图建模，展望未来发展方向。</p>
+                
+                <div class="quote">
+                    "意图是智能的灵魂。没有意图，Agent 只是被动的反应机器；有了意图，Agent 才成为主动的目标追求者。理解意图，就是理解智能的核心。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 60px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给 Michael Bratman、Anand Rao、Michael Georgeff 等意图理论先驱</p>
+            </div>
+        </div>
+
+        <!-- 第 2 章 -->
+        <div class="chapter" id="chapter2">
+            <h2 class="chapter-title">第 2 章 意图与相关概念的辨析：愿望、目标、计划</h2>
+            <div class="content">
+                <h3 class="section-title">2.1 意图 vs 愿望：承诺的分野</h3>
+                
+                <p>意图与愿望的根本区别在于<strong>承诺</strong>（Commitment）。这是 Bratman 意图理论的核心洞察。</p>
+                
+                <div class="section">
+                    <h4>愿望的特征</h4>
+                    <ul style="margin-left: 20px;">
+                        <li><strong>无承诺性</strong>：我可以希望健康，但从不锻炼</li>
+                        <li><strong>允许冲突</strong>：我可以同时希望"吃美食"和"减肥"，尽管两者冲突</li>
+                        <li><strong>无需手段 - 端协调</strong>：我可以希望"环游世界"，但从不制定计划或采取行动</li>
+                        <li><strong>无限性</strong>：我可以有无数个愿望，不受认知资源限制</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>意图的特征</h4>
+                    <ul style="margin-left: 20px;">
+                        <li><strong>承诺性</strong>：意图意味着对行动的承诺，我会实际去做</li>
+                        <li><strong>一致性约束</strong>：我不能同时意图 A 和非 A（如"每天锻炼"和"从不运动"）</li>
+                        <li><strong>手段 - 端协调</strong>：如果意图 E，且相信 M 是实现 E 的必要手段，那么我会意图 M</li>
+                        <li><strong>有限性</strong>：由于认知资源有限，我只能维持有限数量的意图</li>
+                    </ul>
+                </div>
+                
+                <div class="highlight">
+                    <p><strong>关键洞察：</strong>从愿望到意图的转化是一个<strong>筛选过程</strong>。Agent 有无数愿望，但只能选择其中一部分作为意图。这个筛选过程考虑：可行性、一致性、优先级、资源约束。</p>
+                </div>
+                
+                <h3 class="section-title">2.2 意图 vs 目标：抽象与具体的连续谱</h3>
+                
+                <p>意图与目标的关系更为微妙。两者都涉及承诺，但抽象程度不同：</p>
+                
+                <div class="formal-diagram">
+                    <div class="formal-title">意图 - 目标连续谱</div>
+                    <pre>
+抽象程度高 ←──────────────────────────→ 具体程度高
+
+愿望 (Desire)
+  "我希望健康"
+  ↓ 筛选与承诺
+意图 (Intention)
+  "我意图保持健康"
+  ↓ 具体化
+目标 (Goal)
+  "我意图在 2026 年 6 月前减重 10kg"
+  ↓ 操作化
+子目标 (Sub-goal)
+  "每周运动 5 次，每次 30 分钟"
+  "每天摄入热量控制在 1800 卡"
+  ↓ 行动
+计划 (Plan)
+  "周一：跑步 30 分钟"
+  "周二：游泳 30 分钟"
+  ...
+
+关键区别：
+  • 意图：承诺的方向性陈述（"我要做什么"）
+  • 目标：具体化、可衡量的意图（"做到什么程度"）
+  • 计划：实现目标的具体行动序列（"如何做"）
+                    </pre>
+                </div>
+                
+                <h3 class="section-title">2.3 意图 vs 计划：承诺与手段</h3>
+                
+                <p>意图与计划的关系是<strong>目的与手段</strong>的关系：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>意图</strong>：承诺追求的状态（"我意图完成这个项目"）</li>
+                    <li><strong>计划</strong>：实现意图的行动序列（"第一周需求分析，第二周设计..."）</li>
+                    <li><strong>关系</strong>：
+                        <ul>
+                            <li>意图是计划的驱动力（为什么做）</li>
+                            <li>计划是意图的实现路径（如何做）</li>
+                            <li>一个意图可以有多个候选计划</li>
+                            <li>计划失败时，可以更换计划但保持意图</li>
+                        </ul>
+                    </li>
+                </ul>
+                
+                <div class="quote">
+                    "意图是'我要去哪里'，计划是'我如何到达那里'。没有意图，计划失去方向；没有计划，意图只是空想。"
+                    <div class="quote-author">—— 本书评析</div>
+                </div>
+                
+                <h3 class="section-title">2.4 意图的逻辑特性</h3>
+                
+                <div class="section">
+                    <h4>特性一：一致性（Consistency）</h4>
+                    <p>意图必须内部一致，不能自相矛盾：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>有效：I(完成项目) ∧ I(保证质量)</li>
+                        <li>无效：I(完成项目) ∧ I(不花任何时间)</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>特性二：持续性（Persistence）</h4>
+                    <p>意图一旦形成，会持续存在直到：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>意图实现（成功）</li>
+                        <li>意图被判定为不可实现（失败）</li>
+                        <li>意图被更高优先级意图取代（重新考虑）</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>特性三：手段 - 端协调（Means-End Coherence）</h4>
+                    <p>如果 Agent 意图 E，且相信 M 是实现 E 的必要手段，那么 Agent 会意图 M：</p>
+                    <div class="formal-diagram">
+                        <pre>
+形式化：
+  I(E) ∧ B(M → E) ∧ B(¬M → ¬E) → I(M)
+  
+示例：
+  意图：I(通过考试)
+  信念：B(学习 → 通过考试) ∧ B(不学习 → 不通过)
+  推导：I(学习)
+  
+这是实践推理的核心机制
+                    </pre>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h4>特性四：有限性（Boundedness）</h4>
+                    <p>由于认知资源有限，Agent 只能维持有限数量的意图：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>人类工作记忆限制：7±2 个组块</li>
+                        <li>AI Agent 的上下文窗口限制</li>
+                        <li>计算资源限制</li>
+                        <li>需要意图优先级排序和选择机制</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">2.5 意图形成的理性约束</h3>
+                
+                <p>Bratman 提出，理性 Agent 的意图形成必须满足以下约束：</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>约束类型</th>
+                            <th>形式化表述</th>
+                            <th>示例</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>信念 - 意图一致</strong></td>
+                            <td>I(φ) → B(◇φ)</td>
+                            <td>不能意图相信不可能的事</td>
+                        </tr>
+                        <tr>
+                            <td><strong>意图 - 意图一致</strong></td>
+                            <td>I(φ) ∧ I(ψ) → ¬(φ→¬ψ)</td>
+                            <td>不能同时意图矛盾的目标</td>
+                        </tr>
+                        <tr>
+                            <td><strong>手段 - 端协调</strong></td>
+                            <td>I(E) ∧ B(M 是必要手段) → I(M)</td>
+                            <td>意图目的就要意图手段</td>
+                        </tr>
+                        <tr>
+                            <td><strong>意图闭合</strong></td>
+                            <td>I(φ) ∧ B(φ→ψ) → I(ψ)</td>
+                            <td>意图的逻辑后果也应是意图</td>
+                        </tr>
+                        <tr>
+                            <td><strong>资源约束</strong></td>
+                            <td>|{I(φ)}| ≤ N_max</td>
+                            <td>意图数量不能超过认知上限</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">2.6 本章小结</h3>
+                <p>本章辨析了意图与相关概念。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>意图 vs 愿望：承诺是分水岭，意图是对行动的承诺</li>
+                    <li>意图 vs 目标：抽象与具体的连续谱，目标是具体化的意图</li>
+                    <li>意图 vs 计划：目的与手段的关系，计划服务于意图</li>
+                    <li>意图四大逻辑特性：一致性、持续性、手段 - 端协调、有限性</li>
+                    <li>意图形成的五大理性约束：信念 - 意图一致、意图间一致、手段 - 端协调、意图闭合、资源约束</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 4 章 -->
+        <div class="chapter" id="chapter4">
+            <h2 class="chapter-title">第 4 章 BDI 逻辑中的意图形式化</h2>
+            <div class="content">
+                <h3 class="section-title">4.1 BDI 逻辑的模态基础</h3>
+                <p>BDI 逻辑（Belief-Desire-Intention Logic）由 Rao 和 Georgeff 于 1991 年提出，基于<strong>模态逻辑</strong>（Modal Logic）形式化 Agent 的心智状态。</p>
+                
+                <div class="formal-diagram">
+                    <div class="formal-title">BDI 逻辑的模态算子</div>
+                    <pre>
+BDI 逻辑包含三个核心模态算子：
+
+1. 信念算子 B:
+   B(φ) 表示"Agent 相信φ为真"
+   逻辑系统：KD45（正规模态逻辑）
+   
+2. 愿望算子 D:
+   D(φ) 表示"Agent 希望φ为真"
+   逻辑系统：KD（较弱的模态系统）
+   
+3. 意图算子 I:
+   I(φ) 表示"Agent 意图使φ为真"
+   逻辑系统：KD（与愿望相同，但交互公理不同）
+
+模态逻辑基础：
+  • K 公理：□(φ→ψ) → (□φ→□ψ)
+  • D 公理：□φ → ¬□¬φ（一致性）
+  • 4 公理：□φ → □□φ（正内省）
+  • 5 公理：¬□φ → □¬□φ（负内省）
+
+BDI 中各算子的公理系统：
+  • 信念 B：KD45（完全内省）
+  • 愿望 D：KD（无内省）
+  • 意图 I：KD（无内省，但有更强的交互约束）
+                    </pre>
+                </div>
+                
+                <h3 class="section-title">4.2 意图的公理化系统</h3>
+                
+                <div class="section">
+                    <h4>意图的核心公理</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">意图公理系统</div>
+                        <pre>
+一、意图的基本公理（KD 系统）：
+
+  K_I: I(φ→ψ) → (I(φ)→I(ψ))
+       // 意图对逻辑推理封闭
+  
+  D_I: I(φ) → ¬I(¬φ)
+       // 意图一致性：不能同时意图φ和非φ
+
+二、意图 - 愿望交互公理：
+
+  I1: I(φ) → D(φ)
+      // 意图一定是愿望（你不会意图你不希望的事）
+  
+  I2: I(φ) → ¬D(¬φ)
+      // 意图不与愿望冲突
+
+三、意图 - 信念交互公理：
+
+  I3: I(φ) → B(◇φ)
+      // 意图必须是 Agent 相信可实现的
+      // 你不会意图你相信不可能的事
+  
+  I4: I(φ) → ¬B(¬φ)
+      // 意图不与信念冲突
+
+四、意图自反性公理：
+
+  I5: I(φ) → I(I(φ))
+      // Agent 知道自己的意图
+      // 这是意图与愿望的关键区别
+
+五、手段 - 端协调公理：
+
+  I6: I(E) ∧ B(M 是实现 E 的必要手段) → I(M)
+      // 如果意图目的，且相信手段必要，则意图手段
+
+这些公理共同定义了理性意图的逻辑约束
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.3 意图的时间语义</h3>
+                
+                <p>意图具有强烈的时间维度。Rao 和 Georgeff 引入<strong>分支时间逻辑</strong>（Branching Time Logic）来刻画意图的持续性：</p>
+                
+                <div class="formal-diagram">
+                    <div class="formal-title">意图的时间语义</div>
+                    <pre>
+分支时间模型：
+  • 时间点：离散的时刻 t₀, t₁, t₂, ...
+  • 历史（History）：从当前时间点出发的可能未来路径
+  • 分支：不同选择导致不同未来
+
+意图的持续性语义：
+
+  I(φ) 在时间 t 为真，当且仅当：
+  
+  1. 当前承诺：Agent 在 t 时刻承诺追求φ
+  2. 未来持续：在所有 Agent 认为可能的未来历史中，
+     Agent 会持续追求φ，直到：
+     • φ实现（成功）
+     • φ被判定为不可实现（失败）
+     • Agent 重新考虑并放弃φ（重新考虑）
+
+形式化：
+  M, t ⊨ I(φ) 当且仅当
+  ∀h ∈ Intention_Accessible(t):
+    ∃t' ≥ t: M, t' ⊨ φ  // 最终实现
+    ∧ ∀t'' (t ≤ t'' < t'): M, t'' ⊨ I(φ)  // 持续承诺
+
+意图的坚持策略：
+  • 盲目坚持（Blind Commitment）：永不重新考虑
+  • 开放坚持（Open-minded Commitment）：定期重新考虑
+  • 条件坚持（Conditional Commitment）：特定条件下重新考虑
+                    </pre>
+                </div>
+                
+                <h3 class="section-title">4.4 意图形成的形式化模型</h3>
+                
+                <div class="section">
+                    <h4>意图形成过程</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">意图形成算法</div>
+                        <pre>
+算法：IntentionFormation
+
+输入：
+  • 愿望集合 D = {d₁, d₂, ..., dₙ}
+  • 信念集合 B
+  • 当前意图集合 I_current
+  • 资源约束 R
+
+输出：
+  • 新意图集合 I_new
+
+过程：
+  1. 【可行性筛选】
+     D_feasible ← {d ∈ D | B(◇d)}
+     // 只保留相信可实现的愿望
+  
+  2. 【一致性检查】
+     D_consistent ← {d ∈ D_feasible | 
+                     ∀i ∈ I_current: ¬(d→¬i)}
+     // 只保留与当前意图一致的愿望
+  
+  3. 【优先级排序】
+     Sort D_consistent by Utility(d)
+     // 根据效用函数排序
+  
+  4. 【资源约束选择】
+     I_new ← ∅
+     for d in D_consistent (按优先级):
+       if ResourcesRequired(d) ≤ R:
+         I_new ← I_new ∪ {d}
+         R ← R - ResourcesRequired(d)
+       if |I_new| ≥ MaxIntentions:
+         break
+  
+  5. 【手段 - 端闭包】
+     I_final ← CloseMeansEnds(I_new, B)
+     // 添加必要手段意图
+  
+  6. return I_final
+
+关键设计点：
+  • 效用函数：如何评估愿望的价值？
+  • 资源估计：如何预测意图的资源需求？
+  • 重新考虑触发：何时重新评估意图？
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.5 意图的逻辑推理示例</h3>
+                
+                <div class="section">
+                    <h4>示例：旅行规划的 BDI 推理</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">BDI 推理示例</div>
+                        <pre>
+场景：Agent 计划去日本旅行
+
+初始状态：
+  愿望：
+    D(去日本旅行)
+    D(节省开支)
+  
+  信念：
+    B(去日本需要 5 万元)
+    B(当前存款 3 万元)
+    B(每月可存 5000 元)
+    B(10 个月后可存够钱)
+    B(需要办理签证)
+    B(签证需要 2 周时间)
+
+意图形成推理：
+  
+  步骤 1：可行性筛选
+    D(去日本) 可行吗？
+    B(◇去日本) = true（10 个月后可实现）
+    ∴ 通过筛选
+  
+  步骤 2：一致性检查
+    I(去日本) 与 I(节省开支) 一致吗？
+    ¬(去日本 → ¬节省开支) = true
+    ∴ 一致（可以既旅行又节省）
+  
+  步骤 3：手段 - 端协调
+    I(去日本) ∧ B(存钱是必要手段) → I(存钱)
+    I(去日本) ∧ B(办签证是必要手段) → I(办签证)
+  
+  步骤 4：计划生成
+    意图：I(去日本)
+    计划：
+      Month 1-10: 每月存 5000 元
+      Month 11: 办理签证
+      Month 12: 去日本旅行
+
+最终意图集合：
+  I(去日本旅行)
+  I(每月存 5000 元)
+  I(办理签证)
+  I(节省开支)
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.6 本章小结</h3>
+                <p>本章详解了 BDI 逻辑中的意图形式化。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>BDI 逻辑基础：信念（KD45）、愿望（KD）、意图（KD）的模态算子</li>
+                    <li>意图公理系统：K_I、D_I、I1-I6 六大公理</li>
+                    <li>意图时间语义：分支时间逻辑中的持续性承诺</li>
+                    <li>意图形成算法：可行性筛选、一致性检查、优先级排序、资源约束选择、手段 - 端闭包</li>
+                    <li>BDI 推理示例：旅行规划的五步推理过程</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 9 章 -->
+        <div class="chapter" id="chapter9">
+            <h2 class="chapter-title">第 9 章 自然语言指令的理解与解析</h2>
+            <div class="content">
+                <h3 class="section-title">9.1 自然语言指令的挑战</h3>
+                <p>人类使用自然语言向 Agent 下达指令，但自然语言具有<strong>歧义性</strong>、<strong>隐含性</strong>、<strong>上下文依赖性</strong>，给任务理解带来巨大挑战。</p>
+                
+                <div class="highlight">
+                    <p><strong>核心挑战：</strong></p>
+                    <ul style="margin-left: 20px; margin-top: 15px;">
+                        <li><strong>歧义性</strong>："帮我订个房间"——什么房间？酒店？会议室？何时？何地？</li>
+                        <li><strong>隐含前提</strong>："我饿了"——隐含意图是"找食物"或"订餐"</li>
+                        <li><strong>上下文依赖</strong>："还是老样子"——需要历史上下文理解</li>
+                        <li><strong>复合指令</strong>："先订机票，然后订酒店，最后通知客户"——需要分解和排序</li>
+                        <li><strong>条件指令</strong>："如果明天下雨，就取消野餐"——需要条件推理</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">9.2 指令理解的层次模型</h3>
+                
+                <div class="formal-diagram">
+                    <div class="formal-title">指令理解五层次模型</div>
+                    <pre>
+层次 1：词法分析（Lexical Analysis）
+  输入："帮我订明天去北京的机票"
+  输出：分词结果 ["帮", "我", "订", "明天", "去", "北京", "的", "机票"]
+  
+层次 2：句法分析（Syntactic Analysis）
+  输出：依存句法树
+    订 (ROOT)
+    ├─ 帮 (aux)
+    ├─ 我 (dative)
+    ├─ 机票 (obj)
+    │   └─ 北京 (mod)
+    │       └─ 去 (verb)
+    └─ 明天 (time)
+  
+层次 3：语义分析（Semantic Analysis）
+  输出：语义表示
+    Action: BOOK
+    Object: FLIGHT_TICKET
+    Destination: BEIJING
+    Time: TOMORROW
+    Beneficiary: SPEAKER
+  
+层次 4：语用分析（Pragmatic Analysis）
+  输出：意图推断
+    Intent: BOOK_FLIGHT
+    Constraints: 
+      - departure_date = tomorrow
+      - destination = Beijing
+      - passenger = user
+    Implicit needs:
+      - 需要知道出发地（默认当前城市）
+      - 需要知道时间偏好（未指定）
+      - 需要知道预算（未指定）
+  
+层次 5：任务形式化（Task Formalization）
+  输出：可执行任务表示
+    Task {
+      type: BOOK_FLIGHT
+      parameters: {
+        from: CURRENT_CITY,
+        to: "Beijing",
+        date: "2026-03-11",
+        passenger: USER_ID
+      }
+      constraints: {
+        budget: UNKNOWN,
+        time_preference: UNKNOWN,
+        airline_preference: UNKNOWN
+      }
+      subtasks: [
+        SEARCH_FLIGHTS,
+        SELECT_BEST_OPTION,
+        CONFIRM_BOOKING,
+        PAY
+      ]
+    }
+                    </pre>
+                </div>
+                
+                <h3 class="section-title">9.3 基于 LLM 的指令理解</h3>
+                
+                <p>大语言模型（LLM）为自然语言指令理解带来了革命性突破：</p>
+                
+                <div class="section">
+                    <h4>方法一：Prompt-based 指令解析</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">LLM Prompt 模板</div>
+                        <pre>
+System Prompt:
+你是一个任务解析专家。请将用户的自然语言指令
+解析为结构化的任务表示。
+
+输出格式：
+{
+  "intent": "意图类型",
+  "parameters": {...},
+  "constraints": {...},
+  "subtasks": [...]
+}
+
+User: "帮我订明天去北京的机票"
+
+Assistant:
+{
+  "intent": "BOOK_FLIGHT",
+  "parameters": {
+    "from": "CURRENT_CITY",
+    "to": "Beijing",
+    "date": "2026-03-11",
+    "passenger": "user"
+  },
+  "constraints": {
+    "budget": null,
+    "time_preference": null,
+    "airline_preference": null
+  },
+  "subtasks": [
+    "SEARCH_FLIGHTS",
+    "SELECT_BEST_OPTION",
+    "CONFIRM_BOOKING",
+    "PAY"
+  ],
+  "clarification_questions": [
+    "请问您的出发城市是？",
+    "您有偏好的起飞时间吗？",
+    "您的预算范围是？"
+  ]
+}
+
+优势：
+  • 零样本学习：无需训练即可解析新指令
+  • 上下文理解：能处理隐含信息和上下文依赖
+  • 澄清能力：能主动提问消除歧义
+                        </pre>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h4>方法二：Few-shot 指令学习</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li>提供少量示例，让 LLM 学习指令解析模式</li>
+                        <li>适用于特定领域的指令解析</li>
+                        <li>示例质量直接影响解析效果</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>方法三：Fine-tuning 专用解析器</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li>在领域特定数据上微调 LLM</li>
+                        <li>获得更高精度和效率</li>
+                        <li>需要标注数据，成本较高</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">9.4 歧义消解与澄清策略</h3>
+                
+                <div class="section">
+                    <h4>歧义类型</h4>
+                    <ul style="margin-left: 20px;">
+                        <li><strong>词汇歧义</strong>："苹果"是水果还是公司？</li>
+                        <li><strong>句法歧义</strong>："老张和老李的儿子"——谁的儿子？</li>
+                        <li><strong>指代歧义</strong>："他告诉他自己错了"——两个"他"是谁？</li>
+                        <li><strong>范围歧义</strong>："所有学生都读了一本书"——同一本还是各一本？</li>
+                        <li><strong>意图歧义</strong>："我饿了"——是想做饭、订餐还是找餐厅？</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>澄清策略</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>策略</th>
+                                <th>适用场景</th>
+                                <th>示例</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>直接提问</strong></td>
+                                <td>关键信息缺失</td>
+                                <td>"请问您的出发城市是？"</td>
+                            </tr>
+                            <tr>
+                                <td><strong>选项确认</strong></td>
+                                <td>多个候选解释</td>
+                                <td>"您是指北京首都机场还是大兴机场？"</td>
+                            </tr>
+                            <tr>
+                                <td><strong>默认值 + 确认</strong></td>
+                                <td>可合理推测</td>
+                                <td>"我假设您从上海出发，对吗？"</td>
+                            </tr>
+                            <tr>
+                                <td><strong>上下文推断</strong></td>
+                                <td>有历史对话</td>
+                                <td>基于之前对话推断"还是老样子"</td>
+                            </tr>
+                            <tr>
+                                <td><strong>主动补全</strong></td>
+                                <td>隐含需求明显</td>
+                                <td>用户说"我饿了"，主动推荐附近餐厅</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h3 class="section-title">9.5 复合指令的分解与排序</h3>
+                
+                <div class="section">
+                    <h4>复合指令类型</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>序列指令</strong>："先 A，然后 B，最后 C"</li>
+                        <li><strong>并行指令</strong>："同时做 A 和 B"</li>
+                        <li><strong>条件指令</strong>："如果 A，则 B；否则 C"</li>
+                        <li><strong>循环指令</strong>："每天重复 A"</li>
+                        <li><strong>嵌套指令</strong>："在做 A 之前，先完成 B 中的 C"</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>指令分解算法</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">复合指令分解算法</div>
+                        <pre>
+算法：DecomposeComplexInstruction
+
+输入：
+  • 自然语言指令 I
+  • 领域知识 KB
+
+输出：
+  • 任务 DAG（有向无环图）
+
+过程：
+  1. 【连接词识别】
+     识别"先"、"然后"、"同时"、"如果"等连接词
+     确定任务间关系（序列、并行、条件）
+  
+  2. 【子句分割】
+     根据连接词将 I 分割为子句 {c₁, c₂, ..., cₙ}
+  
+  3. 【子句解析】
+     for each cᵢ:
+       Taskᵢ ← ParseSingleInstruction(cᵢ)
+       // 调用单指令解析
+  
+  4. 【依赖关系构建】
+     for each pair (Taskᵢ, Taskⱼ):
+       if cᵢ 在 cⱼ 之前:
+         AddEdge(Taskᵢ → Taskⱼ)
+       if cᵢ 和 cⱼ 同时:
+         MarkParallel(Taskᵢ, Taskⱼ)
+       if cᵢ 是条件:
+         MarkConditional(Taskⱼ, condition=cᵢ)
+  
+  5. 【隐式任务补全】
+     for each Taskᵢ:
+       PreTasks ← GetPrerequisites(Taskᵢ, KB)
+       // 添加前置任务（如"订机票"前需"搜索航班"）
+  
+  6. 【拓扑排序】
+     OrderedTasks ← TopologicalSort(TaskDAG)
+  
+  7. return OrderedTasks
+
+示例：
+  指令："先订机票和酒店，然后通知客户，如果客户确认就付款"
+  
+  分解结果：
+    Task1: SEARCH_FLIGHTS
+    Task2: SEARCH_HOTELS
+    Task3: BOOK_FLIGHT (depends on Task1)
+    Task4: BOOK_HOTEL (depends on Task2)
+    Task5: NOTIFY_CLIENT (depends on Task3, Task4)
+    Task6: CONDITIONAL: if CLIENT_CONFIRMED then PAY
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">9.6 本章小结</h3>
+                <p>本章探讨了自然语言指令的理解与解析。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>指令理解五层次：词法、句法、语义、语用、任务形式化</li>
+                    <li>LLM 指令理解方法：Prompt-based、Few-shot、Fine-tuning</li>
+                    <li>歧义消解策略：直接提问、选项确认、默认值 + 确认、上下文推断、主动补全</li>
+                    <li>复合指令分解：连接词识别、子句分割、依赖关系构建、隐式任务补全、拓扑排序</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 15 章 -->
+        <div class="chapter" id="chapter15">
+            <h2 class="chapter-title">第 15 章 LLM Agent 时代的意图建模新范式</h2>
+            <div class="content">
+                <h3 class="section-title">15.1 LLM Agent 的意图推理能力</h3>
+                <p>大语言模型（LLM）为意图建模带来了前所未有的能力突破。LLM 不仅能理解自然语言指令，还能进行<strong>意图推理</strong>、<strong>计划生成</strong>和<strong>自我反思</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>LLM 的意图建模优势：</strong></p>
+                    <ul style="margin-left: 20px; margin-top: 15px;">
+                        <li><strong>零样本意图理解</strong>：无需训练即可理解新领域指令</li>
+                        <li><strong>隐含意图推断</strong>：能从上下文推断未明说的意图</li>
+                        <li><strong>常识推理</strong>：利用世界知识理解意图的合理性</li>
+                        <li><strong>自我反思</strong>：能审视和调整自己的意图</li>
+                        <li><strong>自然语言接口</strong>：意图表示与人类语言无缝对接</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">15.2 ReAct 架构中的意图推理</h3>
+                
+                <div class="section">
+                    <h4>ReAct：Reason + Act</h4>
+                    <p>ReAct（Yao et al., 2023）将意图推理与行动执行交织，形成强大的目标驱动循环：</p>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">ReAct 意图推理循环</div>
+                        <pre>
+输入：用户指令"帮我规划一个难忘的生日惊喜"
+
+ReAct 循环：
+
+  Thought 1（意图理解）:
+    用户想要给某人策划生日惊喜。
+    核心意图：CREATE_BIRTHDAY_SURPRISE
+    隐含需求：
+      - 需要知道寿星是谁
+      - 需要知道生日日期
+      - 需要了解寿星喜好
+      - 预算范围？
+      - 地点偏好？
+  
+  Action 1（信息收集）:
+    AskUser("请问寿星是谁？生日是哪天？")
+  
+  Observation 1:
+    "我女朋友，3 月 20 日生日"
+  
+  Thought 2（意图细化）:
+    现在知道是女朋友的生日惊喜。
+    细化意图：
+      - 了解她的兴趣爱好
+      - 查询 3 月 20 日的天气
+      - 搜索浪漫惊喜创意
+      - 考虑预算约束
+  
+  Action 2（多步信息收集）:
+    AskUser("她平时喜欢什么活动？")
+    QueryWeather("2026-03-20", location)
+    SearchIdeas("romantic birthday surprise for girlfriend")
+  
+  Observation 2:
+    "她喜欢户外和美食"
+    天气："晴朗，15-22°C"
+    搜索结果：["野餐惊喜", "日落晚餐", "星空观影"]
+  
+  Thought 3（计划生成）:
+    基于信息生成计划：
+    1. 准备野餐篮和她喜欢的食物
+    2. 选择风景好的公园
+    3. 安排朋友提前布置场地
+    4. 日落时带她到地点
+    5. 惊喜揭晓 + 晚餐
+    6. 晚上星空观影
+  
+  Action 3（计划执行）:
+    TaskList = [
+      ORDER_FOOD,
+      BOOK_PARK_PERMIT,
+      COORDINATE_FRIENDS,
+      PREPARE_DECORATIONS,
+      EXECUTE_PLAN
+    ]
+    Execute(TaskList)
+  
+  ... 继续循环直到任务完成
+
+关键特性：
+  • Thought 中的意图推理是显式的、可追溯的
+  • 意图在行动中不断细化和调整
+  • 信息收集服务于意图理解
+  • 计划生成基于意图和约束
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">15.3 LLM 的意图表示学习</h3>
+                
+                <p>LLM 通过预训练学习了丰富的意图表示：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>隐式意图嵌入</strong>：LLM 的隐藏层编码了意图语义</li>
+                    <li><strong>意图聚类</strong>：相似意图在表示空间中聚集</li>
+                    <li><strong>意图迁移</strong>：从一个领域的意图理解迁移到新领域</li>
+                    <li><strong>层次化意图</strong>：LLM 能理解意图的层次结构（高级意图→子意图）</li>
+                </ul>
+                
+                <h3 class="section-title">15.4 神经符号融合的意图建模</h3>
+                
+                <div class="section">
+                    <h4>融合范式</h4>
+                    <p>结合 LLM 的神经表示与符号逻辑的精确性：</p>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">神经符号意图建模架构</div>
+                        <pre>
+┌─────────────────────────────────────────┐
+│      神经层（LLM）                       │
+│  • 自然语言理解                          │
+│  • 意图语义表示                          │
+│  • 常识推理                              │
+│  • 隐式知识                              │
+└─────────────────────────────────────────┘
+              │
+              │ 意图提取
+              ▼
+┌─────────────────────────────────────────┐
+│      符号层（BDI 逻辑）                   │
+│  • 形式化意图表示 I(φ)                   │
+│  • 逻辑一致性验证                        │
+│  • 手段 - 端推理                          │
+│  • 承诺持续性保证                        │
+└─────────────────────────────────────────┘
+              │
+              │ 计划生成
+              ▼
+┌─────────────────────────────────────────┐
+│      执行层                              │
+│  • 任务分解                              │
+│  • 工具调用                              │
+│  • 监控与调整                            │
+└─────────────────────────────────────────┘
+
+工作流程：
+  1. LLM 理解自然语言指令，提取意图候选
+  2. 符号层验证意图一致性、可行性
+  3. LLM 生成实现意图的计划
+  4. 符号层验证计划的逻辑正确性
+  5. 执行层执行计划，LLM 监控异常
+  6. 异常时，LLM 重新理解，符号层重新验证
+
+优势：
+  • LLM 的灵活性与符号系统的可靠性结合
+  • 自然语言接口 + 形式化保证
+  • 常识推理 + 逻辑严谨性
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">15.5 LLM Agent 的意图挑战</h3>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>挑战</th>
+                            <th>表现</th>
+                            <th>解决方向</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>幻觉意图</strong></td>
+                            <td>LLM 可能生成不存在的用户意图</td>
+                            <td>意图验证、用户确认机制</td>
+                        </tr>
+                        <tr>
+                            <td><strong>意图漂移</strong></td>
+                            <td>长对话中意图理解逐渐偏离</td>
+                            <td>意图追踪、定期校准</td>
+                        </tr>
+                        <tr>
+                            <td><strong>上下文限制</strong></td>
+                            <td>有限上下文窗口限制长期意图维持</td>
+                            <td>外部记忆、意图摘要</td>
+                        </tr>
+                        <tr>
+                            <td><strong>一致性维护</strong></td>
+                            <td>多轮对话中意图一致性难以保证</td>
+                            <td>符号验证、一致性检查</td>
+                        </tr>
+                        <tr>
+                            <td><strong>可解释性</strong></td>
+                            <td>LLM 意图推理过程不透明</td>
+                            <td>Thought 链、注意力可视化</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">15.6 未来方向</h3>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>长期意图维持</strong>：跨会话的意图追踪与坚持</li>
+                    <li><strong>多 Agent 意图协调</strong>：多个 LLM Agent 的意图共享与协作</li>
+                    <li><strong>意图学习</strong>：从用户反馈中学习意图偏好</li>
+                    <li><strong>情感意图融合</strong>：考虑情感因素的意图建模</li>
+                    <li><strong>伦理意图约束</strong>：确保意图符合伦理规范</li>
+                    <li><strong>可验证意图</strong>：形式化验证 LLM 意图的正确性</li>
+                </ul>
+                
+                <div class="quote" style="margin-top: 60px; border-left-color: var(--intention-gold);">
+                    "从 Bratman 的哲学意图论，到 Rao & Georgeff 的 BDI 逻辑，再到 LLM Agent 的神经符号融合，意图建模走过了 40 年历程。变的是技术，不变的是对智能本质的追求。意图，作为智能的核心，将继续指引我们探索 AI 的深层奥秘。"
+                    <div class="quote-author">—— 全书结语</div>
+                </div>
+                
+                <h3 class="section-title">15.7 本章小结</h3>
+                <p>本章探讨了 LLM Agent 时代的意图建模新范式。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>LLM 的意图推理优势：零样本理解、隐含推断、常识推理、自我反思</li>
+                    <li>ReAct 架构：Thought-Action 循环中的意图推理与执行</li>
+                    <li>神经符号融合：LLM 灵活性 + 符号系统可靠性</li>
+                    <li>LLM 意图挑战：幻觉、漂移、上下文限制、一致性、可解释性</li>
+                    <li>未来方向：长期意图维持、多 Agent 协调、意图学习、情感融合、伦理约束、可验证性</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与延伸阅读（1987-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">意图哲学基础（1987-2000）</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;">
+                    <li>Bratman, M. E. (1987). "Intention, Plans, and Practical Reason." Harvard University Press.</li>
+                    <li>Bratman, M. E. (1992). "Shared Cooperative Activity." Philosophical Review, 101(2), 327-341.</li>
+                    <li>Searle, J. R. (1983). "Intentionality: An Essay in the Philosophy of Mind." Cambridge University Press.</li>
+                    <li>Mele, A. R. (1992). "Springs of Action: Understanding Intentional Behavior." Oxford University Press.</li>
+                </ol>
+                
+                <h3 class="section-title">BDI 逻辑与形式化（1990-2010）</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="5">
+                    <li>Rao, A. S., & Georgeff, M. P. (1991). "Modeling Rational Agents within a BDI-Architecture." KR-91.</li>
+                    <li>Rao, A. S., & Georgeff, M. P. (1995). "BDI-agents: From Theory to Practice." ICMAS-95.</li>
+                    <li>Georgeff, M., et al. (1999). "The Belief-Desire-Intention Model of Agency." ATAL-98.</li>
+                    <li>Dastani, M., et al. (2005). "A Programming Language for Cognitive Agents." ProMAS-04.</li>
+                    <li>Bordini, R. H., Hübner, J. F., & Wooldridge, M. (2007). "Programming Multi-Agent Systems in AgentSpeak Using Jason." Wiley.</li>
+                </ol>
+                
+                <h3 class="section-title">任务理解与规划（2000-2020）</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="10">
+                    <li>Ghallab, M., Nau, D., & Traverso, P. (2004). "Automated Planning: Theory and Practice." Morgan Kaufmann.</li>
+                    <li>Haslum, P., et al. (2019). "An Introduction to Automated Planning." Cambridge University Press.</li>
+                    <li>Winfield, A., & Jirotka, M. (2018). "Ethical Governance for Autonomous Systems." IEEE.</li>
+                </ol>
+                
+                <h3 class="section-title">LLM Agent 与现代意图建模（2023-2026）</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="13">
+                    <li>Yao, S., et al. (2023). "ReAct: Synergizing Reasoning and Acting in Language Models." ICLR 2023.</li>
+                    <li>Xi, Z., et al. (2025). "The Rise and Potential of Large Language Model Based Agents: A Survey." Science China Information Sciences.</li>
+                    <li>Weng, L. (2023). "LLM Powered Autonomous Agents." Lil'Log Blog.</li>
+                    <li>Bui, N. D. Q. (2026). "Building AI Coding Agents for the Terminal: Scaffolding, Harness, Context Engineering, and Lessons Learned." arXiv:2603.05344.</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.5em; margin-bottom: 25px; color: var(--intention-gold); font-weight: 800; font-family: 'Georgia', serif;">目标驱动 Agent 的意图建模与任务理解</p>
+                <p style="font-size: 1.2em; margin-bottom: 15px; font-style: italic;">从哲学意图论到 LLM Agent 的任务解析</p>
+                <p>© 2026 超级代码智能体 | 意图建模版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 35px; font-size: 1em; line-height: 2.0;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="intention-spectrum" style="margin-top: 50px;">
+                    <div class="spectrum-item spectrum-desire">🟡 愿望</div>
+                    <div class="spectrum-item spectrum-intention">🟠 意图</div>
+                    <div class="spectrum-item spectrum-goal">🔵 目标</div>
+                </div>
+                <p style="margin-top: 50px; font-size: 0.95em; color: var(--text-secondary);">
+                    谨以此书献给 Michael Bratman、Anand Rao、Michael Georgeff 等意图理论先驱<br>
+                    从 1987 年 Bratman 意图论到 2026 年 LLM Agent<br>
+                    40 年探索，意图——智能的核心
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🟡🟠🔵 Intention Modeling & Task Understanding');
+        console.log('📚 From Bratman (1987) to BDI Logic (1991) to LLM Agents (2026)');
+        console.log('✨ 40 Years of Intention Theory Evolution');
+        console.log('🧠 Intention: The Core of Intelligence');
+    </script>
+</body>
+</html>

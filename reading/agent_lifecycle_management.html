@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent 全生命周期管理体系</title>
+    <style>
+        :root {
+            --plan-blue: #0284c7;
+            --dev-purple: #a855f7;
+            --deploy-gold: #ca8a04;
+            --monitor-green: #16a34a;
+            --retire-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-lifecycle: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--plan-blue), var(--dev-purple), var(--deploy-gold), var(--monitor-green), var(--retire-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-lifecycle);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: lifecycleRotate 105s linear infinite;
+        }
+        
+        @keyframes lifecycleRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .lifecycle-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 16px 35px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 1.1em;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-plan {
+            background: linear-gradient(135deg, var(--plan-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-dev {
+            background: linear-gradient(135deg, var(--dev-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-deploy {
+            background: linear-gradient(135deg, var(--deploy-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-monitor {
+            background: linear-gradient(135deg, var(--monitor-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-retire {
+            background: linear-gradient(135deg, var(--retire-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.8em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 30px;
+            text-shadow: 0 0 60px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 3px;
+            line-height: 1.35;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 2em;
+            color: var(--text-secondary);
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .lifecycle-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            margin: 60px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .lifecycle-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 35px 45px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 180px;
+        }
+        
+        .lifecycle-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .lifecycle-box.plan {
+            border-color: var(--plan-blue);
+            box-shadow: 0 15px 40px rgba(2, 132, 199, 0.35);
+        }
+        
+        .lifecycle-box.dev {
+            border-color: var(--dev-purple);
+            box-shadow: 0 15px 40px rgba(168, 85, 247, 0.35);
+        }
+        
+        .lifecycle-box.deploy {
+            border-color: var(--deploy-gold);
+            box-shadow: 0 15px 40px rgba(202, 138, 4, 0.35);
+        }
+        
+        .lifecycle-box.monitor {
+            border-color: var(--monitor-green);
+            box-shadow: 0 15px 40px rgba(22, 163, 74, 0.35);
+        }
+        
+        .lifecycle-box.retire {
+            border-color: var(--retire-red);
+            box-shadow: 0 15px 40px rgba(220, 38, 38, 0.35);
+        }
+        
+        .lifecycle-label {
+            font-size: 1.6em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 12px;
+        }
+        
+        .lifecycle-box.plan .lifecycle-label { color: var(--plan-blue); }
+        .lifecycle-box.dev .lifecycle-label { color: var(--dev-purple); }
+        .lifecycle-box.deploy .lifecycle-label { color: var(--deploy-gold); }
+        .lifecycle-box.monitor .lifecycle-label { color: var(--monitor-green); }
+        .lifecycle-box.retire .lifecycle-label { color: var(--retire-red); }
+        
+        .lifecycle-desc {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.7;
+        }
+        
+        .lifecycle-arrow {
+            font-size: 2em;
+            color: var(--deploy-gold);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 35px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 60px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px 35px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px var(--border-glow);
+            border-color: var(--plan-blue);
+        }
+        
+        .meta-label {
+            color: var(--plan-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 10px;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 1.05em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 60px 55px;
+            margin-bottom: 80px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 50px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 3em;
+            color: var(--plan-blue);
+            margin-bottom: 50px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 30px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 50px 0 30px 0;
+            padding: 25px 35px;
+            border-radius: 18px;
+            font-size: 1.7em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--plan-blue); 
+            color: var(--plan-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--dev-purple); 
+            color: var(--dev-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--deploy-gold); 
+            color: var(--deploy-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--monitor-green); 
+            color: var(--monitor-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--retire-red); 
+            color: var(--retire-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 20px;
+        }
+        
+        .toc-list li {
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 1.05em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 18px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--plan-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--plan-blue);
+            text-shadow: 0 0 12px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 70px 60px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 25px 80px var(--border-glow), 0 0 60px rgba(2, 132, 199, 0.2);
+            border-color: var(--plan-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.8em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 45px;
+            border-bottom: 4px solid var(--plan-blue);
+            padding-bottom: 25px;
+            font-weight: 800;
+            text-shadow: 0 0 25px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 50px 0;
+        }
+        
+        .section-title {
+            font-size: 2em;
+            color: var(--plan-blue);
+            margin-bottom: 30px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--dev-purple);
+            font-size: 0.7em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.2;
+            font-size: 1.1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 30px;
+        }
+        
+        .lifecycle-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin: 50px 0;
+        }
+        
+        .lifecycle-box-card {
+            padding: 38px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .lifecycle-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .lifecycle-box-card.plan {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--plan-blue);
+            box-shadow: 0 8px 35px rgba(2, 132, 199, 0.3);
+        }
+        
+        .lifecycle-box-card.dev {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--dev-purple);
+            box-shadow: 0 8px 35px rgba(168, 85, 247, 0.3);
+        }
+        
+        .lifecycle-box-card.deploy {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--deploy-gold);
+            box-shadow: 0 8px 35px rgba(202, 138, 4, 0.3);
+        }
+        
+        .lifecycle-box-card.monitor {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--monitor-green);
+            box-shadow: 0 8px 35px rgba(22, 163, 74, 0.3);
+        }
+        
+        .lifecycle-box-card.retire {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--retire-red);
+            box-shadow: 0 8px 35px rgba(220, 38, 38, 0.3);
+        }
+        
+        .lifecycle-box-title {
+            font-size: 1.75em;
+            font-weight: 800;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .lifecycle-box-card.plan .lifecycle-box-title { color: var(--plan-blue); }
+        .lifecycle-box-card.dev .lifecycle-box-title { color: var(--dev-purple); }
+        .lifecycle-box-card.deploy .lifecycle-box-title { color: var(--deploy-gold); }
+        .lifecycle-box-card.monitor .lifecycle-box-title { color: var(--monitor-green); }
+        .lifecycle-box-card.retire .lifecycle-box-title { color: var(--retire-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 45px 50px;
+            border-left: 8px solid var(--plan-blue);
+            border-radius: 20px;
+            margin: 45px 0;
+            box-shadow: 0 8px 35px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--plan-blue);
+            font-weight: 800;
+        }
+        
+        .timeline-box {
+            background: linear-gradient(135deg, #0d0d14, #1a1a2e);
+            border: 3px solid var(--border-glow);
+            border-radius: 20px;
+            padding: 45px;
+            margin: 50px 0;
+            box-shadow: inset 0 0 40px rgba(2, 132, 199, 0.1);
+        }
+        
+        .timeline-title {
+            color: var(--plan-blue);
+            margin-bottom: 35px;
+            font-weight: 800;
+            font-size: 1.7em;
+            text-align: center;
+            font-family: 'Georgia', serif;
+        }
+        
+        .timeline-item {
+            display: flex;
+            gap: 25px;
+            margin: 30px 0;
+            padding: 25px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            border-left: 4px solid;
+        }
+        
+        .timeline-item.early { border-color: var(--plan-blue); }
+        .timeline-item.mature { border-color: var(--dev-purple); }
+        .timeline-item.modern { border-color: var(--deploy-gold); }
+        
+        .timeline-year {
+            font-weight: 800;
+            font-size: 1.25em;
+            min-width: 120px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .timeline-item.early .timeline-year { color: var(--plan-blue); }
+        .timeline-item.mature .timeline-year { color: var(--dev-purple); }
+        .timeline-item.modern .timeline-year { color: var(--deploy-gold); }
+        
+        .timeline-content {
+            color: var(--text-primary);
+            line-height: 1.9;
+        }
+        
+        .formal-diagram {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 3px solid var(--border-glow);
+            border-radius: 25px;
+            padding: 45px;
+            margin: 50px 0;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(2, 132, 199, 0.2);
+        }
+        
+        .formal-title {
+            color: var(--plan-blue);
+            margin-bottom: 35px;
+            font-weight: 800;
+            font-size: 1.6em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .formal-diagram pre {
+            text-align: left;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.9em;
+            line-height: 1.8;
+            overflow-x: auto;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 45px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 18px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 18px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--plan-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            font-size: 0.9em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--plan-blue);
+            padding-left: 35px;
+            margin: 40px 0;
+            color: var(--text-secondary);
+            font-size: 1.15em;
+            font-family: 'Georgia', serif;
+            line-height: 2.1;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 20px;
+            color: var(--dev-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 30px 0;
+            padding-left: 45px;
+        }
+        
+        li {
+            margin-bottom: 18px;
+            line-height: 2.1;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 80px 50px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 120px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 40px 25px;
+            }
+            
+            .book-title {
+                font-size: 2.3em;
+            }
+            
+            .lifecycle-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .lifecycle-diagram {
+                flex-direction: column;
+            }
+            
+            .lifecycle-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="lifecycle-spectrum">
+                <div class="spectrum-item spectrum-plan">🔵 规划</div>
+                <div class="spectrum-item spectrum-dev">🟣 开发</div>
+                <div class="spectrum-item spectrum-deploy">🟡 部署</div>
+                <div class="spectrum-item spectrum-monitor">🟢 监控</div>
+                <div class="spectrum-item spectrum-retire">🔴 退役</div>
+            </div>
+            <h1 class="book-title">Agent 全生命周期管理体系</h1>
+            <h2 class="book-subtitle">从规划到退役的完整治理之道</h2>
+            
+            <div class="lifecycle-diagram">
+                <div class="lifecycle-box plan">
+                    <span class="lifecycle-label">🔵 规划</span>
+                    <span class="lifecycle-desc">需求分析<br>架构设计<br>风险评估</span>
+                </div>
+                <div class="lifecycle-arrow">→</div>
+                <div class="lifecycle-box dev">
+                    <span class="lifecycle-label">🟣 开发</span>
+                    <span class="lifecycle-desc">模型训练<br>工具集成<br>测试验证</span>
+                </div>
+                <div class="lifecycle-arrow">→</div>
+                <div class="lifecycle-box deploy">
+                    <span class="lifecycle-label">🟡 部署</span>
+                    <span class="lifecycle-desc">CI/CD<br>灰度发布<br>版本管理</span>
+                </div>
+                <div class="lifecycle-arrow">→</div>
+                <div class="lifecycle-box monitor">
+                    <span class="lifecycle-label">🟢 监控</span>
+                    <span class="lifecycle-desc">性能监控<br>漂移检测<br>合规审计</span>
+                </div>
+                <div class="lifecycle-arrow">→</div>
+                <div class="lifecycle-box retire">
+                    <span class="lifecycle-label">🔴 退役</span>
+                    <span class="lifecycle-desc">数据归档<br>服务下线<br>知识传承</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">全生命周期版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">MLOps·LLMOps·AI 治理·风险管理</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 生命周期管理理论基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：全生命周期管理范式——Agent 治理的新纪元</a></li>
+                <li><a href="#chapter1">第 1 章 MLOps 与 LLMOps 演进</a></li>
+                <li><a href="#chapter2">第 2 章 生命周期管理框架</a></li>
+                <li><a href="#chapter3">第 3 章 AI 治理与合规体系</a></li>
+                
+                <div class="toc-part part2">第二编 核心架构与组件</div>
+                <li><a href="#chapter4">第 4 章 生命周期管理平台架构</a></li>
+                <li><a href="#chapter5">第 5 章 Agent 注册与元数据管理</a></li>
+                <li><a href="#chapter6">第 6 章 版本控制与配置管理</a></li>
+                <li><a href="#chapter7">第 7 章 自动化流水线设计</a></li>
+                
+                <div class="toc-part part3">第三编 各阶段管理实践</div>
+                <li><a href="#chapter8">第 8 章 规划阶段：需求与架构</a></li>
+                <li><a href="#chapter9">第 9 章 开发阶段：训练与测试</a></li>
+                <li><a href="#chapter10">第 10 章 部署阶段：发布与运维</a></li>
+                <li><a href="#chapter11">第 11 章 监控阶段：观测与优化</a></li>
+                <li><a href="#chapter12">第 12 章 退役阶段：归档与下线</a></li>
+                
+                <div class="toc-part part4">第四编 工程化与治理</div>
+                <li><a href="#chapter13">第 13 章 质量保障体系</a></li>
+                <li><a href="#chapter14">第 14 章 安全与权限控制</a></li>
+                <li><a href="#chapter15">第 15 章 合规审计与风险管理</a></li>
+                <li><a href="#chapter16">第 16 章 成本优化与资源管理</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter17">第 17 章 生产案例与未来趋势</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 50px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 生命周期管理模板</a></li>
+                <li><a href="#appendix-b">附录 B 检查清单与最佳实践</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：全生命周期管理范式——Agent 治理的新纪元</h2>
+            <div class="content">
+                <p>随着 AI Agent 从实验走向大规模生产应用，一个根本性挑战日益凸显：<strong>如何系统化地管理 Agent 从规划、开发、部署、监控到退役的完整生命周期？</strong>传统的软件开发流程难以应对 AI 模型的不确定性、数据漂移、合规风险等特殊挑战。Agent 全生命周期管理体系应运而生，成为企业级 AI 治理的核心基础设施。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>Agent 全生命周期管理通过规划阶段的严谨设计、开发阶段的质量保障、部署阶段的自动化发布、监控阶段的持续观测、退役阶段的有序下线，五阶段闭环，构建可信赖、可审计、可持续的 Agent 治理体系。</p>
+                </div>
+                
+                <h3 class="section-title">全生命周期管理的兴起</h3>
+                
+                <div class="timeline-box">
+                    <h4 class="timeline-title">Agent 生命周期管理技术演进历程</h4>
+                    <div class="timeline-item early">
+                        <div class="timeline-year">2024</div>
+                        <div class="timeline-content"><strong>早期探索</strong>：MLOps 初步应用于 Agent 管理，实现基础 CI/CD 与监控</div>
+                    </div>
+                    <div class="timeline-item mature">
+                        <div class="timeline-year">2025</div>
+                        <div class="timeline-content"><strong>架构成熟</strong>：LLMOps 专门化、AI 治理框架完善、合规自动化成熟</div>
+                    </div>
+                    <div class="timeline-item modern">
+                        <div class="timeline-year">2026</div>
+                        <div class="timeline-content"><strong>生产普及</strong>：全生命周期管理平台成为企业标配，自动化率>90%，合规审计 100% 覆盖</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">全生命周期五阶段模型</h3>
+                
+                <div class="lifecycle-card">
+                    <div class="lifecycle-box-card plan">
+                        <h3 class="lifecycle-box-title">🔵 规划阶段 (Planning Phase)</h3>
+                        <p><strong>定义：</strong>定义 Agent 目标、需求、架构、风险评估的起始阶段。</p>
+                        <p style="margin-top: 15px;"><strong>核心活动：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>需求分析：业务目标、功能需求、性能指标</li>
+                            <li>架构设计：技术选型、系统集成、数据流设计</li>
+                            <li>风险评估：安全、合规、伦理风险评估</li>
+                            <li>资源规划：算力、数据、人力、时间规划</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="lifecycle-box-card dev">
+                        <h3 class="lifecycle-box-title">🟣 开发阶段 (Development Phase)</h3>
+                        <p><strong>定义：</strong>实现 Agent 模型训练、工具集成、测试验证的核心阶段。</p>
+                        <p style="margin-top: 15px;"><strong>核心活动：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>模型训练：数据准备、模型训练、调优优化</li>
+                            <li>工具集成：API 集成、插件开发、工作流编排</li>
+                            <li>测试验证：单元测试、集成测试、压力测试</li>
+                            <li>文档编写：技术文档、API 文档、用户手册</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="lifecycle-box-card deploy">
+                        <h3 class="lifecycle-box-title">🟡 部署阶段 (Deployment Phase)</h3>
+                        <p><strong>定义：</strong>将 Agent 发布到生产环境的执行阶段。</p>
+                        <p style="margin-top: 15px;"><strong>核心活动：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>CI/CD：持续集成、持续部署自动化</li>
+                            <li>灰度发布：金丝雀发布、A/B 测试</li>
+                            <li>版本管理：版本控制、回滚机制</li>
+                            <li>配置管理：环境配置、密钥管理</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="lifecycle-box-card monitor">
+                        <h3 class="lifecycle-box-title">🟢 监控阶段 (Monitoring Phase)</h3>
+                        <p><strong>定义：</strong>持续观测 Agent 运行状态、性能、合规的运维阶段。</p>
+                        <p style="margin-top: 15px;"><strong>核心活动：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>性能监控：延迟、吞吐量、错误率监控</li>
+                            <li>漂移检测：数据漂移、概念漂移检测</li>
+                            <li>合规审计：日志审计、合规检查、伦理审查</li>
+                            <li>优化迭代：性能优化、模型更新、功能迭代</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="lifecycle-box-card retire">
+                        <h3 class="lifecycle-box-title">🔴 退役阶段 (Retirement Phase)</h3>
+                        <p><strong>定义：</strong>有序下线 Agent、归档数据、传承知识的终结阶段。</p>
+                        <p style="margin-top: 15px;"><strong>核心活动：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>数据归档：训练数据、日志数据归档存储</li>
+                            <li>服务下线：平滑下线、流量迁移</li>
+                            <li>知识传承：经验总结、文档归档、最佳实践</li>
+                            <li>资源释放：计算资源、存储资源释放</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="quote">
+                    "全生命周期管理不是简单的流程串联，而是一种系统性的治理思维。规划阶段奠定坚实基础，开发阶段保障质量，部署阶段实现自动化，监控阶段确保持续健康，退役阶段完成有序退出。五阶段闭环，才能构建真正可信赖、可审计、可持续的 Agent 治理体系。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 生命周期管理理论基础</strong>：阐述 MLOps 与 LLMOps 演进、生命周期管理框架、AI 治理与合规体系等基础知识。</p>
+                
+                <p><strong>第二编 核心架构与组件</strong>：深入剖析生命周期管理平台架构、Agent 注册与元数据管理、版本控制、自动化流水线等核心组件。</p>
+                
+                <p><strong>第三编 各阶段管理实践</strong>：详细探讨规划、开发、部署、监控、退役五阶段的具体实践方法与工具。</p>
+                
+                <p><strong>第四编 工程化与治理</strong>：涵盖质量保障、安全权限、合规审计、成本优化等生产环境治理实践。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从 MLOps 到 LLMOps，从基础 CI/CD 到全生命周期自动化，从被动响应到主动治理，Agent 全生命周期管理体系正在重塑企业 AI 治理的设计范式。这不仅是技术的进步，更是治理思维的演进。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 60px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在 AI 治理前沿探索的工程师与管理者们</p>
+            </div>
+        </div>
+
+        <!-- 第 4 章 -->
+        <div class="chapter" id="chapter4">
+            <h2 class="chapter-title">第 4 章 生命周期管理平台架构</h2>
+            <div class="content">
+                <h3 class="section-title">4.1 平台架构概述</h3>
+                
+                <p>Agent 全生命周期管理平台（Agent Lifecycle Management Platform）是统一管理 Agent 从规划到退役各阶段的中心化系统。它提供 Agent 注册、版本控制、自动化流水线、监控告警、合规审计等核心能力，是企业 AI 治理的基础设施。</p>
+                
+                <div class="highlight">
+                    <p><strong>平台核心原则：</strong>中心化注册、自动化流水线、全链路追踪、合规可审计、开放可扩展。</p>
+                </div>
+                
+                <h3 class="section-title">4.2 平台分层架构</h3>
+                
+                <div class="section">
+                    <h4>生命周期管理平台架构</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">全生命周期管理平台架构</div>
+                        <pre>
+┌─────────────────────────────────────────────────────────────┐
+│              Agent 全生命周期管理平台                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  【用户界面层】                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │  Web Portal │  │   CLI 工具   │  │  API/SDK    │        │
+│  │             │  │             │  │             │        │
+│  │ • 可视化    │  │ • 命令行    │  │ • REST API  │        │
+│  │   管理界面  │  │   操作      │  │ • Python SDK│        │
+│  │ • 仪表盘    │  │ • 脚本      │  │ • 集成      │        │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
+│         │                │                │                 │
+│         └────────────────┼────────────────┘                 │
+│                          │                                  │
+│                          ▼                                  │
+│  【核心服务层】                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │ Agent 注册  │  │ 版本控制    │  │ 流水线引擎  │        │
+│  │   中心      │  │   服务      │  │             │        │
+│  │             │  │             │  │             │        │
+│  │ • 元数据    │  │ • 版本      │  │ • CI/CD     │        │
+│  │   管理      │  │   管理      │  │ • 自动化    │        │
+│  │ • 分类      │  │ • 回滚      │  │ • 审批      │        │
+│  │   检索      │  │   机制      │  │   流程      │        │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
+│         │                │                │                 │
+│  ┌──────┴────────────────┴────────────────┴──────┐        │
+│  │            监控告警服务      合规审计服务      │        │
+│  │            • 性能监控        • 日志审计        │        │
+│  │            • 漂移检测        • 合规检查        │        │
+│  │            • 告警通知        • 报告生成        │        │
+│  └──────────────────┬──────────────────────────────┘       │
+│                     │                                       │
+│                     ▼                                       │
+│  【基础设施层】                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │  计算资源   │  │  存储资源   │  │  网络资源   │        │
+│  │             │  │             │  │             │        │
+│  │ • GPU 集群  │  │ • 对象存储  │  │ • 服务网格  │        │
+│  │ • CPU 集群  │  │ • 数据库    │  │ • API 网关  │        │
+│  │ • 弹性伸缩  │  │ • 缓存      │  │ • 负载均衡  │        │
+│  └─────────────┘  └─────────────┘  └─────────────┘        │
+│                                                             │
+│  【集成层】                                                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │  代码仓库   │  │  模型仓库   │  │  监控工具   │        │
+│  │  (Git)      │  │  (Registry) │  │ (Prometheus)│        │
+│  └─────────────┘  └─────────────┘  └─────────────┘        │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+关键特性：
+  • 中心化注册：统一 Agent 元数据管理
+  • 自动化流水线：CI/CD 自动化发布
+  • 全链路追踪：从开发到生产的全程追踪
+  • 合规可审计：完整审计日志与合规报告
+  • 开放可扩展：API/SDK 支持第三方集成
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.3 Agent 注册中心</h3>
+                
+                <div class="section">
+                    <h4>Agent 元数据模型</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>字段</th>
+                                <th>类型</th>
+                                <th>必填</th>
+                                <th>描述</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>agent_id</strong></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>全局唯一标识符 (UUID)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>name</strong></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>Agent 名称</td>
+                            </tr>
+                            <tr>
+                                <td><strong>version</strong></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>语义化版本号 (SemVer)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>description</strong></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>功能描述</td>
+                            </tr>
+                            <tr>
+                                <td><strong>owner</strong></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>负责人/团队</td>
+                            </tr>
+                            <tr>
+                                <td><strong>status</strong></td>
+                                <td>enum</td>
+                                <td>✓</td>
+                                <td>状态 (dev/testing/staging/production/retired)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>model_info</strong></td>
+                                <td>object</td>
+                                <td>✓</td>
+                                <td>模型信息 (类型、大小、框架)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>tools</strong></td>
+                                <td>array</td>
+                                <td>✗</td>
+                                <td>集成工具列表</td>
+                            </tr>
+                            <tr>
+                                <td><strong>permissions</strong></td>
+                                <td>array</td>
+                                <td>✓</td>
+                                <td>权限配置</td>
+                            </tr>
+                            <tr>
+                                <td><strong>created_at</strong></td>
+                                <td>timestamp</td>
+                                <td>✓</td>
+                                <td>创建时间</td>
+                            </tr>
+                            <tr>
+                                <td><strong>updated_at</strong></td>
+                                <td>timestamp</td>
+                                <td>✓</td>
+                                <td>更新时间</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h3 class="section-title">4.4 自动化流水线</h3>
+                
+                <div class="section">
+                    <h4>CI/CD 流水线设计</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">Agent CI/CD 流水线</div>
+                        <pre>
+┌─────────────────────────────────────────────────────────────┐
+│                  Agent CI/CD 流水线                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. 代码提交 (Git Push)                                     │
+│     └─→ 触发流水线                                          │
+│                                                             │
+│  2. 构建阶段 (Build)                                        │
+│     ├─→ 代码编译                                            │
+│     ├─→ 依赖安装                                            │
+│     └─→ 镜像构建                                            │
+│                                                             │
+│  3. 测试阶段 (Test)                                         │
+│     ├─→ 单元测试 (Unit Test)                                │
+│     ├─→ 集成测试 (Integration Test)                         │
+│     ├─→ 模型评估 (Model Evaluation)                         │
+│     │   ├─→ 准确率测试                                      │
+│     │   ├─→ 偏见检测                                        │
+│     │   └─→ 鲁棒性测试                                      │
+│     └─→ 安全扫描 (Security Scan)                            │
+│                                                             │
+│  4. 审批阶段 (Approval)                                     │
+│     ├─→ 自动审批 (测试通过)                                 │
+│     └─→ 人工审批 (生产发布)                                 │
+│                                                             │
+│  5. 部署阶段 (Deploy)                                       │
+│     ├─→ 开发环境部署                                        │
+│     ├─→ 测试环境部署                                        │
+│     ├─→ 预发布环境部署 (Staging)                            │
+│     └─→ 生产环境部署 (Production)                           │
+│         ├─→ 金丝雀发布 (5% → 25% → 50% → 100%)             │
+│         └─→ 健康检查                                        │
+│                                                             │
+│  6. 监控阶段 (Monitor)                                      │
+│     ├─→ 性能监控                                            │
+│     ├─→ 错误追踪                                            │
+│     └─→ 自动回滚 (如果失败)                                 │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+关键指标：
+  • 构建时间：< 10 分钟
+  • 测试覆盖率：> 80%
+  • 部署频率：按需/每天多次
+  • 回滚时间：< 5 分钟
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.5 全链路追踪</h3>
+                
+                <div class="section">
+                    <h4>追踪链路实现</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>唯一追踪 ID</strong>：每个请求生成全局唯一追踪 ID (Trace ID)</li>
+                        <li><strong>跨服务传播</strong>：Trace ID 在所有服务间传递</li>
+                        <li><strong>上下文记录</strong>：记录每个阶段的关键信息（输入、输出、耗时、状态）</li>
+                        <li><strong>可视化展示</strong>：提供链路可视化，快速定位问题</li>
+                        <li><strong>关联分析</strong>：关联代码提交、模型版本、配置变更</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">4.6 本章小结</h3>
+                <p>本章深入探讨了生命周期管理平台架构。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>平台原则：中心化注册、自动化流水线、全链路追踪、合规可审计、开放可扩展</li>
+                    <li>分层架构：用户界面层、核心服务层、基础设施层、集成层</li>
+                    <li>Agent 注册：元数据模型、版本管理、状态追踪</li>
+                    <li>CI/CD 流水线：构建、测试、审批、部署、监控六阶段</li>
+                    <li>全链路追踪：唯一 ID、跨服务传播、上下文记录、可视化</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 11 章 -->
+        <div class="chapter" id="chapter11">
+            <h2 class="chapter-title">第 11 章 监控阶段：观测与优化</h2>
+            <div class="content">
+                <h3 class="section-title">11.1 监控体系概述</h3>
+                
+                <p>监控阶段（Monitoring Phase）是 Agent 生命周期中持续时间最长、最关键的阶段。它通过持续观测 Agent 的运行状态、性能指标、数据质量、合规情况，确保 Agent 在生产环境中稳定、高效、安全地运行。</p>
+                
+                <div class="highlight">
+                    <p><strong>监控核心目标：</strong>实时发现问题、快速定位根因、自动告警通知、数据驱动优化。</p>
+                </div>
+                
+                <h3 class="section-title">11.2 性能监控</h3>
+                
+                <div class="section">
+                    <h4>关键性能指标 (KPIs)</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>指标类别</th>
+                                <th>具体指标</th>
+                                <th>阈值</th>
+                                <th>告警级别</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>延迟</strong></td>
+                                <td>P50/P95/P99 延迟</td>
+                                <td>P95 < 500ms</td>
+                                <td>警告/严重</td>
+                            </tr>
+                            <tr>
+                                <td><strong>吞吐量</strong></td>
+                                <td>QPS (Queries Per Second)</td>
+                                <td>根据容量规划</td>
+                                <td>警告</td>
+                            </tr>
+                            <tr>
+                                <td><strong>错误率</strong></td>
+                                <td>错误请求占比</td>
+                                <td>< 0.1%</td>
+                                <td>严重</td>
+                            </tr>
+                            <tr>
+                                <td><strong>可用性</strong></td>
+                                <td>服务正常运行时间</td>
+                                <td>> 99.9%</td>
+                                <td>严重</td>
+                            </tr>
+                            <tr>
+                                <td><strong>资源使用</strong></td>
+                                <td>CPU/内存/GPU 使用率</td>
+                                <td>< 80%</td>
+                                <td>警告</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h3 class="section-title">11.3 漂移检测</h3>
+                
+                <div class="section">
+                    <h4>数据漂移与概念漂移</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>数据漂移 (Data Drift)</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>定义：输入数据分布随时间发生变化</li>
+                                <li>检测方法：PSI (Population Stability Index)、KL 散度</li>
+                                <li>影响：模型性能下降，预测准确性降低</li>
+                                <li>应对：重新训练、在线学习、数据增强</li>
+                            </ul>
+                        </li>
+                        <li><strong>概念漂移 (Concept Drift)</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>定义：输入 - 输出关系随时间发生变化</li>
+                                <li>检测方法：性能监控、统计检验</li>
+                                <li>影响：模型学到的模式不再适用</li>
+                                <li>应对：增量学习、模型更新、特征工程</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>漂移检测实现示例</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">PSI 漂移检测算法</div>
+                        <pre>
+import numpy as np
+
+def calculate_psi(expected, actual, buckets=10):
+    """
+    计算 Population Stability Index (PSI)
+    
+    Args:
+        expected: 期望分布 (训练数据)
+        actual: 实际分布 (生产数据)
+        buckets: 分桶数量
+    
+    Returns:
+        PSI 值 (>0.25 表示严重漂移)
+    """
+    # 创建分桶
+    breakpoints = np.quantile(expected, np.linspace(0, 1, buckets + 1))
+    
+    # 计算每个桶的比例
+    expected_counts = np.histogram(expected, bins=breakpoints)[0]
+    actual_counts = np.histogram(actual, bins=breakpoints)[0]
+    
+    # 转换为比例 (避免除零，添加小值)
+    expected_percents = (expected_counts + 1) / (len(expected) + buckets)
+    actual_percents = (actual_counts + 1) / (len(actual) + buckets)
+    
+    # 计算 PSI
+    psi = np.sum((actual_percents - expected_percents) * 
+                 np.log(actual_percents / expected_percents))
+    
+    return psi
+
+# 使用示例
+psi_value = calculate_psi(train_data, production_data)
+
+if psi_value < 0.1:
+    print("无显著漂移")
+elif psi_value < 0.25:
+    print("中等漂移，需要关注")
+else:
+    print("严重漂移，需要重新训练模型")
+
+# 监控指标
+# PSI < 0.1: 绿色 (正常)
+# PSI 0.1-0.25: 黄色 (警告)
+# PSI > 0.25: 红色 (严重)
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">11.4 合规审计</h3>
+                
+                <div class="section">
+                    <h4>审计日志与合规检查</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>审计日志</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>记录所有 Agent 决策与操作</li>
+                                <li>包含时间戳、用户、输入、输出、决策依据</li>
+                                <li>不可篡改，长期存储（至少 7 年）</li>
+                                <li>支持审计查询与报告生成</li>
+                            </ul>
+                        </li>
+                        <li><strong>合规检查</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>自动化合规规则检查</li>
+                                <li>偏见检测：性别、种族、年龄等敏感属性</li>
+                                <li>隐私保护：PII 数据检测与脱敏</li>
+                                <li>伦理审查：决策透明度、可解释性</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">11.5 持续优化</h3>
+                
+                <div class="section">
+                    <h4>优化策略</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>性能优化</strong>：基于监控数据识别瓶颈，优化推理速度、降低延迟</li>
+                        <li><strong>模型更新</strong>：检测到漂移后触发重新训练，部署新版本</li>
+                        <li><strong>功能迭代</strong>：根据用户反馈与业务需求，持续添加新功能</li>
+                        <li><strong>成本优化</strong>：优化资源使用，降低计算成本</li>
+                        <li><strong>A/B 测试</strong>：对比不同版本/策略，选择最优方案</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">11.6 本章小结</h3>
+                <p>本章探讨了监控阶段的观测与优化。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>性能监控：延迟、吞吐量、错误率、可用性、资源使用</li>
+                    <li>漂移检测：数据漂移 (PSI)、概念漂移、自动告警</li>
+                    <li>合规审计：审计日志、偏见检测、隐私保护、伦理审查</li>
+                    <li>持续优化：性能优化、模型更新、功能迭代、成本优化、A/B 测试</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 15 章 -->
+        <div class="chapter" id="chapter15">
+            <h2 class="chapter-title">第 15 章 合规审计与风险管理</h2>
+            <div class="content">
+                <h3 class="section-title">15.1 合规框架概述</h3>
+                
+                <p>AI 合规（AI Compliance）是确保 Agent 系统符合法律法规、行业标准、伦理准则的系统性工程。随着全球 AI 监管趋严（如欧盟 AI 法案、中国生成式 AI 管理办法），合规已成为企业 AI 部署的前提条件。</p>
+                
+                <div class="highlight">
+                    <p><strong>合规核心目标：</strong>法律合规、风险可控、伦理可接受、社会可信赖。</p>
+                </div>
+                
+                <h3 class="section-title">15.2 全球 AI 法规概览</h3>
+                
+                <div class="section">
+                    <h4>主要 AI 法规对比</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>法规</th>
+                                <th>地区</th>
+                                <th>生效时间</th>
+                                <th>核心要求</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>欧盟 AI 法案</strong></td>
+                                <td>欧盟</td>
+                                <td>2026</td>
+                                <td>风险分级、透明度、人工监督、数据治理</td>
+                            </tr>
+                            <tr>
+                                <td><strong>生成式 AI 管理办法</strong></td>
+                                <td>中国</td>
+                                <td>2025</td>
+                                <td>内容安全、数据合规、算法备案、标识义务</td>
+                            </tr>
+                            <tr>
+                                <td><strong>AI 权利法案</strong></td>
+                                <td>美国</td>
+                                <td>2025</td>
+                                <td>安全有效、算法歧视保护、数据隐私、透明通知</td>
+                            </tr>
+                            <tr>
+                                <td><strong>ISO 42001</strong></td>
+                                <td>国际</td>
+                                <td>2024</td>
+                                <td>AI 管理体系、风险评估、持续改进</td>
+                            </tr>
+                            <tr>
+                                <td><strong>NIST AI RMF</strong></td>
+                                <td>美国</td>
+                                <td>2024</td>
+                                <td>风险管理框架、映射、测量、管理、治理</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h3 class="section-title">15.3 风险评估与管理</h3>
+                
+                <div class="section">
+                    <h4>AI 风险分类</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>安全风险</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>模型被攻击（对抗样本、数据投毒）</li>
+                                <li>敏感信息泄露</li>
+                                <li>未授权访问与滥用</li>
+                            </ul>
+                        </li>
+                        <li><strong>偏见风险</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>性别、种族、年龄歧视</li>
+                                <li>不公平决策</li>
+                                <li>代表性不足群体受损</li>
+                            </ul>
+                        </li>
+                        <li><strong>合规风险</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>违反数据保护法规（GDPR、个人信息保护法）</li>
+                                <li>违反行业监管要求</li>
+                                <li>知识产权侵权</li>
+                            </ul>
+                        </li>
+                        <li><strong>声誉风险</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>错误决策导致公众质疑</li>
+                                <li>伦理争议引发负面舆论</li>
+                                <li>透明度不足失去信任</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">15.4 自动化合规检查</h3>
+                
+                <div class="section">
+                    <h4>合规检查流水线</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">自动化合规检查流程</div>
+                        <pre>
+┌─────────────────────────────────────────────────────────────┐
+│              自动化合规检查流水线                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. 数据合规检查                                            │
+│     ├─→ 数据来源合法性验证                                  │
+│     ├─→ 个人信息保护检查 (PII 检测)                         │
+│     ├─→ 数据使用授权验证                                    │
+│     └─→ 数据跨境传输合规                                    │
+│                                                             │
+│  2. 模型合规检查                                            │
+│     ├─→ 偏见检测 (性别、种族、年龄等)                       │
+│     ├─→ 可解释性评估                                        │
+│     ├─→ 鲁棒性测试                                          │
+│     └─→ 性能基准测试                                        │
+│                                                             │
+│  3. 决策合规检查                                            │
+│     ├─→ 决策透明度检查                                      │
+│     ├─→ 人工监督机制验证                                    │
+│     ├─→ 申诉机制检查                                        │
+│     └─→ 影响评估 (高风险场景)                               │
+│                                                             │
+│  4. 文档合规检查                                            │
+│     ├─→ 技术文档完整性                                      │
+│     ├─→ 用户告知书合规                                      │
+│     ├─→ 风险评估报告                                        │
+│     └─→ 审计报告生成                                        │
+│                                                             │
+│  5. 持续监控                                                │
+│     ├─→ 实时合规监控                                        │
+│     ├─→ 定期合规审计                                        │
+│     ├─→ 法规变更追踪                                        │
+│     └─→ 合规报告自动生成                                    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+合规评分：
+  • 90-100: 优秀 (绿色)
+  • 75-89: 良好 (蓝色)
+  • 60-74: 合格 (黄色)
+  • <60: 不合格 (红色，禁止部署)
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">15.5 审计与报告</h3>
+                
+                <div class="section">
+                    <h4>审计报告模板</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>执行摘要</strong>：审计范围、关键发现、总体评分</li>
+                        <li><strong>合规检查结果</strong>：各项法规符合性详情</li>
+                        <li><strong>风险评估</strong>：识别的风险、风险等级、缓解措施</li>
+                        <li><strong>问题清单</strong>：不合规项、整改建议、责任人、截止日期</li>
+                        <li><strong>最佳实践</strong>：值得推广的做法</li>
+                        <li><strong>附录</strong>：测试数据、日志样本、技术细节</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">15.6 本章小结</h3>
+                <p>本章探讨了合规审计与风险管理。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>全球法规：欧盟 AI 法案、中国生成式 AI 管理办法、AI 权利法案、ISO 42001、NIST AI RMF</li>
+                    <li>风险分类：安全风险、偏见风险、合规风险、声誉风险</li>
+                    <li>合规检查：数据合规、模型合规、决策合规、文档合规、持续监控</li>
+                    <li>审计报告：执行摘要、合规结果、风险评估、问题清单、最佳实践</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 17 章 -->
+        <div class="chapter" id="chapter17">
+            <h2 class="chapter-title">第 17 章 生产案例与未来趋势</h2>
+            <div class="content">
+                <h3 class="section-title">17.1 生产案例分析</h3>
+                
+                <div class="section">
+                    <h4>案例一：金融风控 Agent</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某大型银行部署 AI Agent 进行信贷风险评估</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>监管合规要求严格（银保监会、个人信息保护法）</li>
+                                <li>模型决策需要可解释性</li>
+                                <li>需要持续监控偏见与漂移</li>
+                            </ul>
+                        </li>
+                        <li><strong>解决方案</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>建立全生命周期管理平台，实现从开发到退役的闭环管理</li>
+                                <li>自动化合规检查，确保符合监管要求</li>
+                                <li>实时漂移检测，PSI > 0.25 自动触发重新训练</li>
+                                <li>完整审计日志，支持监管检查</li>
+                            </ul>
+                        </li>
+                        <li><strong>成果</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>合规审计通过率 100%</li>
+                                <li>模型更新周期从 3 个月缩短到 2 周</li>
+                                <li>偏见投诉减少 90%</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>案例二：电商客服 Agent</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某电商平台部署 AI Agent 处理客服咨询</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>高并发（日均 1000 万 + 对话）</li>
+                                <li>需要快速迭代优化</li>
+                                <li>用户体验敏感</li>
+                            </ul>
+                        </li>
+                        <li><strong>解决方案</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>CI/CD 自动化流水线，支持每天多次部署</li>
+                                <li>金丝雀发布，5% → 25% → 50% → 100% 渐进式发布</li>
+                                <li>A/B 测试框架，对比不同版本效果</li>
+                                <li>实时监控 P95 延迟 < 300ms，错误率 < 0.05%</li>
+                            </ul>
+                        </li>
+                        <li><strong>成果</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>部署频率从每周 1 次提升到每天 5 次</li>
+                                <li>用户满意度提升 35%</li>
+                                <li>人工客服成本降低 60%</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">17.2 未来趋势</h3>
+                
+                <div class="section">
+                    <h4>2026-2028 年技术趋势</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>AI 驱动的生命周期管理</strong>：使用 AI 优化生命周期管理本身（自动调参、自动修复）</li>
+                        <li><strong>去中心化治理</strong>：区块链 + 智能合约实现去中心化合规审计</li>
+                        <li><strong>自适应合规</strong>：AI 自动适应法规变更，动态调整合规策略</li>
+                        <li><strong>跨组织协作</strong>：行业联盟共享最佳实践、风险情报、合规模板</li>
+                        <li><strong>零信任安全</strong>：零信任架构应用于 Agent 全生命周期，持续验证</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">17.3 最佳实践清单</h3>
+                
+                <div class="section">
+                    <h4>全生命周期管理实施检查清单</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>规划阶段</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 明确业务目标与成功指标</li>
+                                <li>✓ 完成风险评估与合规审查</li>
+                                <li>✓ 制定资源规划与时间表</li>
+                            </ul>
+                        </li>
+                        <li><strong>开发阶段</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 建立 CI/CD 流水线</li>
+                                <li>✓ 测试覆盖率 > 80%</li>
+                                <li>✓ 完成偏见与鲁棒性测试</li>
+                            </ul>
+                        </li>
+                        <li><strong>部署阶段</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 灰度发布策略</li>
+                                <li>✓ 回滚机制验证</li>
+                                <li>✓ 监控告警配置</li>
+                            </ul>
+                        </li>
+                        <li><strong>监控阶段</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 性能监控仪表盘</li>
+                                <li>✓ 漂移检测自动化</li>
+                                <li>✓ 合规审计日志</li>
+                            </ul>
+                        </li>
+                        <li><strong>退役阶段</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 数据归档策略</li>
+                                <li>✓ 服务下线计划</li>
+                                <li>✓ 知识传承文档</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 60px; border-left-color: var(--plan-blue);">
+                    "从 MLOps 到 LLMOps，从基础 CI/CD 到全生命周期自动化，从被动响应到主动治理，Agent 全生命周期管理体系正在重塑企业 AI 治理的设计范式。未来的 Agent 管理将更加智能、更加自动化、更加合规。这不仅是技术的进步，更是治理思维的演进。"
+                    <div class="quote-author">—— 全书结语</div>
+                </div>
+                
+                <h3 class="section-title">17.4 本章小结</h3>
+                <p>本章分析了生产案例与未来趋势。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>生产案例：金融风控 Agent（合规驱动）、电商客服 Agent（效率驱动）</li>
+                    <li>未来趋势：AI 驱动管理、去中心化治理、自适应合规、跨组织协作、零信任安全</li>
+                    <li>最佳实践：五阶段检查清单，确保全生命周期管理落地</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">MLOps 与 LLMOps</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;">
+                    <li>ModelOp (2026). "Enterprise AI Lifecycle Management and Governance." modelop.com</li>
+                    <li>Radicalbit (2026). "MLOps & AI Observability Platform." radicalbit.ai</li>
+                </ol>
+                
+                <h3 class="section-title">AI 治理与合规</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="3">
+                    <li>Asenion (2026). "AI Governance, Risk and Compliance Management Platform." fairly.ai</li>
+                    <li>TrustArc (2026). "AI Governance Solutions." trustarc.com</li>
+                    <li>Composio (2026). "Enterprise AI Agent Management Guide." composio.dev</li>
+                </ol>
+                
+                <h3 class="section-title">行业标准与框架</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="6">
+                    <li>ISO (2024). "ISO 42001: AI Management Systems." iso.org</li>
+                    <li>NIST (2024). "AI Risk Management Framework." nist.gov</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.5em; margin-bottom: 25px; color: var(--plan-blue); font-weight: 800; font-family: 'Georgia', serif;">Agent 全生命周期管理体系</p>
+                <p style="font-size: 1.2em; margin-bottom: 15px; font-style: italic;">从规划到退役的完整治理之道</p>
+                <p>© 2026 超级代码智能体 | 全生命周期版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 35px; font-size: 1em; line-height: 2.0;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="lifecycle-spectrum" style="margin-top: 50px;">
+                    <div class="spectrum-item spectrum-plan">🔵 规划</div>
+                    <div class="spectrum-item spectrum-dev">🟣 开发</div>
+                    <div class="spectrum-item spectrum-deploy">🟡 部署</div>
+                    <div class="spectrum-item spectrum-monitor">🟢 监控</div>
+                    <div class="spectrum-item spectrum-retire">🔴 退役</div>
+                </div>
+                <p style="margin-top: 50px; font-size: 0.95em; color: var(--text-secondary);">
+                    谨以此书献给所有在 AI 治理前沿探索的工程师与管理者们<br>
+                    从 2024 年 MLOps 初步应用到 2026 年全生命周期自动化<br>
+                    2 年探索，五阶段闭环——可信赖、可审计、可持续的完美平衡
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Agent Lifecycle Management System');
+        console.log('📚 From Planning to Retirement (2024-2026)');
+        console.log('✨ 2 Years of AI Governance Evolution');
+        console.log('🌐 Planning + Development + Deployment + Monitoring + Retirement = Trustworthy AI');
+    </script>
+</body>
+</html>

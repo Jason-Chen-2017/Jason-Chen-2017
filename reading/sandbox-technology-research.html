@@ -1,0 +1,1683 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>企业级 AI Agent 系统开发实战：轻量级沙箱技术深度研究报告</title>
+    <style>
+        :root {
+            --primary-color: #3b82f6;
+            --secondary-color: #1e40af;
+            --accent-color: #f59e0b;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --purple-color: #8b5cf6;
+            --cyan-color: #06b6d4;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --bg-light: #f8fafc;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+            --gradient-1: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            --gradient-2: linear-gradient(135deg, #06b6d4, #10b981);
+            --gradient-3: linear-gradient(135deg, #f59e0b, #ef4444);
+            --code-bg: #1e1e1e;
+            --code-text: #d4d4d4;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.8;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(ellipse at 20% 80%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* 头部 */
+        .header {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(139, 92, 246, 0.2) 50%, rgba(6, 182, 212, 0.2) 100%);
+            padding: 100px 40px;
+            text-align: center;
+            border-bottom: 2px solid var(--border-color);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%);
+            animation: rotate 120s linear infinite;
+        }
+
+        @keyframes rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .header-badge {
+            display: inline-block;
+            padding: 12px 30px;
+            background: rgba(59, 130, 246, 0.15);
+            border: 2px solid var(--primary-color);
+            border-radius: 30px;
+            font-size: 14px;
+            color: var(--primary-color);
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+            position: relative;
+            z-index: 1;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            font-weight: 800;
+            margin-bottom: 25px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.3;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header .subtitle {
+            font-size: 22px;
+            color: var(--text-secondary);
+            max-width: 900px;
+            margin: 0 auto;
+            line-height: 1.8;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header .meta {
+            margin-top: 40px;
+            display: flex;
+            justify-content: center;
+            gap: 35px;
+            font-size: 14px;
+            color: var(--text-secondary);
+            position: relative;
+            z-index: 1;
+        }
+
+        .header .meta span {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* 目录 */
+        .toc {
+            background: var(--bg-card);
+            max-width: 1100px;
+            margin: -50px auto 60px;
+            padding: 50px 60px;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            position: relative;
+            z-index: 10;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .toc h3 {
+            font-size: 26px;
+            margin-bottom: 30px;
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .toc ul {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc li {
+            counter-increment: toc-counter;
+            margin: 18px 0;
+            padding-left: 45px;
+            position: relative;
+        }
+
+        .toc li::before {
+            content: counter(toc-counter);
+            position: absolute;
+            left: 0;
+            width: 32px;
+            height: 32px;
+            background: var(--gradient-1);
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 32px;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .toc a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.3s;
+            display: block;
+            font-size: 16px;
+        }
+
+        .toc a:hover {
+            color: var(--primary-color);
+            transform: translateX(8px);
+        }
+
+        /* 主容器 */
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 20px 80px;
+        }
+
+        /* 章节 */
+        .section {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 60px;
+            margin-bottom: 50px;
+            border: 1px solid var(--border-color);
+        }
+
+        .section h2 {
+            font-size: 36px;
+            color: var(--primary-color);
+            margin-bottom: 35px;
+            padding-bottom: 25px;
+            border-bottom: 3px solid var(--border-color);
+            font-weight: 700;
+        }
+
+        .section h3 {
+            font-size: 26px;
+            color: var(--purple-color);
+            margin: 45px 0 25px;
+            font-weight: 600;
+        }
+
+        .section h4 {
+            font-size: 20px;
+            color: var(--text-primary);
+            margin: 35px 0 20px;
+            font-weight: 600;
+        }
+
+        .section p {
+            color: var(--text-secondary);
+            margin-bottom: 25px;
+            text-align: justify;
+            font-size: 17px;
+            line-height: 1.9;
+        }
+
+        .section ul, .section ol {
+            color: var(--text-secondary);
+            margin-left: 28px;
+            margin-bottom: 28px;
+        }
+
+        .section li {
+            margin-bottom: 16px;
+            line-height: 1.8;
+            font-size: 16px;
+        }
+
+        /* 代码块 */
+        .code-block {
+            background: var(--code-bg);
+            border-radius: 14px;
+            padding: 30px;
+            margin: 35px 0;
+            overflow-x: auto;
+            position: relative;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .code-block pre {
+            margin: 0;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.7;
+            color: var(--code-text);
+        }
+
+        .code-label {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: rgba(255,255,255,0.1);
+            padding: 5px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #888;
+            font-weight: 500;
+        }
+
+        .code-block .comment { color: #6a9955; }
+        .code-block .keyword { color: #569cd6; }
+        .code-block .string { color: #ce9178; }
+        .code-block .number { color: #b5cea8; }
+        .code-block .function { color: #dcdcaa; }
+        .code-block .class { color: #4ec9b0; }
+        .code-block .decorator { color: #dcdcaa; }
+        .code-block .type { color: #4ec9b0; }
+
+        /* 提示框 */
+        .tip-box {
+            padding: 28px 35px;
+            border-radius: 14px;
+            margin: 35px 0;
+            border-left: 6px solid;
+        }
+
+        .tip-info {
+            background: rgba(59, 130, 246, 0.08);
+            border-left-color: var(--primary-color);
+        }
+
+        .tip-warning {
+            background: rgba(245, 158, 11, 0.08);
+            border-left-color: var(--warning-color);
+        }
+
+        .tip-success {
+            background: rgba(16, 185, 129, 0.08);
+            border-left-color: var(--success-color);
+        }
+
+        .tip-danger {
+            background: rgba(239, 68, 68, 0.08);
+            border-left-color: var(--danger-color);
+        }
+
+        .tip-title {
+            font-weight: 700;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 17px;
+        }
+
+        .tip-info .tip-title { color: var(--primary-color); }
+        .tip-warning .tip-title { color: var(--warning-color); }
+        .tip-success .tip-title { color: var(--success-color); }
+        .tip-danger .tip-title { color: var(--danger-color); }
+
+        .tip-content {
+            color: var(--text-secondary);
+            line-height: 1.9;
+            font-size: 15px;
+        }
+
+        /* 表格 */
+        .table-container {
+            overflow-x: auto;
+            margin: 35px 0;
+            border-radius: 14px;
+            border: 1px solid var(--border-color);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(30, 41, 59, 0.5);
+        }
+
+        th, td {
+            padding: 18px 22px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background: var(--gradient-1);
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            color: var(--text-secondary);
+            font-size: 15px;
+        }
+
+        tr:hover {
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        /* 架构图 */
+        .architecture-diagram {
+            background: rgba(15, 23, 42, 0.8);
+            border: 2px solid var(--border-color);
+            border-radius: 14px;
+            padding: 40px;
+            margin: 40px 0;
+            text-align: center;
+        }
+
+        .arch-layer {
+            background: rgba(30, 41, 59, 0.8);
+            border: 2px solid var(--primary-color);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 20px 0;
+        }
+
+        .arch-layer-title {
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            font-size: 17px;
+        }
+
+        .arch-components {
+            display: flex;
+            justify-content: center;
+            gap: 18px;
+            flex-wrap: wrap;
+        }
+
+        .arch-component {
+            background: var(--gradient-1);
+            color: white;
+            padding: 14px 24px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .arch-arrow {
+            font-size: 28px;
+            color: var(--primary-color);
+            margin: 15px 0;
+        }
+
+        /* 引用 */
+        blockquote {
+            background: rgba(59, 130, 246, 0.05);
+            border-left: 5px solid var(--primary-color);
+            padding: 25px 32px;
+            margin: 32px 0;
+            border-radius: 0 10px 10px 0;
+            font-style: italic;
+        }
+
+        blockquote p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        /* 重点突出 */
+        .highlight {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.15));
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        /* 对比卡片 */
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 35px 0;
+        }
+
+        .comparison-card {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 30px;
+            transition: all 0.3s;
+        }
+
+        .comparison-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary-color);
+            box-shadow: 0 15px 40px rgba(59, 130, 246, 0.15);
+        }
+
+        .comparison-card.docker { border-top: 4px solid #2496ed; }
+        .comparison-card.microvm { border-top: 4px solid #ff9900; }
+        .comparison-card.unikernel { border-top: 4px solid #00bcd4; }
+
+        .comparison-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .comparison-card.docker .comparison-title { color: #2496ed; }
+        .comparison-card.microvm .comparison-title { color: #ff9900; }
+        .comparison-card.unikernel .comparison-title { color: #00bcd4; }
+
+        .comparison-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .comparison-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .comparison-list li:last-child {
+            border-bottom: none;
+        }
+
+        /* 页脚 */
+        .footer {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            border-top: 2px solid var(--border-color);
+            margin-top: 80px;
+            background: var(--bg-card);
+        }
+
+        /* 进度条 */
+        .progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            z-index: 1000;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--gradient-1);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .header h1 { font-size: 32px; }
+            .header .subtitle { font-size: 18px; }
+            .section { padding: 35px 25px; }
+            .toc { padding: 30px; margin: -35px 20px 35px; }
+            .arch-components { flex-direction: column; }
+            .comparison-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 进度条 -->
+    <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+    </div>
+
+    <!-- 头部 -->
+    <header class="header">
+        <div class="header-badge">🔐 企业级 AI Agent 安全基础设施系列</div>
+        <h1>企业级 AI Agent 系统开发实战<br>轻量级沙箱技术深度研究报告</h1>
+        <p class="subtitle">
+            全面解析 Docker Sandbox、MicroVM、Unikernel 三大轻量级沙箱技术的原理、
+            实现细节、性能对比，以及在企业级 AI Agent 系统中的最佳实践与应用
+        </p>
+        <div class="meta">
+            <span>📅 2025 年 2 月</span>
+            <span>⏱️ 阅读时间：40 分钟</span>
+            <span>📊 技术深度：专家级</span>
+        </div>
+    </header>
+
+    <!-- 目录 -->
+    <nav class="toc">
+        <h3>📑 目录</h3>
+        <ul>
+            <li><a href="#section1">引言：AI Agent 沙箱的必要性</a></li>
+            <li><a href="#section2">沙箱技术概述与分类</a></li>
+            <li><a href="#section3">Docker Sandbox 深度解析</a></li>
+            <li><a href="#section4">MicroVM 技术详解</a></li>
+            <li><a href="#section5">Unikernel 架构探索</a></li>
+            <li><a href="#section6">三大技术对比与选型指南</a></li>
+            <li><a href="#section7">企业级 AI Agent 系统实战</a></li>
+            <li><a href="#section8">安全加固与最佳实践</a></li>
+            <li><a href="#section9">总结与未来展望</a></li>
+        </ul>
+    </nav>
+
+    <!-- 主容器 -->
+    <div class="container">
+        <!-- 第 1 节 -->
+        <section id="section1" class="section">
+            <h2>1. 引言：AI Agent 沙箱的必要性</h2>
+            
+            <p>
+                随着大语言模型（LLM）和 AI Agent 技术的快速发展，<span class="highlight">代码执行能力</span>已成为现代 AI Agent 的核心功能之一。
+                从代码生成助手、数据分析 Agent 到自动化运维系统，AI Agent 需要执行用户提供的代码来完成各种任务。
+                然而，执行不受信任的代码带来了巨大的<span class="highlight">安全风险</span>。
+            </p>
+
+            <p>
+                想象一下，如果 AI Agent 直接在生产环境中执行用户提供的代码，可能会导致：
+            </p>
+
+            <div class="tip-box tip-danger">
+                <div class="tip-title">❌ 潜在安全风险</div>
+                <div class="tip-content">
+                    <ul>
+                        <li><strong>数据泄露：</strong>恶意代码可能读取敏感数据并外传</li>
+                        <li><strong>资源滥用：</strong>无限循环、内存泄漏导致系统资源耗尽</li>
+                        <li><strong>系统破坏：</strong>删除关键文件、修改系统配置</li>
+                        <li><strong>网络攻击：</strong>发起 DDoS 攻击、扫描内网漏洞</li>
+                        <li><strong>权限提升：</strong>利用漏洞获取更高权限</li>
+                    </ul>
+                </div>
+            </div>
+
+            <p>
+                <span class="highlight">沙箱（Sandbox）</span>技术通过在隔离环境中执行代码，有效解决了上述安全问题。
+                一个优秀的沙箱系统应该具备以下特性：
+            </p>
+
+            <ul>
+                <li><strong>隔离性：</strong>代码执行与主机系统完全隔离</li>
+                <li><strong>资源限制：</strong>CPU、内存、磁盘、网络等资源可控</li>
+                <li><strong>可审计性：</strong>所有操作可记录、可追溯</li>
+                <li><strong>快速启动：</strong>毫秒级启动，支持高并发</li>
+                <li><strong>易于管理：</strong>生命周期管理、监控、日志收集</li>
+            </ul>
+
+            <div class="tip-box tip-info">
+                <div class="tip-title">💡 本报告内容</div>
+                <div class="tip-content">
+                    <p>
+                        本报告将深入探讨三种主流轻量级沙箱技术：<strong>Docker Sandbox</strong>、
+                        <strong>MicroVM</strong>、<strong>Unikernel</strong>，
+                        从原理、实现、性能、安全等多个维度进行对比分析，
+                        并提供企业级 AI Agent 系统中的实战应用指南。
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 第 2 节 -->
+        <section id="section2" class="section">
+            <h2>2. 沙箱技术概述与分类</h2>
+
+            <h3>2.1 沙箱技术演进</h3>
+
+            <p>
+                沙箱技术的发展经历了多个阶段，从早期的进程隔离到现代的轻量级虚拟化，
+                每一代技术都在隔离性、性能、易用性之间寻找平衡。
+            </p>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>代际</th>
+                            <th>技术代表</th>
+                            <th>隔离级别</th>
+                            <th>启动时间</th>
+                            <th>资源开销</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>第一代</strong></td>
+                            <td>chroot、setrlimit</td>
+                            <td>进程级</td>
+                            <td>< 1ms</td>
+                            <td>极低</td>
+                        </tr>
+                        <tr>
+                            <td><strong>第二代</strong></td>
+                            <td>VMware、VirtualBox</td>
+                            <td>硬件级</td>
+                            <td>30-60s</td>
+                            <td>高</td>
+                        </tr>
+                        <tr>
+                            <td><strong>第三代</strong></td>
+                            <td>Docker、LXC</td>
+                            <td>系统调用级</td>
+                            <td>100-500ms</td>
+                            <td>低</td>
+                        </tr>
+                        <tr>
+                            <td><strong>第四代</strong></td>
+                            <td>Firecracker、gVisor</td>
+                            <td>混合隔离</td>
+                            <td>10-100ms</td>
+                            <td>中低</td>
+                        </tr>
+                        <tr>
+                            <td><strong>第五代</strong></td>
+                            <td>Unikernel、WASM</td>
+                            <td>应用级</td>
+                            <td>< 10ms</td>
+                            <td>极低</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>2.2 沙箱技术分类</h3>
+
+            <p>
+                根据隔离机制的不同，沙箱技术可分为以下几类：
+            </p>
+
+            <div class="architecture-diagram">
+                <div class="arch-layer">
+                    <div class="arch-layer-title">📦 容器级沙箱（Container-based）</div>
+                    <div class="arch-components">
+                        <div class="arch-component">Docker</div>
+                        <div class="arch-component">LXC</div>
+                        <div class="arch-component">Podman</div>
+                    </div>
+                </div>
+                <div class="arch-arrow">⬇️</div>
+                <div class="arch-layer">
+                    <div class="arch-layer-title">🖥️ 虚拟机级沙箱（VM-based）</div>
+                    <div class="arch-components">
+                        <div class="arch-component">Firecracker</div>
+                        <div class="arch-component">Kata Containers</div>
+                        <div class="arch-component">gVisor</div>
+                    </div>
+                </div>
+                <div class="arch-arrow">⬇️</div>
+                <div class="arch-layer">
+                    <div class="arch-layer-title">⚡ 内核级沙箱（Kernel-based）</div>
+                    <div class="arch-components">
+                        <div class="arch-component">Unikernel</div>
+                        <div class="arch-component">WASM</div>
+                        <div class="arch-component">eBPF</div>
+                    </div>
+                </div>
+            </div>
+
+            <h3>2.3 核心隔离机制</h3>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>隔离机制</th>
+                            <th>Linux 实现</th>
+                            <th>隔离内容</th>
+                            <th>安全强度</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>命名空间</strong></td>
+                            <td>Namespaces</td>
+                            <td>PID、网络、文件系统、用户等</td>
+                            <td>⭐⭐⭐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>控制组</strong></td>
+                            <td>Cgroups</td>
+                            <td>CPU、内存、IO 等资源限制</td>
+                            <td>⭐⭐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>能力限制</strong></td>
+                            <td>Capabilities</td>
+                            <td>系统调用权限控制</td>
+                            <td>⭐⭐⭐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>安全模块</strong></td>
+                            <td>SELinux/AppArmor</td>
+                            <td>强制访问控制</td>
+                            <td>⭐⭐⭐⭐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>系统调用过滤</strong></td>
+                            <td>seccomp-bpf</td>
+                            <td>限制可用的系统调用</td>
+                            <td>⭐⭐⭐⭐</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 第 3 节 -->
+        <section id="section3" class="section">
+            <h2>3. Docker Sandbox 深度解析</h2>
+
+            <h3>3.1 Docker 沙箱原理</h3>
+
+            <p>
+                Docker 是目前最流行的容器化技术，通过 Linux 内核的 Namespaces 和 Cgroups 实现进程隔离和资源限制。
+                在 AI Agent 系统中，Docker Sandbox 提供了一种快速、易用的代码执行环境。
+            </p>
+
+            <div class="code-block">
+                <span class="code-label">Docker 沙箱核心配置</span>
+                <pre><span class="comment"># Dockerfile - AI Agent 代码执行环境</span>
+<span class="keyword">FROM</span> python:3.11-slim
+
+<span class="comment"># 创建非 root 用户</span>
+<span class="keyword">RUN</span> useradd -m -u 1000 sandbox
+
+<span class="comment"># 安装必要依赖</span>
+<span class="keyword">RUN</span> apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+<span class="comment"># 设置工作目录</span>
+<span class="keyword">WORKDIR</span> /sandbox
+
+<span class="comment"># 复制代码（限制可执行文件）</span>
+<span class="keyword">COPY</span> --chown=sandbox:sandbox . /sandbox/
+
+<span class="comment"># 切换到非 root 用户</span>
+<span class="keyword">USER</span> sandbox
+
+<span class="comment"># 设置资源限制</span>
+<span class="keyword">HEALTHCHECK</span> --interval=30s --timeout=10s --retries=3 \
+    <span class="keyword">CMD</span> python3 -c <span class="string">"print('OK')"</span>
+
+<span class="keyword">CMD</span> [<span class="string">"python3"</span>, <span class="string">"main.py"</span>]</pre>
+            </div>
+
+            <h3>3.2 Python SDK 实现</h3>
+
+            <div class="code-block">
+                <span class="code-label">Docker Sandbox Python 实现</span>
+                <pre><span class="keyword">import</span> docker
+<span class="keyword">import</span> uuid
+<span class="keyword">import</span> asyncio
+<span class="keyword">from</span> typing <span class="keyword">import</span> Optional, Tuple
+<span class="keyword">from</span> dataclasses <span class="keyword">import</span> dataclass
+
+@dataclass
+<span class="keyword">class</span> <span class="class">SandboxConfig</span>:
+    <span class="string">"""沙箱配置"""</span>
+    image: <span class="keyword">str</span> = <span class="string">"python:3.11-slim"</span>
+    memory_limit: <span class="keyword">str</span> = <span class="string">"512m"</span>
+    cpu_quota: <span class="keyword">int</span> = <span class="number">50000</span>  <span class="comment"># 50% CPU</span>
+    pids_limit: <span class="keyword">int</span> = <span class="number">50</span>
+    network_disabled: <span class="keyword">bool</span> = <span class="keyword">True</span>
+    read_only: <span class="keyword">bool</span> = <span class="keyword">True</span>
+    timeout: <span class="keyword">int</span> = <span class="number">60</span>
+
+<span class="keyword">class</span> <span class="class">DockerSandbox</span>:
+    <span class="string">"""Docker 代码执行沙箱"""</span>
+    
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, config: SandboxConfig = <span class="keyword">None</span>):
+        self.config = config <span class="keyword">or</span> SandboxConfig()
+        self.client = docker.from_client()
+        self.container: Optional[docker.models.containers.Container] = <span class="keyword">None</span>
+    
+    <span class="keyword">async def</span> <span class="function">create</span>(self) -> <span class="keyword">bool</span>:
+        <span class="string">"""创建沙箱容器"""</span>
+        <span class="keyword">try</span>:
+            self.container = self.client.containers.run(
+                self.config.image,
+                <span class="string">"tail -f /dev/null"</span>,
+                detach=<span class="keyword">True</span>,
+                remove=<span class="keyword">True</span>,
+                name=<span class="string">f"sandbox-{uuid.uuid4().hex[:8]}"</span>,
+                <span class="comment"># 资源限制</span>
+                mem_limit=self.config.memory_limit,
+                cpu_quota=self.config.cpu_quota,
+                pids_limit=self.config.pids_limit,
+                <span class="comment"># 安全配置</span>
+                network_disabled=self.config.network_disabled,
+                read_only=self.config.read_only,
+                tmpfs={<span class="string">"/tmp"</span>: <span class="string">"rw,noexec,nosuid,size=100m"</span>},
+                <span class="comment"># 安全选项</span>
+                security_opt=[<span class="string">"no-new-privileges:true"</span>],
+                cap_drop=[<span class="string">"ALL"</span>],
+            )
+            <span class="keyword">return</span> <span class="keyword">True</span>
+        <span class="keyword">except</span> Exception <span class="keyword">as</span> e:
+            <span class="keyword">print</span>(<span class="string">f"Failed to create sandbox: {e}"</span>)
+            <span class="keyword">return</span> <span class="keyword">False</span>
+    
+    <span class="keyword">async def</span> <span class="function">execute</span>(self, code: <span class="keyword">str</span>) -> Tuple[<span class="keyword">int</span>, <span class="keyword">str</span>, <span class="keyword">str</span>]:
+        <span class="string">"""执行代码"""</span>
+        <span class="keyword">if not</span> self.container:
+            <span class="keyword">raise</span> RuntimeError(<span class="string">"Sandbox not created"</span>)
+        
+        <span class="comment"># 写入代码文件</span>
+        <span class="keyword">await</span> self._write_file(<span class="string">"/tmp/code.py"</span>, code)
+        
+        <span class="comment"># 执行代码（带超时）</span>
+        <span class="keyword">try</span>:
+            result = self.container.exec_run(
+                <span class="string">"python3 /tmp/code.py"</span>,
+                demux=<span class="keyword">True</span>,
+                timeout=self.config.timeout
+            )
+            
+            stdout = result.output[<span class="number">0</span>].decode() <span class="keyword">if</span> result.output[<span class="number">0</span>] <span class="keyword">else</span> <span class="string">""</span>
+            stderr = result.output[<span class="number">1</span>].decode() <span class="keyword">if</span> result.output[<span class="number">1</span>] <span class="keyword">else</span> <span class="string">""</span>
+            
+            <span class="keyword">return</span> result.exit_code, stdout, stderr
+        <span class="keyword">except</span> Exception <span class="keyword">as</span> e:
+            <span class="keyword">return</span> -<span class="number">1</span>, <span class="string">""</span>, <span class="keyword">str</span>(e)
+    
+    <span class="keyword">async def</span> <span class="function">_write_file</span>(self, path: <span class="keyword">str</span>, content: <span class="keyword">str</span>):
+        <span class="string">"""写入文件到容器"""</span>
+        <span class="keyword">import</span> tarfile
+        <span class="keyword">import</span> io
+        
+        tar_stream = io.BytesIO()
+        <span class="keyword">with</span> tarfile.open(fileobj=tar_stream, mode=<span class="string">"w"</span>) <span class="keyword">as</span> tar:
+            tarinfo = tarfile.TarInfo(name=path.lstrip(<span class="string">"/"</span>))
+            tarinfo.size = <span class="keyword">len</span>(content.encode())
+            tar.addfile(tarinfo, io.BytesIO(content.encode()))
+        
+        tar_stream.seek(<span class="number">0</span>)
+        self.container.put_archive(<span class="string">"/"</span>, tar_stream)
+    
+    <span class="keyword">async def</span> <span class="function">destroy</span>(self):
+        <span class="string">"""销毁沙箱"""</span>
+        <span class="keyword">if</span> self.container:
+            self.container.stop()
+            self.container = <span class="keyword">None</span></pre>
+            </div>
+
+            <h3>3.3 安全加固措施</h3>
+
+            <div class="tip-box tip-warning">
+                <div class="tip-title">⚠️ Docker 沙箱安全加固</div>
+                <div class="tip-content">
+                    <ul>
+                        <li><strong>禁用网络：</strong>network_disabled=True，防止外部通信</li>
+                        <li><strong>只读文件系统：</strong>read_only=True，防止文件修改</li>
+                        <li><strong>非 root 用户：</strong>USER sandbox，降低权限</li>
+                        <li><strong>丢弃能力：</strong>cap_drop=["ALL"]，移除所有 Linux 能力</li>
+                        <li><strong>禁止提权：</strong>no-new-privileges:true，防止权限提升</li>
+                        <li><strong>临时文件系统：</strong>tmpfs 挂载，限制可写区域</li>
+                        <li><strong>seccomp 配置：</strong>限制系统调用</li>
+                        <li><strong>AppArmor/SELinux：</strong>强制访问控制</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h3>3.4 性能优化</h3>
+
+            <ul>
+                <li><strong>镜像预热：</strong>提前拉取基础镜像，减少冷启动时间</li>
+                <li><strong>容器池：</strong>维护预创建容器池，快速分配</li>
+                <li><strong>镜像优化：</strong>使用多阶段构建，减小镜像体积</li>
+                <li><strong>资源复用：</strong>相同代码复用容器，避免重复创建</li>
+            </ul>
+        </section>
+
+        <!-- 第 4 节 -->
+        <section id="section4" class="section">
+            <h2>4. MicroVM 技术详解</h2>
+
+            <h3>4.1 MicroVM 概述</h3>
+
+            <p>
+                <span class="highlight">MicroVM（微型虚拟机）</span>是一种轻量级虚拟机技术，
+                在保持虚拟机级别隔离的同时，实现了接近容器的启动速度和资源开销。
+                代表产品包括 AWS Firecracker、Google gVisor、Kata Containers 等。
+            </p>
+
+            <div class="comparison-grid">
+                <div class="comparison-card microvm">
+                    <div class="comparison-title">🔥 Firecracker</div>
+                    <ul class="comparison-list">
+                        <li>AWS 开源的 MicroVM 监控器</li>
+                        <li>基于 KVM 的轻量级虚拟化</li>
+                        <li>启动时间 < 125ms</li>
+                        <li>内存开销 < 5MB</li>
+                        <li>用于 AWS Lambda、Fargate</li>
+                    </ul>
+                </div>
+                <div class="comparison-card microvm">
+                    <div class="comparison-title">🛡️ gVisor</div>
+                    <ul class="comparison-list">
+                        <li>Google 开源的应用内核</li>
+                        <li>用户空间内核实现</li>
+                        <li>拦截系统调用</li>
+                        <li>兼容 Docker 接口</li>
+                        <li>用于 GCP Cloud Run</li>
+                    </ul>
+                </div>
+                <div class="comparison-card microvm">
+                    <div class="comparison-title">📦 Kata Containers</div>
+                    <ul class="comparison-list">
+                        <li>OpenStack 孵化的项目</li>
+                        <li>标准 OCI 容器接口</li>
+                        <li>每个容器一个 VM</li>
+                        <li>支持多种 Hypervisor</li>
+                        <li>用于 Kubernetes</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h3>4.2 Firecracker 架构</h3>
+
+            <p>
+                Firecracker 是 AWS 开源的 MicroVM 技术，专为无服务器计算设计，
+                在 AI Agent 代码执行场景中提供了优秀的隔离性和性能平衡。
+            </p>
+
+            <div class="code-block">
+                <span class="code-label">Firecracker 配置示例</span>
+                <pre><span class="comment"># firecracker-config.json</span>
+{
+  <span class="string">"boot-source"</span>: {
+    <span class="string">"kernel_image_path"</span>: <span class="string">"/path/to/vmlinux"</span>,
+    <span class="string">"boot_args"</span>: <span class="string">"console=ttyS0 reboot=k panic=1 pci=off"</span>
+  },
+  <span class="string">"drives"</span>: [
+    {
+      <span class="string">"drive_id"</span>: <span class="string">"rootfs"</span>,
+      <span class="string">"path_on_host"</span>: <span class="string">"/path/to/rootfs.img"</span>,
+      <span class="string">"is_root_device"</span>: <span class="keyword">true</span>,
+      <span class="string">"partuuid"</span>: <span class="string">"66d9f393-833d-4c1f-a540-3a8a9e8f5b5c"</span>,
+      <span class="string">"is_read_only"</span>: <span class="keyword">true</span>
+    }
+  ],
+  <span class="string">"machine-config"</span>: {
+    <span class="string">"vcpu_count"</span>: <span class="number">1</span>,
+    <span class="string">"mem_size_mib"</span>: <span class="number">512</span>,
+    <span class="string">"ht_enabled"</span>: <span class="keyword">false</span>
+  },
+  <span class="string">"network-interfaces"</span>: [
+    {
+      <span class="string">"iface_id"</span>: <span class="string">"eth0"</span>,
+      <span class="string">"host_dev_name"</span>: <span class="string">"tap0"</span>,
+      <span class="string">"allow_mmds_requests"</span>: <span class="keyword">false</span>
+    }
+  ],
+  <span class="string">"logger"</span>: {
+    <span class="string">"log_path"</span>: <span class="string">"/var/log/firecracker.log"</span>,
+    <span class="string">"level"</span>: <span class="string">"Info"</span>
+  }
+}</pre>
+            </div>
+
+            <h3>4.3 Firecracker Python SDK</h3>
+
+            <div class="code-block">
+                <span class="code-label">Firecracker 沙箱实现</span>
+                <pre><span class="keyword">import</span> fcntl
+<span class="keyword">import</span> socket
+<span class="keyword">import</span> json
+<span class="keyword">import</span> subprocess
+<span class="keyword">from</span> pathlib <span class="keyword">import</span> Path
+<span class="keyword">from</span> typing <span class="keyword">import</span> Optional
+
+<span class="keyword">class</span> <span class="class">FirecrackerSandbox</span>:
+    <span class="string">"""Firecracker MicroVM 沙箱"""</span>
+    
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, vm_id: <span class="keyword">str</span>, config: dict):
+        self.vm_id = vm_id
+        self.config = config
+        self.socket_path = Path(<span class="string">f"/tmp/firecracker-{vm_id}.socket"</span>)
+        self.process: Optional[subprocess.Popen] = <span class="keyword">None</span>
+    
+    <span class="keyword">def</span> <span class="function">start</span>(self) -> <span class="keyword">bool</span>:
+        <span class="string">"""启动 MicroVM"""</span>
+        <span class="keyword">try</span>:
+            <span class="comment"># 启动 Firecracker 进程</span>
+            self.process = subprocess.Popen(
+                [
+                    <span class="string">"firecracker"</span>,
+                    <span class="string">"--api-sock"</span>, <span class="keyword">str</span>(self.socket_path),
+                    <span class="string">"--config-file"</span>, self.config[<span class="string">"config_path"</span>]
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            
+            <span class="comment"># 等待 socket 就绪</span>
+            <span class="keyword">for</span> _ <span class="keyword">in</span> range(<span class="number">50</span>):
+                <span class="keyword">if</span> self.socket_path.exists():
+                    <span class="keyword">break</span>
+                time.sleep(<span class="number">0.1</span>)
+            
+            <span class="keyword">return</span> <span class="keyword">True</span>
+        <span class="keyword">except</span> Exception <span class="keyword">as</span> e:
+            <span class="keyword">print</span>(<span class="string">f"Failed to start Firecracker: {e}"</span>)
+            <span class="keyword">return</span> <span class="keyword">False</span>
+    
+    <span class="keyword">def</span> <span class="function">_api_call</span>(self, method: <span class="keyword">str</span>, path: <span class="keyword">str</span>, body: dict = <span class="keyword">None</span>) -> dict:
+        <span class="string">"""调用 Firecracker API"""</span>
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(<span class="keyword">str</span>(self.socket_path))
+        
+        request = <span class="string">f"{method} {path} HTTP/1.1\r\n"</span>
+        <span class="keyword">if</span> body:
+            request += <span class="string">f"Content-Length: {len(json.dumps(body))}\r\n"</span>
+            request += <span class="string">"\r\n"</span> + json.dumps(body)
+        <span class="keyword">else</span>:
+            request += <span class="string">"\r\n"</span>
+        
+        sock.sendall(request.encode())
+        response = sock.recv(<span class="number">4096</span>).decode()
+        sock.close()
+        
+        <span class="keyword">return</span> json.loads(response.split(<span class="string">"\r\n\r\n"</span>, <span class="number">1</span>)[<span class="number">1</span>])
+    
+    <span class="keyword">def</span> <span class="function">execute</span>(self, code: <span class="keyword">str</span>, timeout: <span class="keyword">int</span> = <span class="number">60</span>) -> dict:
+        <span class="string">"""执行代码（通过 guest API）"""</span>
+        <span class="comment"># 通过 MMDS 或 virtio-serial 传递代码到 VM 内执行</span>
+        <span class="comment"># 实际实现需要 VM 内的 agent 配合</span>
+        <span class="keyword">pass</span>
+    
+    <span class="keyword">def</span> <span class="function">stop</span>(self):
+        <span class="string">"""停止 MicroVM"""</span>
+        <span class="keyword">if</span> self.process:
+            self.process.terminate()
+            self.process.wait()
+            self.socket_path.unlink(missing_ok=<span class="keyword">True</span>)</pre>
+            </div>
+
+            <h3>4.4 性能对比</h3>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>指标</th>
+                            <th>Docker</th>
+                            <th>Firecracker</th>
+                            <th>gVisor</th>
+                            <th>Kata</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>启动时间</strong></td>
+                            <td>100-500ms</td>
+                            <td>< 125ms</td>
+                            <td>200-800ms</td>
+                            <td>1-2s</td>
+                        </tr>
+                        <tr>
+                            <td><strong>内存开销</strong></td>
+                            <td>~10MB</td>
+                            <td>< 5MB</td>
+                            <td>~50MB</td>
+                            <td>~100MB</td>
+                        </tr>
+                        <tr>
+                            <td><strong>CPU 开销</strong></td>
+                            <td>低</td>
+                            <td>极低</td>
+                            <td>中</td>
+                            <td>中</td>
+                        </tr>
+                        <tr>
+                            <td><strong>隔离级别</strong></td>
+                            <td>进程级</td>
+                            <td>硬件级</td>
+                            <td>系统调用级</td>
+                            <td>硬件级</td>
+                        </tr>
+                        <tr>
+                            <td><strong>安全性</strong></td>
+                            <td>⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 第 5 节 -->
+        <section id="section5" class="section">
+            <h2>5. Unikernel 架构探索</h2>
+
+            <h3>5.1 Unikernel 原理</h3>
+
+            <p>
+                <span class="highlight">Unikernel（单内核）</span>是一种特殊的虚拟化技术，
+                将应用程序与操作系统内核编译成一个单一的、地址空间连续的镜像。
+                相比传统虚拟机，Unikernel 具有更小的体积、更快的启动速度和更低的资源开销。
+            </p>
+
+            <div class="architecture-diagram">
+                <div class="arch-layer">
+                    <div class="arch-layer-title">📦 传统架构 vs Unikernel</div>
+                    <div class="arch-components">
+                        <div class="arch-component">应用 A</div>
+                        <div class="arch-component">应用 B</div>
+                        <div class="arch-component">应用 C</div>
+                    </div>
+                </div>
+                <div class="arch-arrow">⬇️</div>
+                <div class="arch-layer">
+                    <div class="arch-layer-title">🖥️ 传统虚拟机</div>
+                    <div class="arch-components">
+                        <div class="arch-component">Guest OS</div>
+                        <div class="arch-component">Guest OS</div>
+                        <div class="arch-component">Guest OS</div>
+                    </div>
+                </div>
+                <div class="arch-arrow">⬇️</div>
+                <div class="arch-layer">
+                    <div class="arch-layer-title">⚡ Unikernel</div>
+                    <div class="arch-components">
+                        <div class="arch-component">App+Kernel</div>
+                        <div class="arch-component">App+Kernel</div>
+                        <div class="arch-component">App+Kernel</div>
+                    </div>
+                </div>
+            </div>
+
+            <h3>5.2 主流 Unikernel 框架</h3>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>框架</th>
+                            <th>语言</th>
+                            <th>Hypervisor</th>
+                            <th>特点</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>MirageOS</strong></td>
+                            <td>OCaml</td>
+                            <td>Xen/KVM</td>
+                            <td>最成熟的 Unikernel 框架</td>
+                        </tr>
+                        <tr>
+                            <td><strong>IncludeOS</strong></td>
+                            <td>C++</td>
+                            <td>KVM/VMware</td>
+                            <td>C++ 生态，易于移植</td>
+                        </tr>
+                        <tr>
+                            <td><strong>OSv</strong></td>
+                            <td>C++</td>
+                            <td>KVM/Xen</td>
+                            <td>兼容 Linux API</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Nanos</strong></td>
+                            <td>Go</td>
+                            <td>KVM</td>
+                            <td>Go 语言原生支持</td>
+                        </tr>
+                        <tr>
+                            <td><strong>ClickOS</strong></td>
+                            <td>C</td>
+                            <td>Xen</td>
+                            <td>网络功能虚拟化</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>5.3 Nanos Unikernel 示例</h3>
+
+            <div class="code-block">
+                <span class="code-label">Nanos Go 应用编译</span>
+                <pre><span class="comment"># 1. 编写 Go 应用</span>
+<span class="comment">// main.go</span>
+<span class="keyword">package</span> main
+
+<span class="keyword">import</span> (
+    <span class="string">"fmt"</span>
+    <span class="string">"net/http"</span>
+)
+
+<span class="keyword">func</span> <span class="function">handler</span>(w http.ResponseWriter, r *http.Request) {
+    fmt.Fprintf(w, <span class="string">"Hello from Unikernel!"</span>)
+}
+
+<span class="keyword">func</span> <span class="function">main</span>() {
+    http.HandleFunc(<span class="string">"/"</span>, handler)
+    http.ListenAndServe(<span class="string">":8080"</span>, <span class="keyword">nil</span>)
+}
+
+<span class="comment"># 2. 编译为 Unikernel 镜像</span>
+$ ops build -t nanos main.go
+
+<span class="comment"># 3. 运行镜像</span>
+$ ops run -p 8080 main
+
+<span class="comment"># 4. 镜像大小对比</span>
+传统 Docker 镜像：~50MB
+Nanos Unikernel:  ~8MB</pre>
+            </div>
+
+            <h3>5.4 适用场景与限制</h3>
+
+            <div class="tip-box tip-info">
+                <div class="tip-title">💡 Unikernel 适用场景</div>
+                <div class="tip-content">
+                    <ul>
+                        <li><strong>适合：</strong>单一功能服务、网络功能、边缘计算、高并发场景</li>
+                        <li><strong>不适合：</strong>需要动态加载代码、多进程协作、复杂系统调用</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="tip-box tip-warning">
+                <div class="tip-title">⚠️ Unikernel 限制</div>
+                <div class="tip-content">
+                    <ul>
+                        <li>调试困难：缺少传统操作系统的调试工具</li>
+                        <li>生态有限：支持的语言和框架较少</li>
+                        <li>学习曲线：需要理解 Unikernel 架构</li>
+                        <li>工具链不成熟：相比 Docker/K8s 生态差距较大</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- 第 6 节 -->
+        <section id="section6" class="section">
+            <h2>6. 三大技术对比与选型指南</h2>
+
+            <h3>6.1 综合对比</h3>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>维度</th>
+                            <th>Docker Sandbox</th>
+                            <th>MicroVM</th>
+                            <th>Unikernel</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>隔离级别</strong></td>
+                            <td>进程级（Namespaces）</td>
+                            <td>硬件级（KVM）</td>
+                            <td>应用级（编译时）</td>
+                        </tr>
+                        <tr>
+                            <td><strong>启动时间</strong></td>
+                            <td>100-500ms</td>
+                            <td>< 125ms</td>
+                            <td>< 50ms</td>
+                        </tr>
+                        <tr>
+                            <td><strong>内存开销</strong></td>
+                            <td>~10MB</td>
+                            <td>< 5MB</td>
+                            <td>< 10MB</td>
+                        </tr>
+                        <tr>
+                            <td><strong>安全性</strong></td>
+                            <td>⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>兼容性</strong></td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>⭐⭐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>易用性</strong></td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐</td>
+                            <td>⭐⭐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>生态成熟度</strong></td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>⭐⭐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>适用场景</strong></td>
+                            <td>通用代码执行</td>
+                            <td>高安全需求</td>
+                            <td>专用服务</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>6.2 选型决策树</h3>
+
+            <div class="tip-box tip-success">
+                <div class="tip-title">✅ 选型指南</div>
+                <div class="tip-content">
+                    <p><strong>选择 Docker Sandbox 如果：</strong></p>
+                    <ul>
+                        <li>需要快速开发和部署</li>
+                        <li>团队熟悉 Docker 生态</li>
+                        <li>安全要求中等</li>
+                        <li>需要运行多种语言和框架</li>
+                    </ul>
+                    <p><strong>选择 MicroVM 如果：</strong></p>
+                    <ul>
+                        <li>安全是首要考虑因素</li>
+                        <li>需要硬件级隔离</li>
+                        <li>可以接受一定的复杂性</li>
+                        <li>运行环境相对固定</li>
+                    </ul>
+                    <p><strong>选择 Unikernel 如果：</strong></p>
+                    <ul>
+                        <li>追求极致性能和启动速度</li>
+                        <li>应用功能单一固定</li>
+                        <li>愿意投入学习成本</li>
+                        <li>边缘计算等资源受限场景</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- 第 7 节 -->
+        <section id="section7" class="section">
+            <h2>7. 企业级 AI Agent 系统实战</h2>
+
+            <h3>7.1 混合沙箱架构</h3>
+
+            <p>
+                在企业级 AI Agent 系统中，通常采用<span class="highlight">混合沙箱架构</span>，
+                根据任务的安全等级和资源需求，动态选择合适的沙箱技术。
+            </p>
+
+            <div class="architecture-diagram">
+                <div class="arch-layer">
+                    <div class="arch-layer-title">🌐 请求入口层</div>
+                    <div class="arch-components">
+                        <div class="arch-component">API Gateway</div>
+                        <div class="arch-component">认证授权</div>
+                        <div class="arch-component">请求分类</div>
+                    </div>
+                </div>
+                <div class="arch-arrow">⬇️</div>
+                <div class="arch-layer">
+                    <div class="arch-layer-title">🎯 沙箱调度层</div>
+                    <div class="arch-components">
+                        <div class="arch-component">安全等级评估</div>
+                        <div class="arch-component">资源需求分析</div>
+                        <div class="arch-component">沙箱类型选择</div>
+                    </div>
+                </div>
+                <div class="arch-arrow">⬇️</div>
+                <div class="arch-layer">
+                    <div class="arch-layer-title">📦 沙箱执行层</div>
+                    <div class="arch-components">
+                        <div class="arch-component">Docker Pool</div>
+                        <div class="arch-component">Firecracker Pool</div>
+                        <div class="arch-component">Unikernel Pool</div>
+                    </div>
+                </div>
+            </div>
+
+            <h3>7.2 代码执行服务实现</h3>
+
+            <div class="code-block">
+                <span class="code-label">沙箱调度器实现</span>
+                <pre><span class="keyword">from</span> enum <span class="keyword">import</span> Enum
+<span class="keyword">from</span> typing <span class="keyword">import</span> Optional, Type
+<span class="keyword">from</span> abc <span class="keyword">import</span> ABC, abstractmethod
+
+<span class="keyword">class</span> <span class="class">SecurityLevel</span>(Enum):
+    <span class="string">"""安全等级"""</span>
+    LOW = <span class="string">"low"</span>      <span class="comment"># 可信代码，Docker</span>
+    MEDIUM = <span class="string">"medium"</span> <span class="comment"># 半可信，Docker+ 限制</span>
+    HIGH = <span class="string">"high"</span>    <span class="comment"># 不可信，MicroVM</span>
+    CRITICAL = <span class="string">"critical"</span> <span class="comment"># 高危，Unikernel</span>
+
+<span class="keyword">class</span> <span class="class">SandboxProvider</span>(ABC):
+    <span class="string">"""沙箱提供者接口"""</span>
+    
+    @abstractmethod
+    <span class="keyword">async def</span> <span class="function">create</span>(self, config: dict) -> <span class="string">"Sandbox"</span>:
+        <span class="keyword">pass</span>
+    
+    @abstractmethod
+    <span class="keyword">async def</span> <span class="function">destroy</span>(self, sandbox: <span class="string">"Sandbox"</span>):
+        <span class="keyword">pass</span>
+
+<span class="keyword">class</span> <span class="class">SandboxScheduler</span>:
+    <span class="string">"""沙箱调度器"""</span>
+    
+    <span class="keyword">def</span> <span class="function">__init__</span>(self):
+        self.providers: dict[SecurityLevel, SandboxProvider] = {
+            SecurityLevel.LOW: DockerProvider(),
+            SecurityLevel.MEDIUM: DockerProvider(security_enhanced=<span class="keyword">True</span>),
+            SecurityLevel.HIGH: FirecrackerProvider(),
+            SecurityLevel.CRITICAL: UnikernelProvider()
+        }
+    
+    <span class="keyword">async def</span> <span class="function">schedule</span>(self, code: <span class="keyword">str</span>, context: dict) -> Sandbox:
+        <span class="string">"""根据代码和上下文选择合适的沙箱"""</span>
+        <span class="comment"># 1. 评估安全等级</span>
+        security_level = <span class="keyword">await</span> self._assess_security(code, context)
+        
+        <span class="comment"># 2. 选择沙箱提供者</span>
+        provider = self.providers[security_level]
+        
+        <span class="comment"># 3. 创建沙箱</span>
+        config = self._build_config(security_level, context)
+        sandbox = <span class="keyword">await</span> provider.create(config)
+        
+        <span class="keyword">return</span> sandbox
+    
+    <span class="keyword">async def</span> <span class="function">_assess_security</span>(self, code: <span class="keyword">str</span>, context: dict) -> SecurityLevel:
+        <span class="string">"""评估代码安全等级"""</span>
+        <span class="comment"># 基于代码特征、来源、用户信任度等评估</span>
+        <span class="keyword">if</span> context.get(<span class="string">"trusted_source"</span>):
+            <span class="keyword">return</span> SecurityLevel.LOW
+        <span class="keyword">elif</span> <span class="keyword">self</span>._contains_dangerous_patterns(code):
+            <span class="keyword">return</span> SecurityLevel.HIGH
+        <span class="keyword">else</span>:
+            <span class="keyword">return</span> SecurityLevel.MEDIUM</pre>
+            </div>
+        </section>
+
+        <!-- 第 8 节 -->
+        <section id="section8" class="section">
+            <h2>8. 安全加固与最佳实践</h2>
+
+            <h3>8.1 多层防御策略</h3>
+
+            <ul>
+                <li><strong>第一层：代码审查</strong> - 静态分析、模式匹配</li>
+                <li><strong>第二层：沙箱隔离</strong> - 资源限制、系统调用过滤</li>
+                <li><strong>第三层：运行时监控</strong> - 异常检测、行为分析</li>
+                <li><strong>第四层：审计日志</strong> - 完整记录、可追溯</li>
+            </ul>
+
+            <h3>8.2 seccomp-bpf 配置</h3>
+
+            <div class="code-block">
+                <span class="code-label">seccomp 安全配置</span>
+                <pre>{
+  <span class="string">"defaultAction"</span>: <span class="string">"SCMP_ACT_ERRNO"</span>,
+  <span class="string">"architectures"</span>: [<span class="string">"SCMP_ARCH_X86_64"</span>],
+  <span class="string">"syscalls"</span>: [
+    {
+      <span class="string">"names"</span>: [
+        <span class="string">"accept"</span>, <span class="string">"access"</span>, <span class="string">"alarm"</span>, <span class="string">"bind"</span>,
+        <span class="string">"brk"</span>, <span class="string">"close"</span>, <span class="string">"connect"</span>, <span class="string">"dup"</span>,
+        <span class="string">"execve"</span>, <span class="string">"exit"</span>, <span class="string">"fstat"</span>, <span class="string">"getpid"</span>,
+        <span class="string">"getuid"</span>, <span class="string">"listen"</span>, <span class="string">"mmap"</span>, <span class="string">"open"</span>,
+        <span class="string">"read"</span>, <span class="string">"recvfrom"</span>, <span class="string">"sendto"</span>, <span class="string">"socket"</span>,
+        <span class="string">"write"</span>
+      ],
+      <span class="string">"action"</span>: <span class="string">"SCMP_ACT_ALLOW"</span>
+    }
+  ]
+}</pre>
+            </div>
+
+            <h3>8.3 监控与告警</h3>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>监控指标</th>
+                            <th>告警阈值</th>
+                            <th>响应措施</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>CPU 使用率</strong></td>
+                            <td>> 90% 持续 10s</td>
+                            <td>终止沙箱，记录日志</td>
+                        </tr>
+                        <tr>
+                            <td><strong>内存使用率</strong></td>
+                            <td>> 95%</td>
+                            <td>OOM Kill，告警</td>
+                        </tr>
+                        <tr>
+                            <td><strong>系统调用异常</strong></td>
+                            <td>被拒绝调用 > 10 次</td>
+                            <td>立即终止，安全审计</td>
+                        </tr>
+                        <tr>
+                            <td><strong>网络访问</strong></td>
+                            <td>任何外联尝试</td>
+                            <td>阻断，告警，审计</td>
+                        </tr>
+                        <tr>
+                            <td><strong>执行超时</strong></td>
+                            <td>> 配置超时时间</td>
+                            <td>强制终止，记录</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 第 9 节 -->
+        <section id="section9" class="section">
+            <h2>9. 总结与未来展望</h2>
+
+            <h3>9.1 核心要点回顾</h3>
+
+            <ul>
+                <li><strong>Docker Sandbox</strong>：易用性好，生态成熟，适合通用场景</li>
+                <li><strong>MicroVM</strong>：安全隔离强，性能优秀，适合高安全需求</li>
+                <li><strong>Unikernel</strong>：启动最快，开销最低，适合专用服务</li>
+                <li><strong>混合架构</strong>：根据安全等级动态选择沙箱类型</li>
+                <li><strong>多层防御</strong>：代码审查 + 沙箱隔离 + 运行时监控 + 审计日志</li>
+            </ul>
+
+            <h3>9.2 技术趋势展望</h3>
+
+            <div class="tip-box tip-info">
+                <div class="tip-title">🚀 未来发展方向</div>
+                <div class="tip-content">
+                    <ul>
+                        <li><strong>WASM 沙箱：</strong>WebAssembly 提供语言无关的安全执行环境</li>
+                        <li><strong>eBPF 监控：</strong>内核级可观测性，无侵入监控</li>
+                        <li><strong>机密计算：</strong>基于 TEE 的硬件级安全隔离</li>
+                        <li><strong>智能调度：</strong>基于 ML 的沙箱类型自动选择</li>
+                        <li><strong>边缘沙箱：</strong>面向边缘计算的超轻量沙箱</li>
+                    </ul>
+                </div>
+            </div>
+
+            <blockquote>
+                <p>
+                    "沙箱技术是 AI Agent 系统的安全基石，
+                    选择合适的沙箱技术需要在安全性、性能、易用性之间找到最佳平衡点。
+                    没有银弹，只有最适合的方案。"
+                </p>
+            </blockquote>
+        </section>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <p>
+            🔐 企业级 AI Agent 系统开发实战：轻量级沙箱技术深度研究报告 | 
+            技术深度文章 | 
+            2025 年 2 月
+        </p>
+        <p style="margin-top: 15px; font-size: 13px;">
+            本文档基于开源项目文档和实际项目经验整理，仅供参考学习
+        </p>
+        <p style="margin-top: 15px; font-size: 12px; color: #64748b;">
+            安全执行 · 隔离防护 · 性能优化
+        </p>
+    </footer>
+
+    <script>
+        // 滚动进度条
+        window.addEventListener('scroll', () => {
+            const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+            const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+            const scrolled = (winScroll / height) * 100;
+            document.getElementById('progressFill').style.width = scrolled + '%';
+        });
+
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

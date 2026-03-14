@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw + Claude Code 端到端研发自动化系统 - Grafana 监控面板</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #111217;
+            --bg-secondary: #181b1f;
+            --bg-panel: #1e2229;
+            --text-primary: #dfe1e5;
+            --text-secondary: #9fa7b5;
+            --accent-blue: #5794f2;
+            --accent-green: #73bf69;
+            --accent-red: #f2495c;
+            --accent-orange: #ff9830;
+            --accent-purple: #b126d4;
+            --accent-cyan: #28a7c7;
+            --border-color: #2d333b;
+            --grid-gap: 12px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #1a1f2e 0%, #0d1117 100%);
+            padding: 16px 24px;
+            border-bottom: 2px solid var(--accent-blue);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(87, 148, 242, 0.2);
+        }
+
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header-logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 20px;
+            box-shadow: 0 0 15px rgba(87, 148, 242, 0.5);
+        }
+
+        .header h1 {
+            font-size: 22px;
+            font-weight: 600;
+            background: linear-gradient(90deg, #fff, var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-subtitle {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 24px;
+        }
+
+        .stat-item {
+            text-align: right;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--accent-green);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .refresh-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .refresh-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* Main Grid */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: auto auto auto;
+            gap: var(--grid-gap);
+            padding: var(--grid-gap);
+            max-width: 1920px;
+            margin: 0 auto;
+        }
+
+        /* Panel Base */
+        .panel {
+            background: var(--bg-panel);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .panel:hover {
+            border-color: var(--accent-blue);
+            box-shadow: 0 4px 20px rgba(87, 148, 242, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .panel-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .panel-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-icon {
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .panel-content {
+            padding: 16px;
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 280px;
+        }
+
+        .chart-container-small {
+            height: 180px;
+        }
+
+        /* Status Indicators */
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .status-card {
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            padding: 14px;
+            text-align: center;
+            border-left: 3px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .status-card.active {
+            border-left-color: var(--accent-green);
+            background: rgba(115, 191, 105, 0.08);
+        }
+
+        .status-card.warning {
+            border-left-color: var(--accent-orange);
+            background: rgba(255, 152, 48, 0.08);
+        }
+
+        .status-card.error {
+            border-left-color: var(--accent-red);
+            background: rgba(242, 73, 92, 0.08);
+        }
+
+        .status-name {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .status-value {
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .status-active { color: var(--accent-green); }
+        .status-warning { color: var(--accent-orange); }
+        .status-error { color: var(--accent-red); }
+
+        /* Progress Bar */
+        .progress-section {
+            margin-bottom: 16px;
+        }
+
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .progress-bar-bg {
+            height: 8px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        /* Pipeline Flow */
+        .pipeline-flow {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 10px;
+            position: relative;
+        }
+
+        .pipeline-line {
+            position: absolute;
+            top: 50%;
+            left: 50px;
+            right: 50px;
+            height: 3px;
+            background: var(--border-color);
+            transform: translateY(-50%);
+            z-index: 0;
+        }
+
+        .pipeline-progress-line {
+            position: absolute;
+            top: 50%;
+            left: 50px;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));
+            transform: translateY(-50%);
+            z-index: 1;
+            transition: width 1s ease;
+            border-radius: 2px;
+        }
+
+        .pipeline-node {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .node-circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-secondary);
+            border: 3px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .node-circle.completed {
+            border-color: var(--accent-green);
+            background: rgba(115, 191, 105, 0.2);
+            box-shadow: 0 0 15px rgba(115, 191, 105, 0.4);
+        }
+
+        .node-circle.processing {
+            border-color: var(--accent-blue);
+            background: rgba(87, 148, 242, 0.2);
+            box-shadow: 0 0 15px rgba(87, 148, 242, 0.4);
+            animation: nodePulse 1.5s infinite;
+        }
+
+        .node-circle.pending {
+            border-color: var(--border-color);
+            opacity: 0.5;
+        }
+
+        @keyframes nodePulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .node-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-align: center;
+            max-width: 80px;
+        }
+
+        /* Metric Cards */
+        .metric-cards {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .metric-card {
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .metric-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .metric-trend {
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        .trend-up { color: var(--accent-green); }
+        .trend-down { color: var(--accent-red); }
+
+        /* Log Console */
+        .log-console {
+            background: #0d1117;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+        }
+
+        .log-entry {
+            margin-bottom: 6px;
+            line-height: 1.5;
+            display: flex;
+            gap: 12px;
+        }
+
+        .log-time {
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+
+        .log-level {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .log-info { background: rgba(87, 148, 242, 0.2); color: var(--accent-blue); }
+        .log-success { background: rgba(115, 191, 105, 0.2); color: var(--accent-green); }
+        .log-warning { background: rgba(255, 152, 48, 0.2); color: var(--accent-orange); }
+        .log-error { background: rgba(242, 73, 92, 0.2); color: var(--accent-red); }
+
+        .log-message {
+            color: var(--text-primary);
+            word-break: break-word;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-secondary);
+        }
+
+        /* Responsive */
+        @media (max-width: 1400px) {
+            .dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 900px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            .header {
+                flex-direction: column;
+                gap: 16px;
+                text-align: center;
+            }
+            .header-stats {
+                justify-content: center;
+            }
+        }
+
+        /* Animations */
+        .fade-in {
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="header-title">
+            <div class="header-logo">OC</div>
+            <div>
+                <h1>OpenClaw + Claude Code 端到端研发自动化系统</h1>
+                <div class="header-subtitle">Grafana 监控可视化面板 | 全流程自动化研发系统</div>
+            </div>
+        </div>
+        <div class="header-stats">
+            <div class="stat-item">
+                <div class="stat-value" id="active-pipelines">12</div>
+                <div class="stat-label">活跃流水线</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="completed-today">847</div>
+                <div class="stat-label">今日完成</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="success-rate">98.5%</div>
+                <div class="stat-label">成功率</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="avg-duration">4.2m</div>
+                <div class="stat-label">平均耗时</div>
+            </div>
+        </div>
+        <div class="refresh-indicator">
+            <div class="refresh-dot"></div>
+            <span>实时更新</span>
+        </div>
+    </div>
+
+    <!-- Dashboard Grid -->
+    <div class="dashboard-grid">
+        <!-- Panel 1: 服务状态概览 -->
+        <div class="panel" style="grid-column: span 2;">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="panel-icon">🖥️</span>
+                    服务状态监控 (Service Status)
+                </div>
+            </div>
+            <div class="panel-content">
+                <div class="status-grid" id="service-status-grid">
+                    <!-- Dynamic content -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel 2: 流程进度总览 -->
+        <div class="panel" style="grid-column: span 2;">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="panel-icon">📊</span>
+                    流程进度分布 (Process Progress)
+                </div>
+            </div>
+            <div class="panel-content">
+                <div id="progress-chart" class="chart-container chart-container-small"></div>
+            </div>
+        </div>
+
+        <!-- Panel 3: 资源占用 - CPU/Memory -->
+        <div class="panel" style="grid-column: span 2;">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="panel-icon">⚡</span>
+                    系统资源占用 (Resource Usage)
+                </div>
+            </div>
+            <div class="panel-content">
+                <div class="metric-cards" style="margin-bottom: 16px;">
+                    <div class="metric-card">
+                        <div class="metric-value" style="color: var(--accent-blue);" id="cpu-usage">45.2%</div>
+                        <div class="metric-label">CPU 使用率</div>
+                        <div class="metric-trend trend-up">↑ 2.3%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" style="color: var(--accent-purple);" id="memory-usage">62.8%</div>
+                        <div class="metric-label">内存使用率</div>
+                        <div class="metric-trend trend-down">↓ 1.5%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" style="color: var(--accent-cyan);" id="token-usage">12.4K</div>
+                        <div class="metric-label">Token/s</div>
+                        <div class="metric-trend trend-up">↑ 8.7%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" style="color: var(--accent-orange);" id="concurrent-tasks">28</div>
+                        <div class="metric-label">并发任务</div>
+                        <div class="metric-trend trend-up">↑ 3</div>
+                    </div>
+                </div>
+                <div id="resource-chart" class="chart-container chart-container-small"></div>
+            </div>
+        </div>
+
+        <!-- Panel 4: 流水线实时状态 -->
+        <div class="panel" style="grid-column: span 2;">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="panel-icon">🔄</span>
+                    流水线实时状态 (Pipeline Flow)
+                </div>
+            </div>
+            <div class="panel-content">
+                <div class="pipeline-flow">
+                    <div class="pipeline-line"></div>
+                    <div class="pipeline-progress-line" id="pipeline-progress"></div>
+                    <div class="pipeline-node">
+                        <div class="node-circle completed">✓</div>
+                        <div class="node-label">需求分析</div>
+                    </div>
+                    <div class="pipeline-node">
+                        <div class="node-circle completed">✓</div>
+                        <div class="node-label">PRD 设计</div>
+                    </div>
+                    <div class="pipeline-node">
+                        <div class="node-circle completed">✓</div>
+                        <div class="node-label">技术方案</div>
+                    </div>
+                    <div class="pipeline-node">
+                        <div class="node-circle processing">⟳</div>
+                        <div class="node-label">AI Coding</div>
+                    </div>
+                    <div class="pipeline-node">
+                        <div class="node-circle pending">5</div>
+                        <div class="node-label">单元测试</div>
+                    </div>
+                    <div class="pipeline-node">
+                        <div class="node-circle pending">6</div>
+                        <div class="node-label">集成测试</div>
+                    </div>
+                    <div class="pipeline-node">
+                        <div class="node-circle pending">7</div>
+                        <div class="node-label">CI/CD 部署</div>
+                    </div>
+                    <div class="pipeline-node">
+                        <div class="node-circle pending">8</div>
+                        <div class="node-label">UI 验收</div>
+                    </div>
+                </div>
+                <div class="progress-section" style="margin-top: 20px;">
+                    <div class="progress-label">
+                        <span>当前任务：用户管理系统后端 API 开发</span>
+                        <span id="pipeline-percent">50%</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" style="width: 50%; background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));" id="main-progress"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel 5: Agent 性能指标 -->
+        <div class="panel" style="grid-column: span 2;">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="panel-icon">🤖</span>
+                    Agent 性能指标 (Agent Metrics)
+                </div>
+            </div>
+            <div class="panel-content">
+                <div id="agent-chart" class="chart-container chart-container-small"></div>
+            </div>
+        </div>
+
+        <!-- Panel 6: 实时日志 -->
+        <div class="panel" style="grid-column: span 2;">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="panel-icon">📝</span>
+                    系统实时日志 (Live Logs)
+                </div>
+            </div>
+            <div class="panel-content">
+                <div class="log-console" id="log-console">
+                    <!-- Dynamic logs -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel 7: 任务完成率趋势 -->
+        <div class="panel" style="grid-column: span 2;">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="panel-icon">📈</span>
+                    任务完成率趋势 (Success Rate Trend)
+                </div>
+            </div>
+            <div class="panel-content">
+                <div id="trend-chart" class="chart-container"></div>
+            </div>
+        </div>
+
+        <!-- Panel 8: 各阶段耗时分析 -->
+        <div class="panel" style="grid-column: span 2;">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="panel-icon">⏱️</span>
+                    各阶段耗时分析 (Stage Duration)
+                </div>
+            </div>
+            <div class="panel-content">
+                <div id="duration-chart" class="chart-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize charts
+        const progressChart = echarts.init(document.getElementById('progress-chart'));
+        const resourceChart = echarts.init(document.getElementById('resource-chart'));
+        const agentChart = echarts.init(document.getElementById('agent-chart'));
+        const trendChart = echarts.init(document.getElementById('trend-chart'));
+        const durationChart = echarts.init(document.getElementById('duration-chart'));
+
+        // Common chart options
+        const commonOption = {
+            backgroundColor: 'transparent',
+            textStyle: { fontFamily: 'Segoe UI, Roboto, Helvetica Neue, Arial' },
+            grid: { top: 30, right: 20, bottom: 20, left: 40, containLabel: true },
+            tooltip: {
+                trigger: 'axis',
+                backgroundColor: 'rgba(30, 34, 41, 0.95)',
+                borderColor: '#2d333b',
+                textStyle: { color: '#dfe1e5' },
+                axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(87, 148, 242, 0.1)' } }
+            }
+        };
+
+        // Service Status Data
+        const serviceStatusData = [
+            { name: '需求分析 Agent', status: 'active', value: '运行中' },
+            { name: 'PRD 设计 Agent', status: 'active', value: '运行中' },
+            { name: '后端架构 Agent', status: 'active', value: '运行中' },
+            { name: '前端架构 Agent', status: 'active', value: '运行中' },
+            { name: 'API 协议 Agent', status: 'active', value: '运行中' },
+            { name: 'Claude Code Agent', status: 'active', value: '处理中' },
+            { name: '单元测试 Agent', status: 'warning', value: '排队中' },
+            { name: '集成测试 Agent', status: 'pending', value: '等待中' },
+            { name: 'CI/CD Agent', status: 'active', value: '运行中' },
+            { name: 'K8S 部署 Agent', status: 'active', value: '运行中' },
+            { name: 'UI 测试 Agent', status: 'pending', value: '等待中' },
+            { name: '质量网关 Agent', status: 'active', value: '监控中' }
+        ];
+
+        function renderServiceStatus() {
+            const grid = document.getElementById('service-status-grid');
+            grid.innerHTML = serviceStatusData.map(item => `
+                <div class="status-card ${item.status} fade-in">
+                    <div class="status-name">${item.name}</div>
+                    <div class="status-value status-${item.status}">${item.value}</div>
+                </div>
+            `).join('');
+        }
+
+        // Progress Chart
+        const progressOption = {
+            ...commonOption,
+            tooltip: { trigger: 'item' },
+            series: [{
+                type: 'pie',
+                radius: ['40%', '70%'],
+                center: ['50%', '55%'],
+                itemStyle: {
+                    borderRadius: 6,
+                    borderColor: '#1e2229',
+                    borderWidth: 2
+                },
+                label: { color: '#dfe1e5', fontSize: 11 },
+                data: [
+                    { value: 342, name: '已完成', itemStyle: { color: '#73bf69' } },
+                    { value: 156, name: '进行中', itemStyle: { color: '#5794f2' } },
+                    { value: 48, name: '待处理', itemStyle: { color: '#ff9830' } },
+                    { value: 12, name: '失败', itemStyle: { color: '#f2495c' } }
+                ]
+            }]
+        };
+
+        // Resource Chart
+        const resourceOption = {
+            ...commonOption,
+            legend: { data: ['CPU', '内存', 'Token/s'], textStyle: { color: '#9fa7b5' }, top: 0 },
+            xAxis: {
+                type: 'category',
+                data: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'],
+                axisLine: { lineStyle: { color: '#2d333b' } },
+                axisLabel: { color: '#9fa7b5' }
+            },
+            yAxis: {
+                type: 'value',
+                splitLine: { lineStyle: { color: '#2d333b', type: 'dashed' } },
+                axisLabel: { color: '#9fa7b5' }
+            },
+            series: [
+                {
+                    name: 'CPU',
+                    type: 'line',
+                    smooth: true,
+                    data: [35, 42, 48, 52, 45, 38],
+                    itemStyle: { color: '#5794f2' },
+                    areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(87, 148, 242, 0.3)' }, { offset: 1, color: 'rgba(87, 148, 242, 0.05)' }]) }
+                },
+                {
+                    name: '内存',
+                    type: 'line',
+                    smooth: true,
+                    data: [58, 62, 65, 68, 63, 60],
+                    itemStyle: { color: '#b126d4' },
+                    areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(177, 38, 212, 0.3)' }, { offset: 1, color: 'rgba(177, 38, 212, 0.05)' }]) }
+                },
+                {
+                    name: 'Token/s',
+                    type: 'line',
+                    smooth: true,
+                    data: [8.2, 10.5, 12.8, 14.2, 11.6, 9.4],
+                    itemStyle: { color: '#28a7c7' },
+                    areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(40, 167, 199, 0.3)' }, { offset: 1, color: 'rgba(40, 167, 199, 0.05)' }]) }
+                }
+            ]
+        };
+
+        // Agent Chart
+        const agentOption = {
+            ...commonOption,
+            legend: { data: ['响应时间 (ms)', '任务吞吐量', '错误率 (%)'], textStyle: { color: '#9fa7b5' }, top: 0 },
+            xAxis: {
+                type: 'category',
+                data: ['需求', 'PRD', '后端', '前端', 'API', 'Coding', '测试', '部署'],
+                axisLine: { lineStyle: { color: '#2d333b' } },
+                axisLabel: { color: '#9fa7b5', rotate: 0, fontSize: 10 }
+            },
+            yAxis: [
+                { type: 'value', name: 'ms/个', splitLine: { lineStyle: { color: '#2d333b', type: 'dashed' } }, axisLabel: { color: '#9fa7b5' } },
+                { type: 'value', name: '个/min', splitLine: { show: false }, axisLabel: { color: '#9fa7b5' } }
+            ],
+            series: [
+                {
+                    name: '响应时间 (ms)',
+                    type: 'bar',
+                    data: [120, 150, 180, 165, 140, 220, 190, 175],
+                    itemStyle: { color: '#5794f2', borderRadius: [4, 4, 0, 0] }
+                },
+                {
+                    name: '任务吞吐量',
+                    type: 'bar',
+                    yAxisIndex: 1,
+                    data: [45, 38, 32, 35, 42, 28, 30, 36],
+                    itemStyle: { color: '#73bf69', borderRadius: [4, 4, 0, 0] }
+                },
+                {
+                    name: '错误率 (%)',
+                    type: 'line',
+                    yAxisIndex: 0,
+                    data: [1.2, 1.5, 2.1, 1.8, 1.4, 2.8, 2.3, 1.9],
+                    itemStyle: { color: '#f2495c' },
+                    lineStyle: { width: 3 }
+                }
+            ]
+        };
+
+        // Trend Chart
+        const trendOption = {
+            ...commonOption,
+            legend: { data: ['成功率', '完成率'], textStyle: { color: '#9fa7b5' }, top: 0 },
+            xAxis: {
+                type: 'category',
+                data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+                axisLine: { lineStyle: { color: '#2d333b' } },
+                axisLabel: { color: '#9fa7b5' }
+            },
+            yAxis: {
+                type: 'value',
+                min: 90,
+                max: 100,
+                splitLine: { lineStyle: { color: '#2d333b', type: 'dashed' } },
+                axisLabel: { color: '#9fa7b5', formatter: '{value}%' }
+            },
+            series: [
+                {
+                    name: '成功率',
+                    type: 'line',
+                    smooth: true,
+                    data: [97.2, 98.1, 97.8, 98.5, 98.9, 99.1, 98.5],
+                    itemStyle: { color: '#73bf69' },
+                    areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(115, 191, 105, 0.3)' }, { offset: 1, color: 'rgba(115, 191, 105, 0.05)' }]) }
+                },
+                {
+                    name: '完成率',
+                    type: 'line',
+                    smooth: true,
+                    data: [95.5, 96.2, 95.8, 97.1, 97.5, 98.2, 96.8],
+                    itemStyle: { color: '#5794f2' },
+                    areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(87, 148, 242, 0.3)' }, { offset: 1, color: 'rgba(87, 148, 242, 0.05)' }]) }
+                }
+            ]
+        };
+
+        // Duration Chart
+        const durationOption = {
+            ...commonOption,
+            xAxis: {
+                type: 'value',
+                name: '分钟',
+                splitLine: { lineStyle: { color: '#2d333b', type: 'dashed' } },
+                axisLabel: { color: '#9fa7b5' }
+            },
+            yAxis: {
+                type: 'category',
+                data: ['UI 验收', 'K8S 部署', 'CI 构建', '集成测试', '单元测试', 'AI Coding', 'API 设计', '技术方案', 'PRD 设计', '需求分析'],
+                axisLine: { lineStyle: { color: '#2d333b' } },
+                axisLabel: { color: '#9fa7b5', fontSize: 11 }
+            },
+            series: [{
+                type: 'bar',
+                data: [
+                    { value: 3.2, itemStyle: { color: '#28a7c7' } },
+                    { value: 4.5, itemStyle: { color: '#5794f2' } },
+                    { value: 2.8, itemStyle: { color: '#73bf69' } },
+                    { value: 5.6, itemStyle: { color: '#ff9830' } },
+                    { value: 3.9, itemStyle: { color: '#b126d4' } },
+                    { value: 8.2, itemStyle: { color: '#f2495c' } },
+                    { value: 2.1, itemStyle: { color: '#5794f2' } },
+                    { value: 4.3, itemStyle: { color: '#73bf69' } },
+                    { value: 3.5, itemStyle: { color: '#ff9830' } },
+                    { value: 2.8, itemStyle: { color: '#28a7c7' } }
+                ],
+                barWidth: '60%',
+                label: { show: true, position: 'right', color: '#dfe1e5', fontSize: 11 }
+            }]
+        };
+
+        // Apply options
+        progressChart.setOption(progressOption);
+        resourceChart.setOption(resourceOption);
+        agentChart.setOption(agentOption);
+        trendChart.setOption(trendOption);
+        durationChart.setOption(durationOption);
+
+        // Real-time logs
+        const logMessages = [
+            { level: 'INFO', message: '需求分析 Agent 完成 PRD 文档生成', color: 'log-info' },
+            { level: 'SUCCESS', message: '后端技术方案设计通过质量网关验证', color: 'log-success' },
+            { level: 'INFO', message: 'Claude Code Agent 开始生成 user_service.py', color: 'log-info' },
+            { level: 'WARNING', message: '单元测试队列积压：12 个任务等待执行', color: 'log-warning' },
+            { level: 'SUCCESS', message: 'API 接口协议自动生成完成：/api/v1/users', color: 'log-success' },
+            { level: 'INFO', message: 'K8S 部署 Agent 准备部署到 staging 环境', color: 'log-info' },
+            { level: 'ERROR', message: 'UI 自动化测试失败：元素 #login-btn 未找到', color: 'log-error' },
+            { level: 'INFO', message: 'CI/CD 流水线 #8472 启动构建', color: 'log-info' },
+            { level: 'SUCCESS', message: 'Docker 镜像构建成功：myapp:v2.3.1', color: 'log-success' },
+            { level: 'INFO', message: '人机协同节点：等待开发者确认数据库迁移脚本', color: 'log-info' }
+        ];
+
+        function addLog() {
+            const consoleEl = document.getElementById('log-console');
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('zh-CN', { hour12: false });
+            const randomLog = logMessages[Math.floor(Math.random() * logMessages.length)];
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry fade-in';
+            logEntry.innerHTML = `
+                <span class="log-time">[${timeStr}]</span>
+                <span class="log-level ${randomLog.color}">${randomLog.level}</span>
+                <span class="log-message">${randomLog.message}</span>
+            `;
+            
+            consoleEl.appendChild(logEntry);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+            
+            // Keep only last 50 logs
+            while (consoleEl.children.length > 50) {
+                consoleEl.removeChild(consoleEl.firstChild);
+            }
+        }
+
+        // Update metrics dynamically
+        function updateMetrics() {
+            // Update header stats
+            document.getElementById('active-pipelines').textContent = Math.floor(Math.random() * 10) + 8;
+            document.getElementById('completed-today').textContent = 847 + Math.floor(Math.random() * 20);
+            
+            // Update resource metrics
+            const cpu = (40 + Math.random() * 15).toFixed(1);
+            const memory = (58 + Math.random() * 12).toFixed(1);
+            const token = (10 + Math.random() * 8).toFixed(1);
+            const concurrent = Math.floor(20 + Math.random() * 15);
+            
+            document.getElementById('cpu-usage').textContent = cpu + '%';
+            document.getElementById('memory-usage').textContent = memory + '%';
+            document.getElementById('token-usage').textContent = token.toFixed(1) + 'K';
+            document.getElementById('concurrent-tasks').textContent = concurrent;
+
+            // Update pipeline progress
+            const progress = 45 + Math.floor(Math.random() * 15);
+            document.getElementById('pipeline-percent').textContent = progress + '%';
+            document.getElementById('main-progress').style.width = progress + '%';
+            document.getElementById('pipeline-progress').style.width = (progress * 0.8) + '%';
+        }
+
+        // Resize charts on window resize
+        window.addEventListener('resize', () => {
+            progressChart.resize();
+            resourceChart.resize();
+            agentChart.resize();
+            trendChart.resize();
+            durationChart.resize();
+        });
+
+        // Initialize
+        renderServiceStatus();
+        
+        // Add initial logs
+        for (let i = 0; i < 8; i++) {
+            addLog();
+        }
+
+        // Start real-time updates
+        setInterval(() => {
+            updateMetrics();
+            addLog();
+        }, 3000);
+
+        // Simulate pipeline state changes
+        setInterval(() => {
+            const nodes = document.querySelectorAll('.node-circle');
+            const states = ['completed', 'processing', 'pending'];
+            
+            nodes.forEach((node, index) => {
+                if (index < 3) {
+                    node.className = 'node-circle completed';
+                    node.textContent = '✓';
+                } else if (index === 3) {
+                    node.className = 'node-circle processing';
+                    node.textContent = '⟳';
+                } else {
+                    node.className = 'node-circle pending';
+                    node.textContent = index + 1;
+                }
+            });
+        }, 5000);
+
+        // Initial render complete
+        console.log('Grafana Dashboard initialized successfully');
+    </script>
+</body>
+</html>

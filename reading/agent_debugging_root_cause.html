@@ -1,0 +1,1755 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent 调试、故障定位与根因分析</title>
+    <style>
+        :root {
+            --debug-blue: #0284c7;
+            --fault-purple: #a855f7;
+            --root-gold: #ca8a04;
+            --analyze-green: #16a34a;
+            --fix-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-debug: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--debug-blue), var(--fault-purple), var(--root-gold), var(--analyze-green), var(--fix-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-debug);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: debugRotate 135s linear infinite;
+        }
+        
+        @keyframes debugRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .debug-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 44px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 9px 24px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.94em;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-debug {
+            background: linear-gradient(135deg, var(--debug-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-fault {
+            background: linear-gradient(135deg, var(--fault-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-root {
+            background: linear-gradient(135deg, var(--root-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-analyze {
+            background: linear-gradient(135deg, var(--analyze-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-fix {
+            background: linear-gradient(135deg, var(--fix-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.25em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 25px;
+            text-shadow: 0 0 54px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.3;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.72em;
+            color: var(--text-secondary);
+            margin-bottom: 42px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .debug-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            margin: 52px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .debug-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 25px 32px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 145px;
+        }
+        
+        .debug-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .debug-box.debug {
+            border-color: var(--debug-blue);
+            box-shadow: 0 15px 34px rgba(2, 132, 199, 0.35);
+        }
+        
+        .debug-box.fault {
+            border-color: var(--fault-purple);
+            box-shadow: 0 15px 34px rgba(168, 85, 247, 0.35);
+        }
+        
+        .debug-box.root {
+            border-color: var(--root-gold);
+            box-shadow: 0 15px 34px rgba(202, 138, 4, 0.35);
+        }
+        
+        .debug-box.analyze {
+            border-color: var(--analyze-green);
+            box-shadow: 0 15px 34px rgba(22, 163, 74, 0.35);
+        }
+        
+        .debug-box.fix {
+            border-color: var(--fix-red);
+            box-shadow: 0 15px 34px rgba(220, 38, 38, 0.35);
+        }
+        
+        .debug-label {
+            font-size: 1.36em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 8px;
+        }
+        
+        .debug-box.debug .debug-label { color: var(--debug-blue); }
+        .debug-box.fault .debug-label { color: var(--fault-purple); }
+        .debug-box.root .debug-label { color: var(--root-gold); }
+        .debug-box.analyze .debug-label { color: var(--analyze-green); }
+        .debug-box.fix .debug-label { color: var(--fix-red); }
+        
+        .debug-desc {
+            font-size: 0.75em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.63;
+        }
+        
+        .debug-arrow {
+            font-size: 1.64em;
+            color: var(--root-gold);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 52px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 13px 25px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 17px 44px var(--border-glow);
+            border-color: var(--debug-blue);
+        }
+        
+        .meta-label {
+            color: var(--debug-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 6px;
+            font-size: 0.75em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.95em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 44px 40px;
+            margin-bottom: 64px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 42px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.65em;
+            color: var(--debug-blue);
+            margin-bottom: 34px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 24px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 34px 0 22px 0;
+            padding: 16px 25px;
+            border-radius: 18px;
+            font-size: 1.54em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--debug-blue); 
+            color: var(--debug-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--fault-purple); 
+            color: var(--fault-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--root-gold); 
+            color: var(--root-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--analyze-green); 
+            color: var(--analyze-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--fix-red); 
+            color: var(--fix-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 12px;
+        }
+        
+        .toc-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.95em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 11px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--debug-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--debug-blue);
+            text-shadow: 0 0 8px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 54px 44px;
+            margin-bottom: 44px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 5px 32px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 68px var(--border-glow), 0 0 52px rgba(2, 132, 199, 0.2);
+            border-color: var(--debug-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.45em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 32px;
+            border-bottom: 4px solid var(--debug-blue);
+            padding-bottom: 16px;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 34px 0;
+        }
+        
+        .section-title {
+            font-size: 1.84em;
+            color: var(--debug-blue);
+            margin-bottom: 22px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--fault-purple);
+            font-size: 0.62em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.04;
+            font-size: 1.02em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 22px;
+        }
+        
+        .debug-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+            gap: 18px;
+            margin: 34px 0;
+        }
+        
+        .debug-box-card {
+            padding: 27px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .debug-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .debug-box-card.debug {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--debug-blue);
+            box-shadow: 0 8px 27px rgba(2, 132, 199, 0.3);
+        }
+        
+        .debug-box-card.fault {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--fault-purple);
+            box-shadow: 0 8px 27px rgba(168, 85, 247, 0.3);
+        }
+        
+        .debug-box-card.root {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--root-gold);
+            box-shadow: 0 8px 27px rgba(202, 138, 4, 0.3);
+        }
+        
+        .debug-box-card.analyze {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--analyze-green);
+            box-shadow: 0 8px 27px rgba(22, 163, 74, 0.3);
+        }
+        
+        .debug-box-card.fix {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--fix-red);
+            box-shadow: 0 8px 27px rgba(220, 38, 38, 0.3);
+        }
+        
+        .debug-box-title {
+            font-size: 1.59em;
+            font-weight: 800;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .debug-box-card.debug .debug-box-title { color: var(--debug-blue); }
+        .debug-box-card.fault .debug-box-title { color: var(--fault-purple); }
+        .debug-box-card.root .debug-box-title { color: var(--root-gold); }
+        .debug-box-card.analyze .debug-box-title { color: var(--analyze-green); }
+        .debug-box-card.fix .debug-box-title { color: var(--fix-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 32px 38px;
+            border-left: 7px solid var(--debug-blue);
+            border-radius: 20px;
+            margin: 32px 0;
+            box-shadow: 0 8px 27px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--debug-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 14px;
+            padding: 27px;
+            margin: 30px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 25px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.82em;
+            line-height: 1.64;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--debug-blue);
+            font-weight: 700;
+            margin-bottom: 13px;
+            font-family: 'Georgia', serif;
+            font-size: 0.99em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 32px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 14px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 12px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--debug-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.03px;
+            font-size: 0.82em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--debug-blue);
+            padding-left: 25px;
+            margin: 28px 0;
+            color: var(--text-secondary);
+            font-size: 1.05em;
+            font-family: 'Georgia', serif;
+            line-height: 1.94;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 13px;
+            color: var(--fault-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 22px 0;
+            padding-left: 32px;
+        }
+        
+        li {
+            margin-bottom: 11px;
+            line-height: 1.94;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 64px 34px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 104px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 780px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 28px 18px;
+            }
+            
+            .book-title {
+                font-size: 2.02em;
+            }
+            
+            .debug-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .debug-diagram {
+                flex-direction: column;
+            }
+            
+            .debug-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="debug-spectrum">
+                <div class="spectrum-item spectrum-debug">🔵 调试技术</div>
+                <div class="spectrum-item spectrum-fault">🟣 故障检测</div>
+                <div class="spectrum-item spectrum-root">🟡 根因分析</div>
+                <div class="spectrum-item spectrum-analyze">🟢 诊断分析</div>
+                <div class="spectrum-item spectrum-fix">🔴 修复验证</div>
+            </div>
+            <h1 class="book-title">Agent 调试、故障定位与根因分析</h1>
+            <h2 class="book-subtitle">从现象到本质的深度诊断之道</h2>
+            
+            <div class="debug-diagram">
+                <div class="debug-box debug">
+                    <span class="debug-label">🔵 调试技术</span>
+                    <span class="debug-desc">断点调试<br>日志分析<br>追踪回放</span>
+                </div>
+                <div class="debug-arrow">→</div>
+                <div class="debug-box fault">
+                    <span class="debug-label">🟣 故障检测</span>
+                    <span class="debug-desc">异常检测<br>告警触发<br>故障分类</span>
+                </div>
+                <div class="debug-arrow">→</div>
+                <div class="debug-box root">
+                    <span class="debug-label">🟡 根因分析</span>
+                    <span class="debug-desc">5Why 分析<br>鱼骨图<br>故障树</span>
+                </div>
+                <div class="debug-arrow">→</div>
+                <div class="debug-box analyze">
+                    <span class="debug-label">🟢 诊断分析</span>
+                    <span class="debug-desc">假设验证<br>对比分析<br>隔离测试</span>
+                </div>
+                <div class="debug-arrow">→</div>
+                <div class="debug-box fix">
+                    <span class="debug-label">🔴 修复验证</span>
+                    <span class="debug-desc">修复方案<br>回归测试<br>效果验证</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">调试诊断版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">调试·检测·根因·诊断·修复</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 调试理论基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：调试定位——Agent 运维的核心能力</a></li>
+                <li><a href="#chapter1">第 1 章 Agent 调试挑战</a></li>
+                <li><a href="#chapter2">第 2 章 调试方法论体系</a></li>
+                <li><a href="#chapter3">第 3 章 非确定性系统调试策略</a></li>
+                
+                <div class="toc-part part2">第二编 故障检测与诊断</div>
+                <li><a href="#chapter4">第 4 章 故障检测机制</a></li>
+                <li><a href="#chapter5">第 5 章 故障分类与定级</a></li>
+                <li><a href="#chapter6">第 6 章 诊断流程与方法</a></li>
+                <li><a href="#chapter7">第 7 章 常见故障模式分析</a></li>
+                
+                <div class="toc-part part3">第三编 根因分析方法论</div>
+                <li><a href="#chapter8">第 8 章 5Why 根因分析法</a></li>
+                <li><a href="#chapter9">第 9 章 鱼骨图与故障树</a></li>
+                <li><a href="#chapter10">第 10 章 对比分析与隔离测试</a></li>
+                <li><a href="#chapter11">第 11 章 假设驱动诊断</a></li>
+                
+                <div class="toc-part part4">第四编 调试工具与平台</div>
+                <li><a href="#chapter12">第 12 章 调试工具链设计</a></li>
+                <li><a href="#chapter13">第 13 章 LangSmith 调试平台</a></li>
+                <li><a href="#chapter14">第 14 章 分布式追踪调试</a></li>
+                <li><a href="#chapter15">第 15 章 自动化诊断系统</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 34px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 调试检查清单</a></li>
+                <li><a href="#appendix-b">附录 B 故障模式库</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：调试定位——Agent 运维的核心能力</h2>
+            <div class="content">
+                <p>随着 AI Agent 系统在生产环境的大规模部署，一个根本性挑战日益凸显：<strong>当 Agent 系统出现故障时，如何快速定位问题根因，高效修复并验证？</strong>传统软件调试基于确定性假设——设置断点、单步执行、查看变量，问题可复现、根因可定位。然而，Agent 系统基于 LLM，具有 inherent 非确定性：相同输入可能产生不同输出，问题难以稳定复现，传统调试方法失效。需要全新的调试定位与根因分析体系。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>Agent 调试定位体系通过调试技术捕捉系统状态、通过故障检测发现问题、通过根因分析定位本质、通过诊断分析验证假设、通过修复验证解决问题，五层协同，构建高效的故障响应能力。</p>
+                </div>
+                
+                <h3 class="section-title">调试定位革命的兴起</h3>
+                
+                <p>从 LangSmith 的 Trace 回放到 Maxim AI 的 Agent Tracing，从自动根因分析到 AI 辅助诊断，Agent 调试工具与方法快速演进。在 Agent 系统中，调试定位面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>非确定性</strong>：问题难以稳定复现，传统断点调试失效</li>
+                    <li><strong>黑盒性</strong>：LLM 内部推理过程不可见，只能观察输入输出</li>
+                    <li><strong>链路长</strong>：多 Agent 协作、多工具调用的复杂链路难以追踪</li>
+                    <li><strong>根因复杂</strong>：可能是 Prompt 问题、模型问题、数据问题、工具问题的组合</li>
+                </ul>
+                
+                <div class="quote">
+                    "调试定位不是简单的找 Bug，而是一种系统性思维能力。从'观察现象'到'提出假设'，从'验证假设'到'定位根因'，从'修复问题'到'预防复发'。这种转变让工程师从被动救火走向主动预防。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 调试理论基础</strong>：阐述 Agent 调试挑战、调试方法论体系、非确定性系统调试策略等基础知识。</p>
+                
+                <p><strong>第二编 故障检测与诊断</strong>：深入剖析故障检测机制、故障分类与定级、诊断流程与方法、常见故障模式分析等检测技术。</p>
+                
+                <p><strong>第三编 根因分析方法论</strong>：详细探讨 5Why 根因分析法、鱼骨图与故障树、对比分析与隔离测试、假设驱动诊断等分析方法。</p>
+                
+                <p><strong>第四编 调试工具与平台</strong>：涵盖调试工具链设计、LangSmith 调试平台、分布式追踪调试、自动化诊断系统等工具实践。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从调试技术到故障检测，从根因分析到诊断验证，从工具平台到自动化系统，Agent 调试定位体系正在重塑运维响应的范式。未来的 Agent 系统将更加可调试、更加可诊断、更加可靠。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 44px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在调试定位一线守护 Agent 稳定运行的 SRE 工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 8 章 -->
+        <div class="chapter" id="chapter8">
+            <h2 class="chapter-title">第 8 章 5Why 根因分析法</h2>
+            <div class="content">
+                <h3 class="section-title">8.1 5Why 方法概述</h3>
+                
+                <p>5Why 分析法是一种通过连续追问"为什么"来挖掘问题根本原因的方法论，由丰田生产方式创始人丰田佐吉提出。该方法的核心思想是：表面问题往往是深层原因的症状，只有找到根本原因，才能彻底解决问题而非仅仅处理症状。在 Agent 系统调试中，5Why 方法帮助工程师穿透层层表象，定位到 Prompt 设计、模型选择、数据质量、系统架构等根本性问题。</p>
+                
+                <div class="highlight">
+                    <p><strong>5Why 核心价值：</strong>穿透表象（从症状到根因）、系统思考（避免片面归因）、彻底解决（防止问题复发）、持续改进（优化系统设计）。</p>
+                </div>
+                
+                <h3 class="section-title">8.2 5Why 分析流程</h3>
+                
+                <div class="debug-card">
+                    <div class="debug-box-card debug">
+                        <h3 class="debug-box-title">🔵 第一步：定义问题</h3>
+                        <p><strong>目标：</strong>清晰描述问题现象。</p>
+                        <p style="margin-top: 9px;"><strong>关键活动：</strong></p>
+                        <ul style="margin-left: 14px; margin-top: 4px; font-size: 0.89em;">
+                            <li>收集问题症状</li>
+                            <li>量化问题影响</li>
+                            <li>确定问题范围</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="debug-box-card fault">
+                        <h3 class="debug-box-title">🟣 第二步：追问 Why</h3>
+                        <p><strong>目标：</strong>连续追问 5 次为什么。</p>
+                        <p style="margin-top: 9px;"><strong>关键活动：</strong></p>
+                        <ul style="margin-left: 14px; margin-top: 4px; font-size: 0.89em;">
+                            <li>基于事实推理</li>
+                            <li>避免主观臆断</li>
+                            <li>记录每层原因</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="debug-box-card root">
+                        <h3 class="debug-box-title">🟡 第三步：验证根因</h3>
+                        <p><strong>目标：</strong>确认根本原因。</p>
+                        <p style="margin-top: 9px;"><strong>关键活动：</strong></p>
+                        <ul style="margin-left: 14px; margin-top: 4px; font-size: 0.89em;">
+                            <li>设计验证实验</li>
+                            <li>收集验证数据</li>
+                            <li>确认因果关系</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="debug-box-card analyze">
+                        <h3 class="debug-box-title">🟢 第四步：制定对策</h3>
+                        <p><strong>目标：</strong>设计解决方案。</p>
+                        <p style="margin-top: 9px;"><strong>关键活动：</strong></p>
+                        <ul style="margin-left: 14px; margin-top: 4px; font-size: 0.89em;">
+                            <li>针对根因设计</li>
+                            <li>评估方案可行性</li>
+                            <li>制定实施计划</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">8.3 Agent 故障 5Why 分析案例</h3>
+                
+                <div class="section">
+                    <h4>案例：客服 Agent 回答不准确</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>层级</th>
+                                <th>问题</th>
+                                <th>原因分析</th>
+                                <th>证据</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>问题</strong></td>
+                                <td>客服 Agent 回答不准确，用户投诉率上升</td>
+                                <td>现象描述</td>
+                                <td>投诉率从 2% 上升到 8%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Why 1</strong></td>
+                                <td>为什么回答不准确？</td>
+                                <td>Agent 检索到的知识库内容与问题不匹配</td>
+                                <td>Trace 分析显示检索相关性仅 0.45</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Why 2</strong></td>
+                                <td>为什么检索不匹配？</td>
+                                <td>向量检索的 Query  embedding 质量差</td>
+                                <td>Query 改写后检索相关性提升到 0.78</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Why 3</strong></td>
+                                <td>为什么 Query embedding 质量差？</td>
+                                <td>用户原始问题包含口语化表达和错别字</td>
+                                <td>分析 100 条 bad case，85% 存在口语化问题</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Why 4</strong></td>
+                                <td>为什么没有处理口语化问题？</td>
+                                <td>Query 预处理模块缺少口语化改写功能</td>
+                                <td>代码 Review 确认无此功能</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Why 5</strong></td>
+                                <td>为什么缺少这个功能？</td>
+                                <td>需求设计阶段未考虑到用户输入的多样性</td>
+                                <td>需求文档未包含口语化处理要求</td>
+                            </tr>
+                            <tr>
+                                <td><strong>根因</strong></td>
+                                <td colspan="3"><strong>需求设计缺陷</strong>：未考虑用户输入多样性，缺少 Query 预处理机制</td>
+                            </tr>
+                            <tr>
+                                <td><strong>对策</strong></td>
+                                <td colspan="3">1. 增加 Query 口语化改写模块 2. 完善需求评审检查清单 3. 建立 bad case 分析机制</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h3 class="section-title">8.4 5Why 分析实施要点</h3>
+                
+                <div class="section">
+                    <h4>关键成功因素</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>基于事实</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>每一层原因都要有数据或证据支持</li>
+                                <li>避免主观臆断和猜测</li>
+                                <li>使用 Trace、日志、指标等客观数据</li>
+                            </ul>
+                        </li>
+                        <li><strong>逻辑严密</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>确保因果关系成立（如果 A 则 B）</li>
+                                <li>排除其他干扰因素</li>
+                                <li>必要时使用对照实验验证</li>
+                            </ul>
+                        </li>
+                        <li><strong>深入彻底</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>不要停留在表面原因（如"人为失误"）</li>
+                                <li>追问到系统、流程、机制层面</li>
+                                <li>通常 5 次追问能达到根因，但可能需要更多</li>
+                            </ul>
+                        </li>
+                        <li><strong>团队参与</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>组织跨职能团队共同分析</li>
+                                <li>集思广益，避免个人偏见</li>
+                                <li>确保各方对根因达成共识</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">8.5 5Why 分析常见陷阱</h3>
+                
+                <div class="section">
+                    <h4>需要避免的错误</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>陷阱 1：跳跃式推理</strong>
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>错误：从问题直接跳到根因，缺少中间逻辑链</li>
+                                <li>示例："回答不准确" → "模型不好"（缺少中间分析）</li>
+                                <li>正确：逐步追问，建立完整的因果链</li>
+                            </ul>
+                        </li>
+                        <li><strong>陷阱 2：归因于人</strong>
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>错误：将根因归结为"人为失误"、"操作不当"</li>
+                                <li>示例："工程师配置错误"（未分析为何会配置错）</li>
+                                <li>正确：追问为什么系统允许这种错误发生</li>
+                            </ul>
+                        </li>
+                        <li><strong>陷阱 3：多重根因</strong>
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>错误：只找到一个根因就停止，忽略其他并行原因</li>
+                                <li>示例：只分析技术问题，忽略流程问题</li>
+                                <li>正确：使用鱼骨图分析多维度原因</li>
+                            </ul>
+                        </li>
+                        <li><strong>陷阱 4：验证不足</strong>
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>错误：假设的根因未经验证就直接实施对策</li>
+                                <li>示例：认为是模型问题就直接换模型</li>
+                                <li>正确：设计实验验证因果关系</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">8.6 本章小结</h3>
+                <p>本章深入探讨了 5Why 根因分析法。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>分析流程：定义问题→追问 Why→验证根因→制定对策四步法</li>
+                    <li>实施要点：基于事实、逻辑严密、深入彻底、团队参与</li>
+                    <li>常见陷阱：跳跃推理、归因于人、多重根因、验证不足</li>
+                    <li>案例分析：客服 Agent 回答不准确，根因是需求设计缺陷，对策是增加 Query 预处理</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 12 章 -->
+        <div class="chapter" id="chapter12">
+            <h2 class="chapter-title">第 12 章 调试工具链设计</h2>
+            <div class="content">
+                <h3 class="section-title">12.1 调试工具链概述</h3>
+                
+                <p>调试工具链是一套协同工作的工具集合，覆盖从故障检测、问题定位、根因分析到修复验证的全流程。在 Agent 系统中，调试工具链需要支持非确定性调试、Trace 回放、多模态数据分析等特殊需求。优秀的调试工具链应具备：全链路追踪、实时调试、历史回放、智能分析、协作共享等特性。</p>
+                
+                <div class="highlight">
+                    <p><strong>调试工具链核心价值：</strong>效率提升（快速定位问题）、能力增强（可视化复杂链路）、知识沉淀（积累调试经验）、协作优化（团队共享分析结果）。</p>
+                </div>
+                
+                <h3 class="section-title">12.2 调试工具链架构</h3>
+                
+                <div class="debug-card">
+                    <div class="debug-box-card debug">
+                        <h3 class="debug-box-title">🔵 数据采集层</h3>
+                        <p><strong>定义：</strong>负责采集调试所需数据。</p>
+                        <p style="margin-top: 8px;"><strong>核心组件：</strong></p>
+                        <ul style="margin-left: 13px; margin-top: 3px; font-size: 0.88em;">
+                            <li>Trace 采集器</li>
+                            <li>日志收集器</li>
+                            <li>指标采集器</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="debug-box-card fault">
+                        <h3 class="debug-box-title">🟣 数据存储层</h3>
+                        <p><strong>定义：</strong>负责存储和管理调试数据。</p>
+                        <p style="margin-top: 8px;"><strong>核心组件：</strong></p>
+                        <ul style="margin-left: 13px; margin-top: 3px; font-size: 0.88em;">
+                            <li>Trace 数据库</li>
+                            <li>日志存储</li>
+                            <li>指标数据库</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="debug-box-card root">
+                        <h3 class="debug-box-title">🟡 分析引擎层</h3>
+                        <p><strong>定义：</strong>负责数据分析和问题定位。</p>
+                        <p style="margin-top: 8px;"><strong>核心组件：</strong></p>
+                        <ul style="margin-left: 13px; margin-top: 3px; font-size: 0.88em;">
+                            <li>Trace 分析引擎</li>
+                            <li>异常检测引擎</li>
+                            <li>根因分析引擎</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="debug-box-card analyze">
+                        <h3 class="debug-box-title">🟢 交互界面层</h3>
+                        <p><strong>定义：</strong>负责用户交互和可视化。</p>
+                        <p style="margin-top: 8px;"><strong>核心组件：</strong></p>
+                        <ul style="margin-left: 13px; margin-top: 3px; font-size: 0.88em;">
+                            <li>Trace 可视化</li>
+                            <li>调试控制台</li>
+                            <li>报告生成器</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.3 Agent 调试器实现</h3>
+                
+                <div class="section">
+                    <h4>Agent Debugger 核心实现</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">Agent 调试器核心实现</div>
+                        <pre>
+import asyncio
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass, field
+from datetime import datetime
+import json
+
+@dataclass
+class DebugSession:
+    """调试会话数据模型"""
+    session_id: str
+    trace_id: str
+    start_time: datetime
+    breakpoints: List[Dict[str, Any]] = field(default_factory=list)
+    variables: Dict[str, Any] = field(default_factory=dict)
+    call_stack: List[Dict[str, Any]] = field(default_factory=list)
+    events: List[Dict[str, Any]] = field(default_factory=list)
+
+class AgentDebugger:
+    """Agent 调试器核心类"""
+    
+    def __init__(self, agent, trace_store):
+        """
+        初始化调试器
+        
+        Args:
+            agent: 待调试的 Agent 实例
+            trace_store: Trace 数据存储
+        """
+        self.agent = agent
+        self.trace_store = trace_store
+        self.sessions: Dict[str, DebugSession] = {}
+        self.breakpoint_handlers = {}
+    
+    async def start_debug_session(
+        self, 
+        trace_id: str,
+        breakpoints: List[Dict[str, Any]] = None
+    ) -> DebugSession:
+        """
+        启动调试会话
+        
+        Args:
+            trace_id: 要调试的 Trace ID
+            breakpoints: 断点列表
+        
+        Returns:
+            DebugSession: 调试会话对象
+        """
+        # 1. 加载 Trace 数据
+        trace_data = await self.trace_store.get_trace(trace_id)
+        
+        if not trace_data:
+            raise ValueError(f"Trace {trace_id} not found")
+        
+        # 2. 创建调试会话
+        session = DebugSession(
+            session_id=f"debug_{trace_id}_{datetime.now().timestamp()}",
+            trace_id=trace_id,
+            start_time=datetime.now(),
+            breakpoints=breakpoints or [],
+            call_stack=self._build_call_stack(trace_data)
+        )
+        
+        # 3. 初始化变量
+        session.variables = self._extract_variables(trace_data)
+        
+        # 4. 保存会话
+        self.sessions[session.session_id] = session
+        
+        return session
+    
+    def _build_call_stack(self, trace_data: Dict) -> List[Dict]:
+        """构建调用栈"""
+        call_stack = []
+        
+        for span in trace_data.get('spans', []):
+            call_stack.append({
+                'span_id': span['span_id'],
+                'name': span['name'],
+                'start_time': span['start_time'],
+                'end_time': span.get('end_time'),
+                'status': span.get('status', 'unknown'),
+                'attributes': span.get('attributes', {})
+            })
+        
+        return call_stack
+    
+    def _extract_variables(self, trace_data: Dict) -> Dict[str, Any]:
+        """提取变量"""
+        variables = {}
+        
+        for span in trace_data.get('spans', []):
+            # 提取 Span 属性作为变量
+            for key, value in span.get('attributes', {}).items():
+                variables[f"{span['name']}.{key}"] = value
+            
+            # 提取事件数据
+            for event in span.get('events', []):
+                variables[f"event.{event['name']}"] = event.get('attributes', {})
+        
+        return variables
+    
+    async def step_over(self, session_id: str) -> Dict[str, Any]:
+        """
+        单步执行（跳过当前 Span）
+        
+        Args:
+            session_id: 调试会话 ID
+        
+        Returns:
+            当前状态
+        """
+        session = self.sessions.get(session_id)
+        
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+        
+        # 找到当前执行的 Span
+        current_span = self._find_current_span(session)
+        
+        if not current_span:
+            return {'status': 'completed', 'message': 'Trace execution completed'}
+        
+        # 移动到下一个 Span
+        next_span = self._find_next_span(session, current_span)
+        
+        if next_span:
+            # 更新调试状态
+            session.events.append({
+                'type': 'step_over',
+                'timestamp': datetime.now().isoformat(),
+                'from_span': current_span['span_id'],
+                'to_span': next_span['span_id']
+            })
+            
+            return {
+                'status': 'paused',
+                'current_span': next_span,
+                'variables': session.variables,
+                'call_stack': session.call_stack
+            }
+        else:
+            return {'status': 'completed', 'message': 'No more spans to execute'}
+    
+    async def continue_execution(self, session_id: str) -> Dict[str, Any]:
+        """
+        继续执行直到下一个断点
+        
+        Args:
+            session_id: 调试会话 ID
+        
+        Returns:
+            断点命中信息或完成状态
+        """
+        session = self.sessions.get(session_id)
+        
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+        
+        # 从当前位置继续执行
+        current_span = self._find_current_span(session)
+        
+        for span in session.call_stack:
+            # 检查是否命中断点
+            if self._check_breakpoint(session, span):
+                return {
+                    'status': 'breakpoint_hit',
+                    'breakpoint': self._get_matching_breakpoint(session, span),
+                    'current_span': span,
+                    'variables': session.variables
+                }
+        
+        return {'status': 'completed', 'message': 'Execution completed without hitting breakpoints'}
+    
+    def _check_breakpoint(
+        self, 
+        session: DebugSession, 
+        span: Dict
+    ) -> bool:
+        """检查是否命中断点"""
+        for bp in session.breakpoints:
+            # 按 Span 名称匹配
+            if bp.get('type') == 'span_name' and bp.get('name') == span['name']:
+                return True
+            
+            # 按条件匹配
+            if bp.get('type') == 'condition':
+                condition = bp.get('condition')
+                if self._evaluate_condition(condition, span, session.variables):
+                    return True
+        
+        return False
+    
+    def _evaluate_condition(
+        self, 
+        condition: str, 
+        span: Dict, 
+        variables: Dict
+    ) -> bool:
+        """评估断点条件"""
+        try:
+            # 简单的条件评估（生产环境需要更安全的实现）
+            # 支持如：latency > 1000, status == 'ERROR'
+            local_vars = {**variables, 'span': span}
+            return eval(condition, {"__builtins__": {}}, local_vars)
+        except Exception:
+            return False
+    
+    async def inspect_variable(
+        self, 
+        session_id: str, 
+        variable_name: str
+    ) -> Any:
+        """
+        查看变量值
+        
+        Args:
+            session_id: 调试会话 ID
+            variable_name: 变量名称
+        
+        Returns:
+            变量值
+        """
+        session = self.sessions.get(session_id)
+        
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+        
+        return session.variables.get(variable_name)
+    
+    async def replay_trace(
+        self, 
+        trace_id: str,
+        modify_input: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        回放 Trace（可修改输入）
+        
+        Args:
+            trace_id: Trace ID
+            modify_input: 修改的输入参数
+        
+        Returns:
+            回放结果
+        """
+        # 1. 加载原始 Trace
+        original_trace = await self.trace_store.get_trace(trace_id)
+        
+        # 2. 修改输入（如果指定）
+        if modify_input:
+            original_trace['input'] = {
+                **original_trace.get('input', {}),
+                **modify_input
+            }
+        
+        # 3. 重新执行 Agent
+        start_time = datetime.now()
+        response = await self.agent.run(original_trace['input'])
+        end_time = datetime.now()
+        
+        # 4. 对比结果
+        comparison = self._compare_traces(original_trace, response)
+        
+        return {
+            'original_trace': original_trace,
+            'replayed_trace': response,
+            'comparison': comparison,
+            'execution_time': (end_time - start_time).total_seconds()
+        }
+    
+    def _compare_traces(
+        self, 
+        original: Dict, 
+        replayed: Dict
+    ) -> Dict[str, Any]:
+        """对比原始 Trace 和回放 Trace"""
+        return {
+            'output_similarity': self._calculate_similarity(
+                original.get('output', ''),
+                replayed.get('output', '')
+            ),
+            'latency_diff': (
+                replayed.get('latency_ms', 0) - 
+                original.get('latency_ms', 0)
+            ),
+            'tool_calls_diff': self._compare_tool_calls(
+                original.get('tool_calls', []),
+                replayed.get('tool_calls', [])
+            )
+        }
+    
+    def _calculate_similarity(self, text1: str, text2: str) -> float:
+        """计算文本相似度"""
+        from difflib import SequenceMatcher
+        return SequenceMatcher(None, text1, text2).ratio()
+    
+    def _compare_tool_calls(
+        self, 
+        original: List[Dict], 
+        replayed: List[Dict]
+    ) -> Dict[str, Any]:
+        """对比工具调用"""
+        return {
+            'original_count': len(original),
+            'replayed_count': len(replayed),
+            'same_tools': set(t['name'] for t in original) == 
+                         set(t['name'] for t in replayed)
+        }
+    
+    def generate_debug_report(self, session_id: str) -> Dict[str, Any]:
+        """生成调试报告"""
+        session = self.sessions.get(session_id)
+        
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+        
+        return {
+            'session_id': session.session_id,
+            'trace_id': session.trace_id,
+            'duration': (datetime.now() - session.start_time).total_seconds(),
+            'total_spans': len(session.call_stack),
+            'breakpoints_hit': len([
+                e for e in session.events 
+                if e['type'] == 'breakpoint_hit'
+            ]),
+            'variables_count': len(session.variables),
+            'events': session.events
+        }
+
+
+# 使用示例
+async def debug_agent_example():
+    """调试 Agent 示例"""
+    from my_agent import CustomerSupportAgent
+    from trace_store import TraceStore
+    
+    agent = CustomerSupportAgent()
+    trace_store = TraceStore()
+    
+    debugger = AgentDebugger(agent, trace_store)
+    
+    # 1. 启动调试会话
+    session = await debugger.start_debug_session(
+        trace_id="trace_12345",
+        breakpoints=[
+            {'type': 'span_name', 'name': 'llm-completion'},
+            {'type': 'condition', 'condition': 'latency > 1000'}
+        ]
+    )
+    
+    print(f"调试会话启动：{session.session_id}")
+    print(f"调用栈：{len(session.call_stack)} 个 Span")
+    
+    # 2. 单步执行
+    status = await debugger.step_over(session.session_id)
+    print(f"当前状态：{status['status']}")
+    
+    # 3. 查看变量
+    latency = await debugger.inspect_variable(
+        session.session_id,
+        'llm-completion.latency_ms'
+    )
+    print(f"LLM 延迟：{latency}ms")
+    
+    # 4. 继续执行直到断点
+    result = await debugger.continue_execution(session.session_id)
+    if result['status'] == 'breakpoint_hit':
+        print(f"命中断点：{result['breakpoint']}")
+    
+    # 5. Trace 回放
+    replay_result = await debugger.replay_trace(
+        trace_id="trace_12345",
+        modify_input={'temperature': 0.5}  # 修改温度参数
+    )
+    print(f"回放相似度：{replay_result['comparison']['output_similarity']:.2f}")
+    
+    # 6. 生成调试报告
+    report = debugger.generate_debug_report(session.session_id)
+    print(f"调试报告：{json.dumps(report, indent=2)}")
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.4 本章小结</h3>
+                <p>本章深入探讨了调试工具链设计。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>工具链架构：数据采集层、数据存储层、分析引擎层、交互界面层四层设计</li>
+                    <li>核心实现：AgentDebugger 类，支持调试会话管理、单步执行、断点调试、Trace 回放</li>
+                    <li>关键功能：变量检查、调用栈查看、条件断点、Trace 回放与对比</li>
+                    <li>使用示例：完整的调试流程示例，覆盖启动会话、单步执行、查看变量、Trace 回放</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：电商智能客服 Agent 故障排查</h3>
+                
+                <div class="section">
+                    <h4>背景与问题</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某大型电商平台智能客服 Agent，日均处理 100 万 + 用户咨询</li>
+                        <li><strong>问题</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>突发问题：用户投诉率从 2% 飙升到 15%</li>
+                                <li>症状：Agent 频繁回答"我不理解您的问题"</li>
+                                <li>影响：客服转人工率上升 300%，用户满意度大幅下降</li>
+                                <li>紧急程度：P0 级故障，需要立即解决</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>故障排查过程</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>第一步：问题复现与数据收集</strong>（30 分钟）
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>收集 100+ 条 bad case，分析共同特征</li>
+                                <li>使用 LangSmith Trace 回放，观察 Agent 执行流程</li>
+                                <li>发现规律：所有失败案例都包含口语化表达或错别字</li>
+                            </ul>
+                        </li>
+                        <li><strong>第二步：5Why 根因分析</strong>（1 小时）
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>Why 1：为什么 Agent 不理解问题？→ 意图识别准确率低（从 92% 降到 45%）</li>
+                                <li>Why 2：为什么意图识别率低？→ Query embedding 与知识库向量不匹配</li>
+                                <li>Why 3：为什么不匹配？→ 用户 Query 包含口语化表达，未做标准化处理</li>
+                                <li>Why 4：为什么未做标准化？→ Query 预处理模块缺少口语化改写功能</li>
+                                <li>Why 5：为什么缺少功能？→ 需求设计未考虑用户输入多样性</li>
+                                <li><strong>根因</strong>：需求设计缺陷，缺少 Query 口语化预处理</li>
+                            </ul>
+                        </li>
+                        <li><strong>第三步：临时修复</strong>（2 小时）
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>方案 1：在 Prompt 中增加"请理解用户可能的口语化表达"指令</li>
+                                <li>方案 2：增加同义词词典，映射常见口语化表达到标准表述</li>
+                                <li>效果：投诉率从 15% 降到 8%，但未彻底解决</li>
+                            </ul>
+                        </li>
+                        <li><strong>第四步：永久修复</strong>（1 天）
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>开发 Query 口语化改写模块，使用 LLM 将口语转为标准表述</li>
+                                <li>增加拼写纠错功能，自动修正常见错别字</li>
+                                <li>完善需求评审检查清单，确保考虑输入多样性</li>
+                                <li>效果：投诉率降回 1.8%，低于故障前水平</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>经验总结</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>快速响应</strong>：30 分钟内定位问题模式，2 小时内实施临时修复</li>
+                        <li><strong>数据驱动</strong>：基于 100+ bad case 分析，避免主观猜测</li>
+                        <li><strong>根因分析</strong>：使用 5Why 方法找到需求设计缺陷，而非简单归因于模型</li>
+                        <li><strong>分层修复</strong>：临时修复快速止血，永久修复彻底解决</li>
+                        <li><strong>预防机制</strong>：完善需求评审清单，建立 bad case 持续分析机制</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：金融风控 Agent 级联故障诊断</h3>
+                
+                <div class="section">
+                    <h4>背景与问题</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某金融机构智能风控 Agent，实时识别欺诈交易</li>
+                        <li><strong>问题</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>级联故障：Agent A 故障导致 Agent B、C 连锁失败</li>
+                                <li>症状：欺诈识别率从 96% 暴跌到 62%，漏判大量欺诈交易</li>
+                                <li>影响：潜在资金损失风险，监管合规风险</li>
+                                <li>复杂性：3 个 Agent 协作，5 个工具调用，故障传播路径复杂</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>级联故障诊断</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>第一步：故障传播链路分析</strong>（1 小时）
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>使用分布式追踪，绘制故障传播图</li>
+                                <li>发现故障源头：Agent A（交易特征提取）的向量数据库连接超时</li>
+                                <li>传播路径：Agent A 超时→返回空特征→Agent B 评分错误→Agent C 决策错误</li>
+                            </ul>
+                        </li>
+                        <li><strong>第二步：根因定位</strong>（2 小时）
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>向量数据库为何超时？→ 连接池耗尽</li>
+                                <li>为何连接池耗尽？→ 连接泄漏，部分连接未正确释放</li>
+                                <li>为何连接泄漏？→ 异常处理逻辑缺陷，异常时未关闭连接</li>
+                                <li><strong>根因</strong>：代码缺陷，异常处理未释放数据库连接</li>
+                            </ul>
+                        </li>
+                        <li><strong>第三步：修复与验证</strong>（4 小时）
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>修复：增加 finally 块确保连接释放，使用上下文管理器</li>
+                                <li>验证：压力测试模拟高并发，确认无连接泄漏</li>
+                                <li>监控：增加连接池使用率告警，阈值 80%</li>
+                                <li>效果：欺诈识别率恢复到 96.5%</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>经验总结</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>链路追踪</strong>：分布式追踪是诊断级联故障的关键工具</li>
+                        <li><strong>隔离设计</strong>：增加熔断机制，防止单点故障扩散</li>
+                        <li><strong>资源管理</strong>：数据库连接等稀缺资源必须严格管理</li>
+                        <li><strong>监控告警</strong>：关键资源指标（连接池、内存、CPU）需要实时监控</li>
+                        <li><strong>容错设计</strong>：下游 Agent 应能处理上游空响应或错误响应</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>调试定位最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>快速响应</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>建立 P0/P1/P2 故障分级响应机制</li>
+                                <li>P0 故障 15 分钟内响应，30 分钟内初步定位</li>
+                                <li>准备故障排查 Playbook，标准化响应流程</li>
+                            </ul>
+                        </li>
+                        <li><strong>数据驱动</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>基于 Trace、日志、指标等客观数据分析</li>
+                                <li>收集足够样本（至少 50-100 个 bad case）</li>
+                                <li>使用统计方法识别模式和规律</li>
+                            </ul>
+                        </li>
+                        <li><strong>根因分析</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>使用 5Why、鱼骨图等方法论</li>
+                                <li>追问到系统、流程、机制层面</li>
+                                <li>避免归因于个人或偶然因素</li>
+                            </ul>
+                        </li>
+                        <li><strong>工具赋能</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>建设完善的调试工具链（Trace 回放、断点调试、变量检查）</li>
+                                <li>自动化常见诊断任务（异常检测、根因推荐）</li>
+                                <li>积累调试知识库，沉淀专家经验</li>
+                            </ul>
+                        </li>
+                        <li><strong>持续改进</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>每次故障后进行 Post-mortem 分析</li>
+                                <li>制定改进措施并跟踪落实</li>
+                                <li>定期演练故障排查，提升团队能力</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 44px; border-left-color: var(--debug-blue);">
+                    "从电商客服到金融风控，从单点故障到级联故障，从 5Why 分析到 Trace 回放，Agent 调试定位体系正在重塑运维响应的范式。未来的 Agent 系统将更加可调试、更加可诊断、更加可靠。这不仅是技术的进步，更是运维文化的演进。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：电商客服，投诉率 2%→15%→1.8%，根因是需求设计缺陷，使用 5Why 分析定位</li>
+                    <li>案例二：金融风控，级联故障导致识别率 96%→62%，根因是连接泄漏，使用 Trace 分析定位</li>
+                    <li>最佳实践：快速响应、数据驱动、根因分析、工具赋能、持续改进</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">调试工具与平台</h3>
+                <ol style="margin-left: 20px; line-height: 2.03;">
+                    <li>LangChain (2026). "LangSmith Debugging & Tracing Platform." langsmith.com</li>
+                    <li>Maxim AI (2026). "Agent Tracing for Debugging Multi-Agent Systems." getmaxim.ai</li>
+                </ol>
+                
+                <h3 class="section-title">根因分析方法论</h3>
+                <ol style="margin-left: 20px; line-height: 2.03;" start="3">
+                    <li>Toyota (2025). "The Toyota Way: 5Why Root Cause Analysis." toyota.com</li>
+                    <li>Google SRE (2026). "Post-mortem Culture and Root Cause Analysis." sre.google</li>
+                </ol>
+                
+                <h3 class="section-title">故障模式库</h3>
+                <ol style="margin-left: 20px; line-height: 2.03;" start="5">
+                    <li>OWASP (2026). "Top 10 LLM Application Vulnerabilities." owasp.org</li>
+                    <li>Microsoft (2026). "AI Failure Mode Analysis Framework." microsoft.com</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.34em; margin-bottom: 17px; color: var(--debug-blue); font-weight: 800; font-family: 'Georgia', serif;">Agent 调试、故障定位与根因分析</p>
+                <p style="font-size: 1.1em; margin-bottom: 9px; font-style: italic;">从现象到本质的深度诊断之道</p>
+                <p>© 2026 超级代码智能体 | 调试诊断版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 25px; font-size: 0.92em; line-height: 1.84;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="debug-spectrum" style="margin-top: 34px;">
+                    <div class="spectrum-item spectrum-debug">🔵 调试技术</div>
+                    <div class="spectrum-item spectrum-fault">🟣 故障检测</div>
+                    <div class="spectrum-item spectrum-root">🟡 根因分析</div>
+                    <div class="spectrum-item spectrum-analyze">🟢 诊断分析</div>
+                    <div class="spectrum-item spectrum-fix">🔴 修复验证</div>
+                </div>
+                <p style="margin-top: 34px; font-size: 0.85em; color: var(--text-secondary);">
+                    谨以此书献给所有在调试定位一线守护 Agent 稳定运行的 SRE 工程师们<br>
+                    从调试技术到故障检测，从根因分析到诊断验证<br>
+                    调试定位——让 Agent 系统从不可知走向可理解
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Agent Debugging & Root Cause Analysis');
+        console.log('📚 From Symptoms to Root Cause (2024-2026)');
+        console.log('✨ Debugging + Detection + Root Cause + Diagnosis + Fix = System Reliability');
+    </script>
+</body>
+</html>

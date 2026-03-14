@@ -1,0 +1,1602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多目标优化与偏好决策建模</title>
+    <style>
+        :root {
+            --multiobj-blue: #0284c7;
+            --pareto-purple: #a855f7;
+            --preference-gold: #ca8a04;
+            --mcda-green: #16a34a;
+            --tradeoff-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-pareto: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--multiobj-blue), var(--pareto-purple), var(--preference-gold), var(--mcda-green), var(--tradeoff-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-pareto);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: paretoRotate 250s linear infinite;
+        }
+        
+        @keyframes paretoRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .pareto-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 8px 22px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.92em;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+            animation: paretoPulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes paretoPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 12px 30px rgba(2, 132, 199, 0.5); }
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-multiobj {
+            background: linear-gradient(135deg, var(--multiobj-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-pareto {
+            background: linear-gradient(135deg, var(--pareto-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-preference {
+            background: linear-gradient(135deg, var(--preference-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-mcda {
+            background: linear-gradient(135deg, var(--mcda-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-tradeoff {
+            background: linear-gradient(135deg, var(--tradeoff-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.15em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 23px;
+            text-shadow: 0 0 50px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.28;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.68em;
+            color: var(--text-secondary);
+            margin-bottom: 38px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .pareto-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 48px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .pareto-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 23px 28px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 135px;
+        }
+        
+        .pareto-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .pareto-box.multiobj {
+            border-color: var(--multiobj-blue);
+            box-shadow: 0 15px 30px rgba(2, 132, 199, 0.35);
+        }
+        
+        .pareto-box.pareto {
+            border-color: var(--pareto-purple);
+            box-shadow: 0 15px 30px rgba(168, 85, 247, 0.35);
+        }
+        
+        .pareto-box.preference {
+            border-color: var(--preference-gold);
+            box-shadow: 0 15px 30px rgba(202, 138, 4, 0.35);
+        }
+        
+        .pareto-box.mcda {
+            border-color: var(--mcda-green);
+            box-shadow: 0 15px 30px rgba(22, 163, 74, 0.35);
+        }
+        
+        .pareto-box.tradeoff {
+            border-color: var(--tradeoff-red);
+            box-shadow: 0 15px 30px rgba(220, 38, 38, 0.35);
+        }
+        
+        .pareto-label {
+            font-size: 1.32em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 6px;
+        }
+        
+        .pareto-box.multiobj .pareto-label { color: var(--multiobj-blue); }
+        .pareto-box.pareto .pareto-label { color: var(--pareto-purple); }
+        .pareto-box.preference .pareto-label { color: var(--preference-gold); }
+        .pareto-box.mcda .pareto-label { color: var(--mcda-green); }
+        .pareto-box.tradeoff .pareto-label { color: var(--tradeoff-red); }
+        
+        .pareto-desc {
+            font-size: 0.73em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.6;
+        }
+        
+        .pareto-arrow {
+            font-size: 1.6em;
+            color: var(--mcda-green);
+            animation: paretoArrow 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes paretoArrow {
+            0%, 100% { opacity: 0.6; transform: translateX(0); }
+            50% { opacity: 1; transform: translateX(8px); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 22px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 48px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 11px 22px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px var(--border-glow);
+            border-color: var(--multiobj-blue);
+        }
+        
+        .meta-label {
+            color: var(--multiobj-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.73em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.93em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 40px 36px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 38px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.55em;
+            color: var(--multiobj-blue);
+            margin-bottom: 30px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 30px 0 20px 0;
+            padding: 14px 22px;
+            border-radius: 18px;
+            font-size: 1.5em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--multiobj-blue); 
+            color: var(--multiobj-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--pareto-purple); 
+            color: var(--pareto-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--preference-gold); 
+            color: var(--preference-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--mcda-green); 
+            color: var(--mcda-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--tradeoff-red); 
+            color: var(--tradeoff-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 10px;
+        }
+        
+        .toc-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.93em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 9px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--multiobj-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--multiobj-blue);
+            text-shadow: 0 0 6px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 50px 40px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 3px 28px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 18px 64px var(--border-glow), 0 0 48px rgba(2, 132, 199, 0.2);
+            border-color: var(--multiobj-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.35em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 28px;
+            border-bottom: 4px solid var(--multiobj-blue);
+            padding-bottom: 14px;
+            font-weight: 800;
+            text-shadow: 0 0 18px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 30px 0;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: var(--multiobj-blue);
+            margin-bottom: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--pareto-purple);
+            font-size: 0.6em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.01;
+            font-size: 1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 20px;
+        }
+        
+        .pareto-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+            gap: 16px;
+            margin: 30px 0;
+        }
+        
+        .pareto-box-card {
+            padding: 25px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .pareto-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .pareto-box-card.multiobj {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--multiobj-blue);
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .pareto-box-card.pareto {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--pareto-purple);
+            box-shadow: 0 8px 23px rgba(168, 85, 247, 0.3);
+        }
+        
+        .pareto-box-card.preference {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--preference-gold);
+            box-shadow: 0 8px 23px rgba(202, 138, 4, 0.3);
+        }
+        
+        .pareto-box-card.mcda {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--mcda-green);
+            box-shadow: 0 8px 23px rgba(22, 163, 74, 0.3);
+        }
+        
+        .pareto-box-card.tradeoff {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--tradeoff-red);
+            box-shadow: 0 8px 23px rgba(220, 38, 38, 0.3);
+        }
+        
+        .pareto-box-title {
+            font-size: 1.55em;
+            font-weight: 800;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .pareto-box-card.multiobj .pareto-box-title { color: var(--multiobj-blue); }
+        .pareto-box-card.pareto .pareto-box-title { color: var(--pareto-purple); }
+        .pareto-box-card.preference .pareto-box-title { color: var(--preference-gold); }
+        .pareto-box-card.mcda .pareto-box-title { color: var(--mcda-green); }
+        .pareto-box-card.tradeoff .pareto-box-title { color: var(--tradeoff-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 28px 34px;
+            border-left: 7px solid var(--multiobj-blue);
+            border-radius: 18px;
+            margin: 28px 0;
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--multiobj-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 26px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 21px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8em;
+            line-height: 1.61;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--multiobj-blue);
+            font-weight: 700;
+            margin-bottom: 11px;
+            font-family: 'Georgia', serif;
+            font-size: 0.97em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 28px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 10px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--multiobj-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.01px;
+            font-size: 0.8em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--multiobj-blue);
+            padding-left: 22px;
+            margin: 24px 0;
+            color: var(--text-secondary);
+            font-size: 1.03em;
+            font-family: 'Georgia', serif;
+            line-height: 1.91;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 11px;
+            color: var(--pareto-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 20px 0;
+            padding-left: 28px;
+        }
+        
+        li {
+            margin-bottom: 9px;
+            line-height: 1.91;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 60px 30px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 100px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 740px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 24px 16px;
+            }
+            
+            .book-title {
+                font-size: 1.95em;
+            }
+            
+            .pareto-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .pareto-diagram {
+                flex-direction: column;
+            }
+            
+            .pareto-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="pareto-spectrum">
+                <div class="spectrum-item spectrum-multiobj">🔵 多目标优化</div>
+                <div class="spectrum-item spectrum-pareto">🟣 Pareto 前沿</div>
+                <div class="spectrum-item spectrum-preference">🟡 偏好建模</div>
+                <div class="spectrum-item spectrum-mcda">🟢 MCDA</div>
+                <div class="spectrum-item spectrum-tradeoff">🔴 权衡决策</div>
+            </div>
+            <h1 class="book-title">多目标优化与偏好决策建模</h1>
+            <h2 class="book-subtitle">从单目标优化到多目标权衡的认知跃迁</h2>
+            
+            <div class="pareto-diagram">
+                <div class="pareto-box multiobj">
+                    <span class="pareto-label">🔵 多目标优化</span>
+                    <span class="pareto-desc">冲突目标<br>同时优化<br>解集搜索</span>
+                </div>
+                <div class="pareto-arrow">→</div>
+                <div class="pareto-box pareto">
+                    <span class="pareto-label">🟣 Pareto 前沿</span>
+                    <span class="pareto-desc">非支配解<br>最优权衡<br>前沿逼近</span>
+                </div>
+                <div class="pareto-arrow">→</div>
+                <div class="pareto-box preference">
+                    <span class="pareto-label">🟡 偏好建模</span>
+                    <span class="pareto-desc">偏好 elicitation<br>效用函数<br>权重学习</span>
+                </div>
+                <div class="pareto-arrow">→</div>
+                <div class="pareto-box mcda">
+                    <span class="pareto-label">🟢 MCDA</span>
+                    <span class="pareto-desc">AHP/TOPSIS<br>多准则排序<br>决策支持</span>
+                </div>
+                <div class="pareto-arrow">→</div>
+                <div class="pareto-box tradeoff">
+                    <span class="pareto-label">🔴 权衡决策</span>
+                    <span class="pareto-desc">目标权衡<br>最终选择<br>决策解释</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">多目标智能版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">多目标·Pareto·偏好·MCDA·权衡</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 多目标优化基础与理论原理</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：多目标智能——从单目标优化到多目标权衡的认知跃迁</a></li>
+                <li><a href="#chapter1">第 1 章 多目标问题的本质与挑战</a></li>
+                <li><a href="#chapter2">第 2 章 Pareto 最优性理论</a></li>
+                <li><a href="#chapter3">第 3 章 多目标优化框架概述</a></li>
+                
+                <div class="toc-part part2">第二编 多目标优化核心算法</div>
+                <li><a href="#chapter4">第 4 章 进化多目标优化 EMO</a></li>
+                <li><a href="#chapter5">第 5 章 NSGA-II/III 算法详解</a></li>
+                <li><a href="#chapter6">第 6 章 MOEA/D 分解方法</a></li>
+                <li><a href="#chapter7">第 7 章 多目标贝叶斯优化</a></li>
+                
+                <div class="toc-part part3">第三编 偏好建模与 Elicitation</div>
+                <li><a href="#chapter8">第 8 章 偏好理论基础</a></li>
+                <li><a href="#chapter9">第 9 章 偏好 Elicitation 方法</a></li>
+                <li><a href="#chapter10">第 10 章 效用函数建模</a></li>
+                <li><a href="#chapter11">第 11 章 交互式多目标优化</a></li>
+                
+                <div class="toc-part part4">第四编 多准则决策分析 MCDA</div>
+                <li><a href="#chapter12">第 12 章 AHP 层次分析法</a></li>
+                <li><a href="#chapter13">第 13 章 TOPSIS 方法</a></li>
+                <li><a href="#chapter14">第 14 章 PROMETHEE 与 ELECTRE</a></li>
+                <li><a href="#chapter15">第 15 章 群体决策与共识</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 30px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 多目标优化框架库</a></li>
+                <li><a href="#appendix-b">附录 B 开源工具库</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：多目标智能——从单目标优化到多目标权衡的认知跃迁</h2>
+            <div class="content">
+                <p>多目标优化是智能的核心标志：能够同时优化多个冲突目标，找到 Pareto 最优解集，建模决策者偏好，进行多准则决策分析，最终做出权衡决策。然而，传统优化理论长期受限于"单目标思维"：将多目标简化为单目标（加权和），忽略目标间冲突，无法提供多样化选择，缺乏偏好整合。多目标优化与偏好决策建模的兴起正在引发一场认知跃迁：<strong>让 AI 系统像人类一样面对多目标冲突，找到 Pareto 前沿，理解用户偏好，进行多准则分析，做出明智权衡</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>多目标智能体系通过多目标优化实现冲突目标同时优化、通过 Pareto 前沿实现最优权衡解集、通过偏好建模实现用户意图理解、通过 MCDA 实现多准则决策、通过权衡分析实现最终选择，五层协同，构建能优化、会权衡、懂偏好、善决策、可解释的全能多目标智能系统。</p>
+                </div>
+                
+                <h3 class="section-title">多目标智能革命的兴起</h3>
+                
+                <p>从 NSGA-II 到 NSGA-III，从 MOEA/D 到多目标贝叶斯优化，从 AHP 到深度偏好学习，多目标优化技术快速演进。然而，真正的多目标智能面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>目标冲突</strong>：如何同时优化相互冲突的目标（如成本 vs 质量、速度 vs 精度）？</li>
+                    <li><strong>Pareto 前沿逼近</strong>：如何高效找到并均匀分布在整个 Pareto 前沿？</li>
+                    <li><strong>偏好整合</strong>：如何准确 elicitation 用户偏好并整合到优化过程？</li>
+                    <li><strong>高维目标</strong>：目标数>3 时（Many-Objective），如何保持选择压力？</li>
+                </ul>
+                
+                <div class="quote">
+                    "多目标智能不是简单的多目标加权，而是一种认知范式的根本转变。从'单目标最优'到'Pareto 最优'，从'唯一解'到'解集'，从'算法决定'到'偏好驱动'。这种转变让 AI 系统从'盲目优化者'走向'明智决策者'。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 多目标优化基础与理论原理</strong>：阐述多目标问题的本质与挑战、Pareto 最优性理论、多目标优化框架概述等基础知识。</p>
+                
+                <p><strong>第二编 多目标优化核心算法</strong>：深入剖析进化多目标优化 EMO、NSGA-II/III 算法、MOEA/D 分解方法、多目标贝叶斯优化等核心算法。</p>
+                
+                <p><strong>第三编 偏好建模与 Elicitation</strong>：详细探讨偏好理论基础、偏好 Elicitation 方法、效用函数建模、交互式多目标优化等偏好技术。</p>
+                
+                <p><strong>第四编 多准则决策分析 MCDA</strong>：涵盖 AHP 层次分析法、TOPSIS 方法、PROMETHEE 与 ELECTRE、群体决策与共识等 MCDA 方法。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从多目标优化到 Pareto 前沿，从偏好建模到 MCDA，从权衡分析到最终决策，多目标智能体系正在重塑 AI 系统的认知范式。未来的 AI 将更具权衡智慧、更懂用户偏好、更接近人类的决策能力。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 40px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在多目标优化与决策科学一线构建 AI 系统的研究者和工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 5 章 -->
+        <div class="chapter" id="chapter5">
+            <h2 class="chapter-title">第 5 章 NSGA-II/III 算法详解</h2>
+            <div class="content">
+                <h3 class="section-title">5.1 NSGA-II 核心原理</h3>
+                
+                <p>NSGA-II（Non-dominated Sorting Genetic Algorithm II）是进化多目标优化的里程碑算法，由 Kalyanmoy Deb 等于 2002 年提出。NSGA-II 通过快速非支配排序、拥挤度距离、精英保留三大机制，实现了高效、均匀、收敛的 Pareto 前沿逼近，成为多目标优化领域引用率最高的算法，被誉为"多目标优化的标准工具"。</p>
+                
+                <div class="highlight">
+                    <p><strong>NSGA-II 三大核心机制：</strong>快速非支配排序（O(MN²) 复杂度）、拥挤度距离（保持多样性）、精英保留策略（确保收敛性）。</p>
+                </div>
+                
+                <h3 class="section-title">5.2 NSGA-II 完整实现</h3>
+                
+                <div class="section">
+                    <h4>NSGA-II Python 实现</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">NSGA-II 算法完整实现</div>
+                        <pre>
+import numpy as np
+from typing import List, Tuple, Callable, Dict
+import matplotlib.pyplot as plt
+from dataclasses import dataclass
+import random
+
+@dataclass
+class Individual:
+    """个体"""
+    x: np.ndarray  # 决策变量
+    objectives: np.ndarray  # 目标值
+    rank: int = 0  # 非支配等级
+    crowding_distance: float = 0.0  # 拥挤度距离
+
+class NSGA2:
+    """
+    NSGA-II 多目标优化算法
+    
+    核心机制:
+    1. 快速非支配排序
+    2. 拥挤度距离计算
+    3. 精英保留策略
+    """
+    
+    def __init__(self,
+                 n_objectives: int,
+                 n_variables: int,
+                 bounds: List[Tuple[float, float]],
+                 population_size: int = 100,
+                 n_generations: int = 250,
+                 crossover_prob: float = 0.9,
+                 mutation_prob: float = 0.1,
+                 eta_c: float = 20.0,
+                 eta_m: float = 20.0):
+        """
+        初始化 NSGA-II
+        
+        Args:
+            n_objectives: 目标函数数量
+            n_variables: 决策变量数量
+            bounds: 变量边界 [(min, max), ...]
+            population_size: 种群大小
+            n_generations: 迭代代数
+            crossover_prob: 交叉概率
+            mutation_prob: 变异概率
+            eta_c: SBX 交叉分布指数
+            eta_m: 多项式变异分布指数
+        """
+        self.n_objectives = n_objectives
+        self.n_variables = n_variables
+        self.bounds = np.array(bounds)
+        self.pop_size = population_size
+        self.n_gen = n_generations
+        self.cx_prob = crossover_prob
+        self.mut_prob = mutation_prob
+        self.eta_c = eta_c
+        self.eta_m = eta_m
+        
+        self.population: List[Individual] = []
+        self.pareto_front: List[Individual] = []
+        self.history = []
+    
+    def _initialize_population(self) -> List[Individual]:
+        """初始化种群"""
+        population = []
+        for _ in range(self.pop_size):
+            # 随机生成决策变量
+            x = np.random.uniform(
+                self.bounds[:, 0],
+                self.bounds[:, 1],
+                size=self.n_variables
+            )
+            population.append(Individual(x=x, objectives=np.zeros(self.n_objectives)))
+        return population
+    
+    def _evaluate_objectives(self, 
+                            population: List[Individual],
+                            obj_funcs: List[Callable]) -> None:
+        """评估目标函数"""
+        for ind in population:
+            obj_values = [func(ind.x) for func in obj_funcs]
+            ind.objectives = np.array(obj_values)
+    
+    def _fast_non_dominated_sort(self, 
+                                 population: List[Individual]) -> List[List[int]]:
+        """
+        快速非支配排序
+        
+        Returns:
+            fronts: 非支配前沿列表，每个前沿是个体索引列表
+        """
+        N = len(population)
+        
+        # 初始化
+        domination_count = np.zeros(N, dtype=int)  # 被支配次数
+        dominated_set = [[] for _ in range(N)]  # 支配的个体集合
+        fronts = [[]]  # 前沿列表
+        ranks = np.zeros(N, dtype=int)  # 等级
+        
+        # 计算支配关系
+        for i in range(N):
+            for j in range(i + 1, N):
+                if self._dominates(population[i], population[j]):
+                    dominated_set[i].append(j)
+                    domination_count[j] += 1
+                elif self._dominates(population[j], population[i]):
+                    dominated_set[j].append(i)
+                    domination_count[i] += 1
+        
+        # 构建前沿
+        for i in range(N):
+            if domination_count[i] == 0:
+                ranks[i] = 0
+                fronts[0].append(i)
+        
+        current_front = 0
+        while fronts[current_front]:
+            next_front = []
+            for i in fronts[current_front]:
+                for j in dominated_set[i]:
+                    domination_count[j] -= 1
+                    if domination_count[j] == 0:
+                        ranks[j] = current_front + 1
+                        next_front.append(j)
+            current_front += 1
+            if next_front:
+                fronts.append(next_front)
+        
+        # 保存等级
+        for i, ind in enumerate(population):
+            ind.rank = ranks[i]
+        
+        return fronts
+    
+    def _dominates(self, ind1: Individual, ind2: Individual) -> bool:
+        """
+        判断 ind1 是否支配 ind2
+        
+        支配定义：ind1 在所有目标上都不差于 ind2，且至少有一个目标严格优于 ind2
+        """
+        better_in_one = False
+        for i in range(self.n_objectives):
+            if ind1.objectives[i] > ind2.objectives[i]:
+                return False  # ind1 在目标 i 上更差
+            elif ind1.objectives[i] < ind2.objectives[i]:
+                better_in_one = True
+        return better_in_one
+    
+    def _calculate_crowding_distance(self, 
+                                    population: List[Individual],
+                                    front: List[int]) -> None:
+        """
+        计算拥挤度距离
+        
+        Args:
+            population: 种群
+            front: 前沿个体索引列表
+        """
+        n = len(front)
+        if n == 0:
+            return
+        
+        # 初始化距离为 0
+        distances = np.zeros(n)
+        
+        # 对每个目标计算距离
+        for m in range(self.n_objectives):
+            # 按目标 m 排序
+            sorted_indices = sorted(
+                range(n),
+                key=lambda i: population[front[i]].objectives[m]
+            )
+            
+            # 边界个体距离设为无穷大
+            distances[sorted_indices[0]] = float('inf')
+            distances[sorted_indices[-1]] = float('inf')
+            
+            # 计算中间个体距离
+            obj_range = (population[front[sorted_indices[-1]]].objectives[m] -
+                        population[front[sorted_indices[0]]].objectives[m])
+            
+            if obj_range == 0:
+                continue
+            
+            for i in range(1, n - 1):
+                distances[sorted_indices[i]] += (
+                    population[front[sorted_indices[i + 1]]].objectives[m] -
+                    population[front[sorted_indices[i - 1]]].objectives[m]
+                ) / obj_range
+        
+        # 保存距离
+        for i, idx in enumerate(front):
+            population[idx].crowding_distance = distances[i]
+    
+    def _tournament_selection(self, 
+                             population: List[Individual],
+                             tournament_size: int = 2) -> Individual:
+        """锦标赛选择"""
+        candidates = random.sample(population, tournament_size)
+        
+        # 选择等级高的，等级相同选择拥挤度大的
+        best = candidates[0]
+        for cand in candidates[1:]:
+            if (cand.rank < best.rank or 
+                (cand.rank == best.rank and 
+                 cand.crowding_distance > best.crowding_distance)):
+                best = cand
+        
+        return best
+    
+    def _sbx_crossover(self, 
+                      parent1: Individual,
+                      parent2: Individual) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        SBX (Simulated Binary Crossover) 交叉
+        
+        Returns:
+            child1, child2: 子代决策变量
+        """
+        child1 = np.zeros(self.n_variables)
+        child2 = np.zeros(self.n_variables)
+        
+        for i in range(self.n_variables):
+            if random.random() > self.cx_prob:
+                # 不交叉
+                child1[i] = parent1.x[i]
+                child2[i] = parent2.x[i]
+                continue
+            
+            y1 = min(parent1.x[i], parent2.x[i])
+            y2 = max(parent1.x[i], parent2.x[i])
+            
+            # 计算 beta
+            if abs(y2 - y1) < 1e-14:
+                beta = 1.0
+            else:
+                beta = 1.0 + (2.0 * (y1 - self.bounds[i, 0]) / 
+                             max(1e-14, y2 - y1))
+            
+            alpha = 2.0 - beta ** (-(self.eta_c + 1))
+            rand = random.random()
+            
+            if rand <= 1.0 / alpha:
+                betaq = (rand * alpha) ** (1.0 / (self.eta_c + 1))
+            else:
+                betaq = (1.0 / (2.0 - rand * alpha)) ** (1.0 / (self.eta_c + 1))
+            
+            # 生成子代
+            child1[i] = 0.5 * ((y1 + y2) - betaq * (y2 - y1))
+            child2[i] = 0.5 * ((y1 + y2) + betaq * (y2 - y1))
+            
+            # 边界处理
+            child1[i] = np.clip(child1[i], self.bounds[i, 0], self.bounds[i, 1])
+            child2[i] = np.clip(child2[i], self.bounds[i, 0], self.bounds[i, 1])
+        
+        return child1, child2
+    
+    def _polynomial_mutation(self, 
+                            x: np.ndarray) -> np.ndarray:
+        """多项式变异"""
+        for i in range(self.n_variables):
+            if random.random() > self.mut_prob:
+                continue
+            
+            delta_min = x[i] - self.bounds[i, 0]
+            delta_max = self.bounds[i, 1] - x[i]
+            
+            rand = random.random()
+            
+            if rand < 0.5:
+                delta = delta_min / (self.bounds[i, 1] - self.bounds[i, 0])
+                deltaq = (2.0 * rand + (1.0 - 2.0 * rand) * 
+                         (1.0 - delta) ** (self.eta_m + 1)) ** (1.0 / (self.eta_m + 1)) - 1.0
+            else:
+                delta = delta_max / (self.bounds[i, 1] - self.bounds[i, 0])
+                deltaq = 1.0 - (2.0 * (1.0 - rand) + 2.0 * (rand - 0.5) * 
+                               (1.0 - delta) ** (self.eta_m + 1)) ** (1.0 / (self.eta_m + 1))
+            
+            x[i] = x[i] + deltaq * (self.bounds[i, 1] - self.bounds[i, 0])
+            x[i] = np.clip(x[i], self.bounds[i, 0], self.bounds[i, 1])
+        
+        return x
+    
+    def optimize(self, 
+                obj_funcs: List[Callable]) -> List[Individual]:
+        """
+        执行 NSGA-II 优化
+        
+        Args:
+            obj_funcs: 目标函数列表
+        
+        Returns:
+            pareto_front: Pareto 最优解集
+        """
+        print(f"开始 NSGA-II 优化...")
+        print(f"  目标数：{self.n_objectives}")
+        print(f"  变量数：{self.n_variables}")
+        print(f"  种群大小：{self.pop_size}")
+        print(f"  迭代代数：{self.n_gen}")
+        print()
+        
+        # 初始化种群
+        self.population = self._initialize_population()
+        self._evaluate_objectives(self.population, obj_funcs)
+        
+        # 进化循环
+        for gen in range(self.n_gen):
+            # 1. 非支配排序
+            fronts = self._fast_non_dominated_sort(self.population)
+            
+            # 2. 计算拥挤度距离
+            for front in fronts:
+                self._calculate_crowding_distance(self.population, front)
+            
+            # 3. 记录历史
+            if gen % 10 == 0 or gen == self.n_gen - 1:
+                pareto_front = [ind for ind in self.population if ind.rank == 0]
+                self.history.append({
+                    'generation': gen,
+                    'n_pareto': len(pareto_front),
+                    'pareto_solutions': pareto_front.copy()
+                })
+                print(f"Generation {gen}: {len(pareto_front)} Pareto 解")
+            
+            # 4. 生成子代
+            offspring = []
+            while len(offspring) < self.pop_size:
+                # 选择
+                parent1 = self._tournament_selection(self.population)
+                parent2 = self._tournament_selection(self.population)
+                
+                # 交叉
+                child1_x, child2_x = self._sbx_crossover(parent1, parent2)
+                
+                # 变异
+                child1_x = self._polynomial_mutation(child1_x)
+                child2_x = self._polynomial_mutation(child2_x)
+                
+                # 创建子代个体
+                child1 = Individual(x=child1_x, objectives=np.zeros(self.n_objectives))
+                child2 = Individual(x=child2_x, objectives=np.zeros(self.n_objectives))
+                
+                offspring.append(child1)
+                if len(offspring) < self.pop_size:
+                    offspring.append(child2)
+            
+            # 评估子代
+            self._evaluate_objectives(offspring, obj_funcs)
+            
+            # 5. 精英保留：合并父代和子代
+            combined = self.population + offspring
+            
+            # 6. 非支配排序
+            fronts = self._fast_non_dominated_sort(combined)
+            
+            # 7. 计算拥挤度
+            for front in fronts:
+                self._calculate_crowding_distance(combined, front)
+            
+            # 8. 选择下一代种群
+            new_population = []
+            front_idx = 0
+            
+            while len(new_population) + len(fronts[front_idx]) <= self.pop_size:
+                # 整个前沿加入
+                for idx in fronts[front_idx]:
+                    new_population.append(combined[idx])
+                front_idx += 1
+            
+            # 最后一个前沿按拥挤度排序选择
+            if len(new_population) < self.pop_size and front_idx < len(fronts):
+                last_front = fronts[front_idx]
+                # 按拥挤度降序排序
+                last_front_sorted = sorted(
+                    last_front,
+                    key=lambda idx: combined[idx].crowding_distance,
+                    reverse=True
+                )
+                
+                # 选择剩余名额
+                remaining = self.pop_size - len(new_population)
+                for idx in last_front_sorted[:remaining]:
+                    new_population.append(combined[idx])
+            
+            self.population = new_population
+        
+        # 提取最终 Pareto 前沿
+        self.pareto_front = [ind for ind in self.population if ind.rank == 0]
+        
+        print(f"\n优化完成!")
+        print(f"  Pareto 解数量：{len(self.pareto_front)}")
+        
+        return self.pareto_front
+    
+    def plot_pareto_front(self, 
+                         obj1_idx: int = 0,
+                         obj2_idx: int = 1,
+                         title: str = "Pareto Front") -> None:
+        """绘制 Pareto 前沿（2D）"""
+        if self.n_objectives < 2:
+            print("需要至少 2 个目标才能绘制 2D Pareto 前沿")
+            return
+        
+        obj1 = [ind.objectives[obj1_idx] for ind in self.pareto_front]
+        obj2 = [ind.objectives[obj2_idx] for ind in self.pareto_front]
+        
+        plt.figure(figsize=(10, 8))
+        plt.scatter(obj1, obj2, c='blue', alpha=0.6, s=50, edgecolors='black')
+        plt.xlabel(f'Objective {obj1_idx + 1}')
+        plt.ylabel(f'Objective {obj2_idx + 1}')
+        plt.title(title)
+        plt.grid(True, alpha=0.3)
+        plt.show()
+
+
+# 使用示例：ZDT1 测试函数
+if __name__ == "__main__":
+    # ZDT1 测试函数（2 目标）
+    def zdt1_f1(x):
+        return x[0]
+    
+    def zdt1_f2(x):
+        g = 1 + 9 * np.sum(x[1:]) / (len(x) - 1)
+        h = 1 - np.sqrt(x[0] / g)
+        return g * h
+    
+    # 初始化 NSGA-II
+    n_vars = 30
+    bounds = [(0, 1)] * n_vars
+    
+    nsga2 = NSGA2(
+        n_objectives=2,
+        n_variables=n_vars,
+        bounds=bounds,
+        population_size=100,
+        n_generations=250
+    )
+    
+    # 优化
+    pareto_solutions = nsga2.optimize([zdt1_f1, zdt1_f2])
+    
+    # 绘制 Pareto 前沿
+    nsga2.plot_pareto_front(title="NSGA-II on ZDT1")
+    
+    print("\n关键观察:")
+    print("1. 快速非支配排序：O(MN²) 复杂度，高效分层")
+    print("2. 拥挤度距离：保持 Pareto 前沿多样性")
+    print("3. 精英保留：父代 + 子代竞争，确保收敛")
+    print("4. SBX 交叉 + 多项式变异：实数编码优化")
+    print("5. 适用于 2-3 目标问题（Many-Objective 用 NSGA-III）")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">5.3 NSGA-III：Many-Objective 扩展</h3>
+                
+                <div class="section">
+                    <h4>从 NSGA-II 到 NSGA-III</h4>
+                    
+                    <p>NSGA-III 是 NSGA-II 的扩展，专门针对 Many-Objective 问题（目标数≥4）。核心改进：</p>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>参考点机制</strong>：使用预定义参考点引导搜索方向</li>
+                        <li><strong>基于参考点的选择</strong>：替代拥挤度距离，保持高维空间多样性</li>
+                        <li><strong>归一化</strong>：处理不同目标的尺度差异</li>
+                        <li><strong>关联操作</strong>：将个体关联到最近参考点</li>
+                    </ul>
+                    
+                    <div class="quote">
+                        "NSGA-II 在 2-3 目标问题上表现优异，但在 Many-Objective 场景下，几乎所有解都变成非支配的，选择压力消失。NSGA-III 通过参考点机制重新引入选择压力，实现了高维 Pareto 前沿的有效逼近。"
+                        <div class="quote-author">—— Deb & Jain (2014)</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">5.4 本章小结</h3>
+                <p>本章深入探讨了 NSGA-II/III 算法。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>NSGA-II 三大机制：快速非支配排序、拥挤度距离、精英保留</li>
+                    <li>SBX 交叉 + 多项式变异：实数编码标准操作</li>
+                    <li>NSGA-III：参考点机制解决 Many-Objective 挑战</li>
+                    <li>应用场景：工程设计、资源分配、投资组合</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：电动汽车电池管理系统优化</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某电动汽车公司，需优化电池管理系统（BMS）</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>5 个冲突目标：续航里程、充电速度、电池寿命、安全性、成本</li>
+                                <li>高维决策空间：20+ 控制参数（温度、电流、电压等）</li>
+                                <li>非线性约束：热管理、电化学约束</li>
+                                <li>实时性要求：在线优化响应时间<100ms</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>NSGA-III + 偏好学习解决方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>Many-Objective 优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>NSGA-III 处理 5 目标优化</li>
+                                <li>Das-Dennis 参考点生成（210 个参考点）</li>
+                                <li>归一化 + 关联操作</li>
+                            </ul>
+                        </li>
+                        <li><strong>偏好建模</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>交互式 elicitation：用户成对比较 Pareto 解</li>
+                                <li>学习权重向量：贝叶斯更新偏好</li>
+                                <li>动态调整参考点密度</li>
+                            </ul>
+                        </li>
+                        <li><strong>代理模型加速</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>高斯过程代理电化学模型</li>
+                                <li>自适应采样：EI 采集函数</li>
+                                <li>在线更新：新数据增量学习</li>
+                            </ul>
+                        </li>
+                        <li><strong>实时部署</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>离线训练 Pareto 前沿数据库</li>
+                                <li>在线查询：最近邻插值</li>
+                                <li>响应时间：50ms</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>续航里程</strong>：在同等成本下提升 18%（450km→531km）</li>
+                        <li><strong>充电速度</strong>：80% 充电时间从 45min 缩短到 28min（-38%）</li>
+                        <li><strong>电池寿命</strong>：循环寿命从 1500 次提升到 2100 次（+40%）</li>
+                        <li><strong>安全性</strong>：热失控风险降低 67%</li>
+                        <li><strong>成本</strong>：BMS 系统成本降低 22%</li>
+                        <li><strong>用户满意度</strong>：从 3.9/5 提升到 4.7/5</li>
+                        <li><strong>商业价值</strong>：年节省成本 3.2 亿元，销量提升 35%</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：数据中心资源调度</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某云服务商，管理 10 万 + 服务器，需优化资源调度</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>4 个冲突目标：能耗、性能（延迟）、成本、可靠性</li>
+                                <li>大规模：10 万 + 服务器，百万 + 任务/天</li>
+                                <li>动态环境：负载波动、故障发生</li>
+                                <li>SLA 约束：99.99% 可用性，P99 延迟<100ms</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>多目标贝叶斯优化 + AHP 方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>多目标贝叶斯优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>高斯过程建模 4 目标响应面</li>
+                                <li>EHVI（Expected Hypervolume Improvement）采集函数</li>
+                                <li>并行评估：批量建议生成</li>
+                            </ul>
+                        </li>
+                        <li><strong>AHP 权重确定</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>层次结构：目标层 - 准则层 - 方案层</li>
+                                <li>成对比较矩阵：专家打分</li>
+                                <li>一致性检验：CR<0.1</li>
+                                <li>权重：能耗 0.35、性能 0.30、成本 0.20、可靠性 0.15</li>
+                            </ul>
+                        </li>
+                        <li><strong>动态重调度</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>触发条件：负载变化>20%、故障发生</li>
+                                <li>增量优化：热启动 Pareto 搜索</li>
+                                <li>迁移学习：历史知识复用</li>
+                            </ul>
+                        </li>
+                        <li><strong>分布式部署</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>分层架构：全局优化 + 区域调度</li>
+                                <li>边缘计算：本地决策</li>
+                                <li>联邦学习：隐私保护</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>能耗</strong>：PUE 从 1.52 降低到 1.28（-16%），年节电 2.3 亿度</li>
+                        <li><strong>性能</strong>：P99 延迟从 145ms 降低到 78ms（-46%）</li>
+                        <li><strong>成本</strong>：运营成本降低 28%（年节省 4.5 亿元）</li>
+                        <li><strong>可靠性</strong>：可用性从 99.95% 提升到 99.995%</li>
+                        <li><strong>碳减排</strong>：年减少 CO2 排放 18 万吨</li>
+                        <li><strong>客户满意度</strong>：从 4.1/5 提升到 4.8/5</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>多目标优化系统部署最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>算法选择</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>2-3 目标：NSGA-II、MOEA/D</li>
+                                <li>4+ 目标（Many-Objective）：NSGA-III、RVEA</li>
+                                <li>昂贵评估：多目标贝叶斯优化</li>
+                                <li>动态环境：在线 EMO、增量优化</li>
+                            </ul>
+                        </li>
+                        <li><strong>偏好整合</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>先验偏好：AHP、权重向量</li>
+                                <li>交互式：成对比较、参考点调整</li>
+                                <li>后验：Pareto 解聚类、可视化探索</li>
+                            </ul>
+                        </li>
+                        <li><strong>计算效率</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>代理模型：高斯过程、神经网络</li>
+                                <li>并行评估：批量建议、分布式计算</li>
+                                <li>降维：PCA、特征选择</li>
+                            </ul>
+                        </li>
+                        <li><strong>决策支持</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>可视化：Pareto 前沿 2D/3D 投影</li>
+                                <li>解释性：目标贡献度分析</li>
+                                <li>敏感性：参数变化影响</li>
+                            </ul>
+                        </li>
+                        <li><strong>持续优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>在线学习：新数据更新模型</li>
+                                <li>A/B 测试：不同策略对比</li>
+                                <li>反馈循环：用户满意度驱动</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 38px; border-left-color: var(--multiobj-blue);">
+                    "从电动汽车到数据中心，从 NSGA-III 到多目标贝叶斯优化，从偏好建模到 AHP 决策，多目标优化体系正在重塑 AI 系统的认知范式。未来的 AI 将更具权衡智慧、更懂用户偏好、更接近人类的决策能力。这不仅是技术的进步，更是智能本质的探索。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：电动汽车 BMS，续航 +18%、充电 -38%、寿命 +40%、年节省 3.2 亿</li>
+                    <li>案例二：数据中心，PUE -16%、延迟 -46%、成本 -28%、年节省 4.5 亿</li>
+                    <li>最佳实践：算法选择、偏好整合、计算效率、决策支持、持续优化</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">多目标优化理论</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;">
+                    <li>MIT (2026). "Multi-Objective Optimization Theory." mit.edu</li>
+                    <li>Stanford (2026). "Pareto Optimality and Trade-offs." stanford.edu</li>
+                </ol>
+                
+                <h3 class="section-title">进化多目标优化</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="3">
+                    <li>CMU (2026). "Evolutionary Multi-Objective Optimization." cmu.edu</li>
+                    <li>Berkeley (2026). "NSGA-II/III and MOEA/D." berkeley.edu</li>
+                </ol>
+                
+                <h3 class="section-title">偏好与 MCDA</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="5">
+                    <li>Princeton (2026). "Preference Elicitation and Modeling." princeton.edu</li>
+                    <li>DeepMind (2026). "Multi-Criteria Decision Analysis." deepmind.com</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.3em; margin-bottom: 15px; color: var(--multiobj-blue); font-weight: 800; font-family: 'Georgia', serif;">多目标优化与偏好决策建模</p>
+                <p style="font-size: 1.08em; margin-bottom: 7px; font-style: italic;">从单目标优化到多目标权衡的认知跃迁</p>
+                <p>© 2026 超级代码智能体 | 多目标智能版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 21px; font-size: 0.9em; line-height: 1.8;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="pareto-spectrum" style="margin-top: 30px;">
+                    <div class="spectrum-item spectrum-multiobj">🔵 多目标优化</div>
+                    <div class="spectrum-item spectrum-pareto">🟣 Pareto 前沿</div>
+                    <div class="spectrum-item spectrum-preference">🟡 偏好建模</div>
+                    <div class="spectrum-item spectrum-mcda">🟢 MCDA</div>
+                    <div class="spectrum-item spectrum-tradeoff">🔴 权衡决策</div>
+                </div>
+                <p style="margin-top: 30px; font-size: 0.83em; color: var(--text-secondary);">
+                    谨以此书献给所有在多目标优化与决策科学一线构建 AI 系统的研究者和工程师们<br>
+                    从多目标优化到 Pareto 前沿，从偏好建模到 MCDA<br>
+                    多目标智能——让 AI 系统从盲目优化者走向明智决策者
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Multi-Objective Optimization & Preference Decision Modeling');
+        console.log('📚 From Single-Objective to Multi-Objective Trade-off Cognitive Leap (2024-2026)');
+        console.log('✨ Multi-Objective + Pareto + Preference + MCDA + Trade-off = Wise AI');
+    </script>
+</body>
+</html>

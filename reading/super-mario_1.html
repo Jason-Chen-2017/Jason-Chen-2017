@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>超级马里奥 - Super Mario Bros</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+            overflow: hidden;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 768px;
+            height: 576px;
+        }
+        
+        #game-canvas {
+            background: #5c94fc;
+            display: block;
+        }
+        
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            color: #fff;
+            font-size: 16px;
+            text-shadow: 2px 2px 0 #000;
+            z-index: 10;
+        }
+        
+        .ui-item {
+            text-align: center;
+        }
+        
+        .ui-label {
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+        
+        .ui-value {
+            font-size: 18px;
+        }
+        
+        #start-screen, #game-over-screen, #win-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            z-index: 20;
+        }
+        
+        #game-over-screen, #win-screen {
+            display: none;
+        }
+        
+        h1 {
+            font-size: 36px;
+            margin-bottom: 20px;
+            color: #e52521;
+            text-shadow: 3px 3px 0 #000;
+        }
+        
+        h2 {
+            font-size: 24px;
+            margin-bottom: 30px;
+        }
+        
+        .btn {
+            padding: 15px 40px;
+            font-size: 18px;
+            font-family: inherit;
+            background: #e52521;
+            color: #fff;
+            border: 4px solid #fff;
+            cursor: pointer;
+            margin: 10px;
+            text-transform: uppercase;
+        }
+        
+        .btn:hover {
+            background: #ff4d4d;
+        }
+        
+        .controls-info {
+            margin-top: 30px;
+            font-size: 12px;
+            text-align: center;
+            line-height: 2;
+        }
+        
+        .key {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #fff;
+            color: #000;
+            border-radius: 4px;
+            margin: 0 4px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas" width="768" height="576"></canvas>
+        
+        <div id="ui-overlay">
+            <div class="ui-item">
+                <div class="ui-label">MARIO</div>
+                <div class="ui-value" id="score">000000</div>
+            </div>
+            <div class="ui-item">
+                <div class="ui-label">COINS</div>
+                <div class="ui-value" id="coins">× 00</div>
+            </div>
+            <div class="ui-item">
+                <div class="ui-label">WORLD</div>
+                <div class="ui-value" id="world">1-1</div>
+            </div>
+            <div class="ui-item">
+                <div class="ui-label">TIME</div>
+                <div class="ui-value" id="time">400</div>
+            </div>
+            <div class="ui-item">
+                <div class="ui-label">LIVES</div>
+                <div class="ui-value" id="lives">× 3</div>
+            </div>
+        </div>
+        
+        <div id="start-screen">
+            <h1>SUPER MARIO BROS</h1>
+            <button class="btn" onclick="game.start()">START GAME</button>
+            <div class="controls-info">
+                <div><span class="key">←</span> <span class="key">→</span> 移动</div>
+                <div><span class="key">SPACE</span> 或 <span class="key">↑</span> 跳跃</div>
+                <div><span class="key">SHIFT</span> 奔跑</div>
+            </div>
+        </div>
+        
+        <div id="game-over-screen">
+            <h1>GAME OVER</h1>
+            <button class="btn" onclick="game.restart()">TRY AGAIN</button>
+        </div>
+        
+        <div id="win-screen">
+            <h1>YOU WIN!</h1>
+            <h2 id="final-score">Score: 000000</h2>
+            <button class="btn" onclick="game.restart()">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 音效系统 ====================
+        class SoundSystem {
+            constructor() {
+                this.audioContext = null;
+                this.sounds = {};
+                this.enabled = true;
+                this.initialized = false;
+            }
+            
+            init() {
+                if (this.initialized) return;
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.createSounds();
+                    this.initialized = true;
+                } catch (e) {
+                    console.log('Audio not supported');
+                    this.enabled = false;
+                }
+            }
+            
+            createSounds() {
+                // 使用合成器创建经典音效
+                this.sounds = {
+                    jump: () => this.playTone(150, 300, 'square', 0.1),
+                    coin: () => {
+                        this.playTone(987, 100, 'square', 0.1);
+                        setTimeout(() => this.playTone(1318, 150, 'square', 0.1), 80);
+                    },
+                    stomp: () => this.playTone(200, 150, 'sawtooth', 0.1),
+                    powerup: () => {
+                        for (let i = 0; i < 8; i++) {
+                            setTimeout(() => this.playTone(400 + i * 100, 80, 'square', 0.1), i * 80);
+                        }
+                    },
+                    die: () => {
+                        for (let i = 0; i < 6; i++) {
+                            setTimeout(() => this.playTone(400 - i * 50, 150, 'sawtooth', 0.15), i * 150);
+                        }
+                    },
+                    break: () => this.playTone(100, 100, 'square', 0.05),
+                    bump: () => this.playTone(150, 80, 'square', 0.05),
+                    levelComplete: () => {
+                        const notes = [523, 659, 783, 1046, 783, 1046];
+                        notes.forEach((freq, i) => {
+                            setTimeout(() => this.playTone(freq, 200, 'square', 0.2), i * 200);
+                        });
+                    },
+                    win: () => {
+                        const melody = [523, 659, 783, 1046, 783, 1046, 1318, 1046];
+                        melody.forEach((freq, i) => {
+                            setTimeout(() => this.playTone(freq, 250, 'square', 0.25), i * 250);
+                        });
+                    }
+                };
+            }
+            
+            playTone(freq, duration, type, volume) {
+                if (!this.enabled || !this.audioContext) return;
+                
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(this.audioContext.destination);
+                
+                oscillator.frequency.value = freq;
+                oscillator.type = type;
+                
+                gainNode.gain.setValueAtTime(volume, this.audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + duration / 1000);
+                
+                oscillator.start(this.audioContext.currentTime);
+                oscillator.stop(this.audioContext.currentTime + duration / 1000);
+            }
+            
+            play(soundName) {
+                if (!this.enabled) return;
+                this.init();
+                if (this.sounds[soundName]) {
+                    this.sounds[soundName]();
+                }
+            }
+        }
+
+        // ==================== 输入处理 ====================
+        class InputHandler {
+            constructor() {
+                this.keys = {};
+                this.setupListeners();
+            }
+            
+            setupListeners() {
+                window.addEventListener('keydown', (e) => {
+                    this.keys[e.code] = true;
+                    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+                        e.preventDefault();
+                    }
+                });
+                
+                window.addEventListener('keyup', (e) => {
+                    this.keys[e.code] = false;
+                });
+            }
+            
+            isDown(code) {
+                return this.keys[code] === true;
+            }
+            
+            getDirection() {
+                let dir = 0;
+                if (this.isDown('ArrowLeft') || this.isDown('KeyA')) dir -= 1;
+                if (this.isDown('ArrowRight') || this.isDown('KeyD')) dir += 1;
+                return dir;
+            }
+            
+            isJumping() {
+                return this.isDown('Space') || this.isDown('ArrowUp') || this.isDown('KeyW');
+            }
+            
+            isRunning() {
+                return this.isDown('ShiftLeft') || this.isDown('ShiftRight');
+            }
+        }
+
+        // ==================== 物理引擎 ====================
+        class Physics {
+            constructor() {
+                this.gravity = 0.5;
+                this.friction = 0.8;
+            }
+            
+            applyGravity(entity) {
+                entity.vy += this.gravity;
+            }
+            
+            applyFriction(entity) {
+                entity.vx *= this.friction;
+            }
+            
+            checkCollision(rect1, rect2) {
+                return rect1.x < rect2.x + rect2.width &&
+                       rect1.x + rect1.width > rect2.x &&
+                       rect1.y < rect2.y + rect2.height &&
+                       rect1.y + rect1.height > rect2.y;
+            }
+            
+            resolveCollision(entity, block) {
+                const overlapX = (entity.width + block.width) / 2 - Math.abs((entity.x + entity.width / 2) - (block.x + block.width / 2));
+                const overlapY = (entity.height + block.height) / 2 - Math.abs((entity.y + entity.height / 2) - (block.y + block.height / 2));
+                
+                if (overlapX < overlapY) {
+                    if (entity.x < block.x) {
+                        entity.x = block.x - entity.width;
+                        entity.vx = 0;
+                    } else {
+                        entity.x = block.x + block.width;
+                        entity.vx = 0;
+                    }
+                } else {
+                    if (entity.y < block.y) {
+                        entity.y = block.y - entity.height;
+                        entity.vy = 0;
+                        entity.grounded = true;
+                    } else {
+                        entity.y = block.y + block.height;
+                        entity.vy = 0;
+                        entity.hitting = true;
+                    }
+                }
+            }
+        }
+
+        // ==================== 游戏实体 ====================
+        class Entity {
+            constructor(x, y, width, height, color) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.color = color;
+                this.vx = 0;
+                this.vy = 0;
+                this.grounded = false;
+                this.hitting = false;
+                this.active = true;
+            }
+            
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+            }
+            
+            draw(ctx, cameraX) {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x - cameraX, this.y, this.width, this.height);
+            }
+        }
+
+        class Mario extends Entity {
+            constructor(x, y) {
+                super(x, y, 32, 32, '#e52521');
+                this.speed = 5;
+                this.runSpeed = 8;
+                this.jumpForce = -13;
+                this.facing = 1;
+                this.animFrame = 0;
+                this.animTimer = 0;
+                this.invincible = false;
+                this.invincibleTimer = 0;
+                this.big = false;
+                this.dead = false;
+                this.dying = false;
+                this.deathTimer = 0;
+            }
+            
+            update(input, physics, blocks) {
+                if (this.dying) {
+                    this.vy += physics.gravity;
+                    this.y += this.vy;
+                    this.deathTimer++;
+                    return;
+                }
+                
+                if (this.invincible) {
+                    this.invincibleTimer--;
+                    if (this.invincibleTimer <= 0) {
+                        this.invincible = false;
+                    }
+                }
+                
+                const speed = input.isRunning() ? this.runSpeed : this.speed;
+                const dir = input.getDirection();
+                
+                if (dir !== 0) {
+                    this.vx = dir * speed;
+                    this.facing = dir;
+                } else {
+                    physics.applyFriction(this);
+                }
+                
+                if (input.isJumping() && this.grounded) {
+                    this.vy = this.jumpForce;
+                    this.grounded = false;
+                    game.sound.play('jump');
+                }
+                
+                physics.applyGravity(this);
+                this.grounded = false;
+                this.hitting = false;
+                
+                super.update();
+                
+                // 边界检查
+                if (this.x < 0) {
+                    this.x = 0;
+                    this.vx = 0;
+                }
+                
+                // 掉落死亡
+                if (this.y > 600) {
+                    this.die();
+                }
+                
+                // 动画
+                if (Math.abs(this.vx) > 0.5) {
+                    this.animTimer++;
+                    if (this.animTimer > 8) {
+                        this.animFrame = (this.animFrame + 1) % 3;
+                        this.animTimer = 0;
+                    }
+                } else {
+                    this.animFrame = 0;
+                }
+            }
+            
+            draw(ctx, cameraX) {
+                if (this.dying) {
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(this.x - cameraX, this.y, this.width, this.height);
+                    return;
+                }
+                
+                if (this.invincible && Math.floor(this.invincibleTimer / 4) % 2 === 0) {
+                    return;
+                }
+                
+                const drawX = this.x - cameraX;
+                
+                // 绘制马里奥（像素风格）
+                ctx.fillStyle = '#e52521'; // 红色帽子
+                ctx.fillRect(drawX + 4, this.y, 24, 8);
+                ctx.fillRect(drawX + 2, this.y + 8, 28, 4);
+                
+                ctx.fillStyle = '#f8b800'; // 头发
+                ctx.fillRect(drawX + 4, this.y + 4, 8, 4);
+                
+                ctx.fillStyle = '#f8d8a8'; // 脸
+                ctx.fillRect(drawX + 6, this.y + 8, 20, 10);
+                
+                ctx.fillStyle = '#000'; // 眼睛
+                if (this.facing > 0) {
+                    ctx.fillRect(drawX + 18, this.y + 10, 4, 4);
+                } else {
+                    ctx.fillRect(drawX + 10, this.y + 10, 4, 4);
+                }
+                
+                ctx.fillStyle = '#e52521'; // 衣服
+                ctx.fillRect(drawX + 4, this.y + 18, 24, 8);
+                
+                ctx.fillStyle = '#0055e5'; // 背带裤
+                ctx.fillRect(drawX + 4, this.y + 22, 8, 8);
+                ctx.fillRect(drawX + 20, this.y + 22, 8, 8);
+                ctx.fillRect(drawX + 8, this.y + 26, 16, 4);
+                
+                // 腿部动画
+                ctx.fillStyle = '#0055e5';
+                if (this.animFrame === 0) {
+                    ctx.fillRect(drawX + 4, this.y + 30, 10, 4);
+                    ctx.fillRect(drawX + 18, this.y + 30, 10, 4);
+                } else if (this.animFrame === 1) {
+                    ctx.fillRect(drawX + 2, this.y + 28, 10, 6);
+                    ctx.fillRect(drawX + 20, this.y + 30, 10, 4);
+                } else {
+                    ctx.fillRect(drawX + 4, this.y + 30, 10, 4);
+                    ctx.fillRect(drawX + 18, this.y + 28, 10, 6);
+                }
+            }
+            
+            jump() {
+                if (this.grounded) {
+                    this.vy = this.jumpForce;
+                    this.grounded = false;
+                    game.sound.play('jump');
+                }
+            }
+            
+            die() {
+                if (this.dying) return;
+                this.dying = true;
+                this.vy = -10;
+                game.sound.play('die');
+                game.lives--;
+                game.updateUI();
+                
+                setTimeout(() => {
+                    if (game.lives > 0) {
+                        game.resetLevel();
+                    } else {
+                        game.gameOver();
+                    }
+                }, 3000);
+            }
+            
+            makeBig() {
+                if (!this.big) {
+                    this.big = true;
+                    this.height = 48;
+                    this.y -= 16;
+                    game.sound.play('powerup');
+                    game.score += 1000;
+                }
+            }
+            
+            getHit() {
+                if (this.invincible || this.dying) return;
+                
+                if (this.big) {
+                    this.big = false;
+                    this.height = 32;
+                    this.y += 16;
+                    this.invincible = true;
+                    this.invincibleTimer = 120;
+                    game.sound.play('bump');
+                } else {
+                    this.die();
+                }
+            }
+        }
+
+        class Goomba extends Entity {
+            constructor(x, y) {
+                super(x, y, 32, 32, '#8b4513');
+                this.vx = -2;
+                this.animFrame = 0;
+                this.animTimer = 0;
+            }
+            
+            update(physics, blocks, mario) {
+                if (!this.active) return;
+                
+                physics.applyGravity(this);
+                this.grounded = false;
+                
+                super.update();
+                
+                // 简单的AI：碰到障碍物转向
+                for (const block of blocks) {
+                    if (physics.checkCollision(this, block)) {
+                        physics.resolveCollision(this, block);
+                        if (this.hitting || (this.vx !== 0 && block.solid)) {
+                            this.vx = -this.vx;
+                        }
+                    }
+                }
+                
+                // 动画
+                this.animTimer++;
+                if (this.animTimer > 15) {
+                    this.animFrame = (this.animFrame + 1) % 2;
+                    this.animTimer = 0;
+                }
+                
+                // 掉落死亡
+                if (this.y > 600) {
+                    this.active = false;
+                }
+            }
+            
+            draw(ctx, cameraX) {
+                if (!this.active) return;
+                
+                const drawX = this.x - cameraX;
+                
+                // 绘制板栗仔
+                ctx.fillStyle = '#8b4513'; // 棕色身体
+                ctx.fillRect(drawX + 4, this.y + 8, 24, 20);
+                
+                ctx.fillStyle = '#f8d8a8'; // 脸
+                ctx.fillRect(drawX + 6, this.y + 12, 20, 12);
+                
+                ctx.fillStyle = '#000'; // 眼睛
+                ctx.fillRect(drawX + 8, this.y + 14, 6, 6);
+                ctx.fillRect(drawX + 18, this.y + 14, 6, 6);
+                
+                ctx.fillStyle = '#000'; // 眉毛
+                ctx.fillRect(drawX + 7, this.y + 12, 8, 2);
+                ctx.fillRect(drawX + 17, this.y + 12, 8, 2);
+                
+                // 腿部动画
+                ctx.fillStyle = '#000';
+                if (this.animFrame === 0) {
+                    ctx.fillRect(drawX + 6, this.y + 28, 8, 4);
+                    ctx.fillRect(drawX + 18, this.y + 28, 8, 4);
+                } else {
+                    ctx.fillRect(drawX + 4, this.y + 28, 8, 4);
+                    ctx.fillRect(drawX + 20, this.y + 28, 8, 4);
+                }
+            }
+            
+            stomp() {
+                this.active = false;
+                game.sound.play('stomp');
+                game.score += 100;
+            }
+        }
+
+        class Koopa extends Entity {
+            constructor(x, y) {
+                super(x, y, 32, 40, '#00aa00');
+                this.vx = -2;
+                this.shell = false;
+                this.shellTimer = 0;
+            }
+            
+            update(physics, blocks, mario) {
+                if (!this.active) return;
+                
+                if (this.shell) {
+                    this.shellTimer--;
+                    if (this.shellTimer <= 0) {
+                        this.shell = false;
+                        this.height = 40;
+                    } else {
+                        this.vx = 0;
+                    }
+                } else {
+                    physics.applyGravity(this);
+                    this.grounded = false;
+                    super.update();
+                    
+                    for (const block of blocks) {
+                        if (physics.checkCollision(this, block)) {
+                            physics.resolveCollision(this, block);
+                            if (this.hitting || (this.vx !== 0 && block.solid)) {
+                                this.vx = -this.vx;
+                            }
+                        }
+                    }
+                }
+                
+                if (this.y > 600) {
+                    this.active = false;
+                }
+            }
+            
+            draw(ctx, cameraX) {
+                if (!this.active) return;
+                
+                const drawX = this.x - cameraX;
+                
+                if (this.shell) {
+                    ctx.fillStyle = '#00aa00';
+                    ctx.fillRect(drawX + 4, this.y + 20, 24, 16);
+                    return;
+                }
+                
+                // 绘制库巴小兵
+                ctx.fillStyle = '#00aa00'; // 绿色壳
+                ctx.fillRect(drawX + 4, this.y + 16, 24, 20);
+                
+                ctx.fillStyle = '#f8d8a8'; // 头
+                ctx.fillRect(drawX + 6, this.y, 20, 18);
+                
+                ctx.fillStyle = '#000'; // 眼睛
+                ctx.fillRect(drawX + 10, this.y + 4, 4, 4);
+                ctx.fillRect(drawX + 18, this.y + 4, 4, 4);
+                
+                ctx.fillStyle = '#000'; // 腿
+                ctx.fillRect(drawX + 6, this.y + 36, 8, 4);
+                ctx.fillRect(drawX + 18, this.y + 36, 8, 4);
+            }
+            
+            stomp() {
+                if (!this.shell) {
+                    this.shell = true;
+                    this.height = 36;
+                    this.shellTimer = 600;
+                    game.sound.play('stomp');
+                    game.score += 100;
+                }
+            }
+        }
+
+        class Coin extends Entity {
+            constructor(x, y) {
+                super(x, y, 24, 24, '#ffd700');
+                this.animFrame = 0;
+                this.animTimer = 0;
+                this.collected = false;
+            }
+            
+            update() {
+                if (this.collected) return;
+                
+                this.animTimer++;
+                if (this.animTimer > 8) {
+                    this.animFrame = (this.animFrame + 1) % 4;
+                    this.animTimer = 0;
+                }
+            }
+            
+            draw(ctx, cameraX) {
+                if (this.collected) return;
+                
+                const drawX = this.x - cameraX;
+                const widths = [24, 18, 12, 18];
+                const width = widths[this.animFrame];
+                const offsetX = (24 - width) / 2;
+                
+                ctx.fillStyle = '#ffd700';
+                ctx.fillRect(drawX + offsetX, this.y + 2, width, 20);
+                
+                ctx.fillStyle = '#ffec8b';
+                ctx.fillRect(drawX + offsetX + 4, this.y + 6, width - 8, 12);
+            }
+            
+            collect() {
+                if (this.collected) return;
+                this.collected = true;
+                game.sound.play('coin');
+                game.coins++;
+                game.score += 200;
+                if (game.coins >= 100) {
+                    game.coins = 0;
+                    game.lives++;
+                }
+                game.updateUI();
+            }
+        }
+
+        class Mushroom extends Entity {
+            constructor(x, y) {
+                super(x, y, 32, 32, '#ff0000');
+                this.vx = 2;
+                this.emerging = true;
+                this.emergeY = y;
+            }
+            
+            update(physics, blocks) {
+                if (this.emerging) {
+                    this.y -= 1;
+                    if (this.y <= this.emergeY - 32) {
+                        this.emerging = false;
+                    }
+                    return;
+                }
+                
+                physics.applyGravity(this);
+                this.grounded = false;
+                super.update();
+                
+                for (const block of blocks) {
+                    if (physics.checkCollision(this, block)) {
+                        physics.resolveCollision(this, block);
+                        if (this.hitting || (this.vx !== 0 && block.solid)) {
+                            this.vx = -this.vx;
+                        }
+                    }
+                }
+            }
+            
+            draw(ctx, cameraX) {
+                const drawX = this.x - cameraX;
+                
+                // 绘制蘑菇
+                ctx.fillStyle = '#ff0000'; // 红色伞盖
+                ctx.fillRect(drawX + 2, this.y, 28, 16);
+                ctx.fillRect(drawX, this.y + 8, 32, 8);
+                
+                ctx.fillStyle = '#fff'; // 白点
+                ctx.fillRect(drawX + 6, this.y + 2, 6, 6);
+                ctx.fillRect(drawX + 20, this.y + 2, 6, 6);
+                
+                ctx.fillStyle = '#f8d8a8'; // 茎
+                ctx.fillRect(drawX + 8, this.y + 16, 16, 16);
+            }
+        }
+
+        class Block extends Entity {
+            constructor(x, y, type) {
+                super(x, y, 32, 32, '#c84c0c');
+                this.type = type;
+                this.solid = true;
+                this.hit = false;
+                this.bumpOffset = 0;
+                this.bumpTimer = 0;
+                this.content = null;
+                
+                switch(type) {
+                    case 'brick':
+                        this.color = '#c84c0c';
+                        this.solid = true;
+                        break;
+                    case 'question':
+                        this.color = '#f8b800';
+                        this.solid = true;
+                        this.content = 'coin';
+                        break;
+                    case 'hard':
+                        this.color = '#b85c00';
+                        this.solid = true;
+                        break;
+                    case 'pipe':
+                        this.color = '#00aa00';
+                        this.solid = true;
+                        break;
+                    case 'ground':
+                        this.color = '#c84c0c';
+                        this.solid = true;
+                        break;
+                }
+            }
+            
+            hit(mario) {
+                if (this.hit || this.bumpTimer > 0) return;
+                
+                this.bumpOffset = -8;
+                this.bumpTimer = 10;
+                game.sound.play('bump');
+                
+                if (this.type === 'question' && this.content) {
+                    this.hit = true;
+                    this.color = '#b85c00';
+                    
+                    if (this.content === 'coin') {
+                        game.sound.play('coin');
+                        game.coins++;
+                        game.score += 200;
+                        game.updateUI();
+                    } else if (this.content === 'mushroom') {
+                        game.spawnMushroom(this.x, this.y - 32);
+                    }
+                    
+                    this.content = null;
+                } else if (this.type === 'brick' && mario.big) {
+                    this.active = false;
+                    game.sound.play('break');
+                    game.score += 50;
+                }
+            }
+            
+            update() {
+                if (this.bumpTimer > 0) {
+                    this.bumpTimer--;
+                    if (this.bumpTimer <= 0) {
+                        this.bumpOffset = 0;
+                    }
+                }
+            }
+            
+            draw(ctx, cameraX) {
+                if (!this.active) return;
+                
+                const drawX = this.x - cameraX;
+                const drawY = this.y + this.bumpOffset;
+                
+                if (this.type === 'brick') {
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(drawX, drawY, 32, 32);
+                    
+                    // 砖块纹理
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(drawX, drawY + 7, 32, 2);
+                    ctx.fillRect(drawX, drawY + 15, 32, 2);
+                    ctx.fillRect(drawX, drawY + 23, 32, 2);
+                    ctx.fillRect(drawX + 15, drawY, 2, 8);
+                    ctx.fillRect(drawX + 7, drawY + 8, 2, 8);
+                    ctx.fillRect(drawX + 23, drawY + 8, 2, 8);
+                    ctx.fillRect(drawX + 15, drawY + 16, 2, 8);
+                    ctx.fillRect(drawX + 7, drawY + 24, 2, 8);
+                } else if (this.type === 'question') {
+                    ctx.fillStyle = this.hit ? '#b85c00' : this.color;
+                    ctx.fillRect(drawX, drawY, 32, 32);
+                    
+                    if (!this.hit) {
+                        ctx.fillStyle = '#000';
+                        ctx.font = 'bold 24px monospace';
+                        ctx.fillText('?', drawX + 10, drawY + 24);
+                        
+                        // 角落装饰
+                        ctx.fillRect(drawX + 2, drawY + 2, 4, 4);
+                        ctx.fillRect(drawX + 26, drawY + 2, 4, 4);
+                        ctx.fillRect(drawX + 2, drawY + 26, 4, 4);
+                        ctx.fillRect(drawX + 26, drawY + 26, 4, 4);
+                    }
+                } else if (this.type === 'hard') {
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(drawX, drawY, 32, 32);
+                    
+                    ctx.fillStyle = '#000';
+                    ctx.strokeRect(drawX + 2, drawY + 2, 28, 28);
+                } else if (this.type === 'pipe') {
+                    ctx.fillStyle = '#00aa00';
+                    ctx.fillRect(drawX, drawY, 32, 32);
+                    
+                    ctx.fillStyle = '#008800';
+                    ctx.fillRect(drawX + 4, drawY, 8, 32);
+                    ctx.fillStyle = '#00cc00';
+                    ctx.fillRect(drawX + 20, drawY, 8, 32);
+                } else if (this.type === 'ground') {
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(drawX, drawY, 32, 32);
+                    
+                    ctx.fillStyle = '#e58c5c';
+                    ctx.fillRect(drawX + 4, drawY + 4, 24, 24);
+                }
+            }
+        }
+
+        class Flag extends Entity {
+            constructor(x, y) {
+                super(x, y, 16, 400, '#00aa00');
+                this.reached = false;
+            }
+            
+            draw(ctx, cameraX) {
+                const drawX = this.x - cameraX;
+                
+                // 旗杆
+                ctx.fillStyle = '#00aa00';
+                ctx.fillRect(drawX + 6, this.y, 4, 400);
+                
+                // 旗子
+                if (!this.reached) {
+                    ctx.fillStyle = '#e52521';
+                    ctx.fillRect(drawX + 10, this.y + 20, 40, 30);
+                }
+                
+                // 顶部装饰
+                ctx.fillStyle = '#00aa00';
+                ctx.beginPath();
+                ctx.arc(drawX + 8, this.y, 10, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 底座
+                ctx.fillStyle = '#c84c0c';
+                ctx.fillRect(drawX - 16, this.y + 380, 48, 20);
+            }
+        }
+
+        // ==================== 关卡系统 ====================
+        class Level {
+            constructor(levelData) {
+                this.blocks = [];
+                this.enemies = [];
+                this.coins = [];
+                this.flag = null;
+                this.width = 0;
+                this.parseLevel(levelData);
+            }
+            
+            parseLevel(data) {
+                const tileSize = 32;
+                
+                for (let y = 0; y < data.length; y++) {
+                    const row = data[y];
+                    for (let x = 0; x < row.length; x++) {
+                        const char = row[x];
+                        const posX = x * tileSize;
+                        const posY = y * tileSize;
+                        
+                        switch(char) {
+                            case '#':
+                                this.blocks.push(new Block(posX, posY, 'ground'));
+                                break;
+                            case 'B':
+                                this.blocks.push(new Block(posX, posY, 'brick'));
+                                break;
+                            case '?':
+                                this.blocks.push(new Block(posX, posY, 'question'));
+                                break;
+                            case 'H':
+                                this.blocks.push(new Block(posX, posY, 'hard'));
+                                break;
+                            case 'P':
+                                this.blocks.push(new Block(posX, posY, 'pipe'));
+                                break;
+                            case 'G':
+                                this.enemies.push(new Goomba(posX, posY));
+                                break;
+                            case 'K':
+                                this.enemies.push(new Koopa(posX, posY));
+                                break;
+                            case 'C':
+                                this.coins.push(new Coin(posX, posY));
+                                break;
+                            case 'F':
+                                this.flag = new Flag(posX, posY);
+                                break;
+                        }
+                    }
+                }
+                
+                this.width = data[0].length * tileSize;
+            }
+        }
+
+        // ==================== 关卡数据 ====================
+        const LEVELS = [
+            // 1-1
+            [
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "      ?   B?B?B                                                                                                                                                 ",
+                "                                                                                                                                                                ",
+                "                    G   G       ?   ?   ?                                                                                                                       ",
+                "                                                                                   PP                                                                                   ",
+                "         PP                        B   B   B                                     PP                                                                                   ",
+                "                        G   G                                                                                                                                       ",
+                "PP              PP                                                                                                   F                                              ",
+                "####################################################################################################################################################################",
+                "####################################################################################################################################################################",
+                "####################################################################################################################################################################",
+                "####################################################################################################################################################################",
+                "####################################################################################################################################################################"
+            ],
+            // 1-2
+            [
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "          B?B?B?B                                                                                                                                               ",
+                "                                                                                                                                                                ",
+                "                    G       G       G           ?   ?   ?                                                                                                       ",
+                "                                                                                   PP                                                                                   ",
+                "         PP                        B   B   B                                     PP                                                                                   ",
+                "                        G       G       G                                                                                                                                 ",
+                "PP              PP                                                                                                   F                                              ",
+                "####################################################################################################################################################################",
+                "####################################################################################################################################################################",
+                "####################################################################################################################################################################",
+                "####################################################################################################################################################################",
+                "####################################################################################################################################################################"
+            ],
+            // 1-3
+            [
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "                                                                                                                                                                ",
+                "      ?   B?B?B?B?B                                                                                                                                             ",
+                "                                                                                                                                                                ",
+                "                    G   G   G   G       ?   ?   ?   ?                                                                                                           ",
+                "                                                                                   PP                                                                                   ",
+                "         PP                        B   B   B   B   B                             PP                                                                                   ",
+                "                        G   G   G   G                                                                                                                                 ",
+                "PP              PP                                                                                                   F                                              ",
+                "####################################################################################################################################################################",
+                "####################################################################################################################################################################",
+                "####################################################################################################################################################################",
+                "####################################################################################################################################################################",
+                "####################################################################################################################################################################"
+            ]
+        ];
+
+        // ==================== 游戏主类 ====================
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('game-canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.input = new InputHandler();
+                this.physics = new Physics();
+                this.sound = new SoundSystem();
+                
+                this.currentLevel = 0;
+                this.score = 0;
+                this.coins = 0;
+                this.lives = 3;
+                this.time = 400;
+                this.timeTimer = 0;
+                
+                this.mario = null;
+                this.level = null;
+                this.cameraX = 0;
+                this.running = false;
+                this.gameOver = false;
+                this.won = false;
+                
+                this.lastTime = 0;
+                
+                this.setupCanvas();
+            }
+            
+            setupCanvas() {
+                this.canvas.width = 768;
+                this.canvas.height = 576;
+            }
+            
+            start() {
+                this.sound.init();
+                document.getElementById('start-screen').style.display = 'none';
+                this.currentLevel = 0;
+                this.score = 0;
+                this.coins = 0;
+                this.lives = 3;
+                this.gameOver = false;
+                this.won = false;
+                this.loadLevel(this.currentLevel);
+                this.running = true;
+                this.updateUI();
+                this.gameLoop();
+            }
+            
+            restart() {
+                document.getElementById('game-over-screen').style.display = 'none';
+                document.getElementById('win-screen').style.display = 'none';
+                this.start();
+            }
+            
+            loadLevel(levelIndex) {
+                if (levelIndex >= LEVELS.length) {
+                    this.win();
+                    return;
+                }
+                
+                this.level = new Level(LEVELS[levelIndex]);
+                this.mario = new Mario(100, 400);
+                this.cameraX = 0;
+                this.time = 400;
+                this.timeTimer = 0;
+                this.updateUI();
+            }
+            
+            resetLevel() {
+                this.loadLevel(this.currentLevel);
+            }
+            
+            nextLevel() {
+                this.sound.play('levelComplete');
+                this.currentLevel++;
+                setTimeout(() => {
+                    this.loadLevel(this.currentLevel);
+                }, 2000);
+            }
+            
+            spawnMushroom(x, y) {
+                this.level.enemies.push(new Mushroom(x, y));
+            }
+            
+            updateUI() {
+                document.getElementById('score').textContent = this.score.toString().padStart(6, '0');
+                document.getElementById('coins').textContent = '× ' + this.coins.toString().padStart(2, '0');
+                document.getElementById('world').textContent = '1-' + (this.currentLevel + 1);
+                document.getElementById('time').textContent = this.time;
+                document.getElementById('lives').textContent = '× ' + this.lives;
+            }
+            
+            gameOver() {
+                this.running = false;
+                this.gameOver = true;
+                document.getElementById('game-over-screen').style.display = 'flex';
+            }
+            
+            win() {
+                this.running = false;
+                this.won = true;
+                this.sound.play('win');
+                document.getElementById('final-score').textContent = 'Score: ' + this.score.toString().padStart(6, '0');
+                document.getElementById('win-screen').style.display = 'flex';
+            }
+            
+            update(deltaTime) {
+                if (!this.running || this.mario.dying) return;
+                
+                // 时间倒计时
+                this.timeTimer++;
+                if (this.timeTimer >= 60) {
+                    this.time--;
+                    this.timeTimer = 0;
+                    this.updateUI();
+                    
+                    if (this.time <= 0) {
+                        this.mario.die();
+                    }
+                }
+                
+                // 更新马里奥
+                this.mario.update(this.input, this.physics, this.level.blocks);
+                
+                // 更新相机
+                const targetCameraX = this.mario.x - 300;
+                this.cameraX = Math.max(0, Math.min(targetCameraX, this.level.width - 768));
+                
+                // 更新敌人
+                for (const enemy of this.level.enemies) {
+                    if (enemy.active) {
+                        if (enemy instanceof Mushroom) {
+                            enemy.update(this.physics, this.level.blocks);
+                        } else {
+                            enemy.update(this.physics, this.level.blocks, this.mario);
+                        }
+                        
+                        // 敌人与马里奥碰撞
+                        if (this.physics.checkCollision(this.mario, enemy)) {
+                            if (enemy instanceof Mushroom) {
+                                if (!enemy.emerging) {
+                                    this.mario.makeBig();
+                                    enemy.active = false;
+                                }
+                            } else if (this.mario.vy > 0 && this.mario.y + this.mario.height - 10 < enemy.y + enemy.height / 2) {
+                                enemy.stomp();
+                                this.mario.vy = -8;
+                            } else {
+                                this.mario.getHit();
+                            }
+                        }
+                    }
+                }
+                
+                // 更新金币
+                for (const coin of this.level.coins) {
+                    coin.update();
+                    if (this.physics.checkCollision(this.mario, coin)) {
+                        coin.collect();
+                    }
+                }
+                
+                // 更新方块
+                for (const block of this.level.blocks) {
+                    block.update();
+                    
+                    // 马里奥顶方块
+                    if (block.solid && this.mario.hitting && 
+                        this.mario.x + this.mario.width > block.x && 
+                        this.mario.x < block.x + block.width &&
+                        this.mario.y <= block.y + block.height &&
+                        this.mario.y > block.y) {
+                        block.hit(this.mario);
+                    }
+                }
+                
+                // 检查旗子
+                if (this.level.flag && !this.level.flag.reached &&
+                    this.mario.x + this.mario.width > this.level.flag.x &&
+                    this.mario.x < this.level.flag.x + this.level.flag.width) {
+                    this.level.flag.reached = true;
+                    this.score += 1000;
+                    this.nextLevel();
+                }
+                
+                // 边界检查
+                if (this.mario.x > this.level.width - 100) {
+                    this.mario.x = this.level.width - 100;
+                    this.mario.vx = 0;
+                }
+            }
+            
+            draw() {
+                // 清空画布
+                this.ctx.fillStyle = '#5c94fc';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                if (!this.level) return;
+                
+                // 绘制背景装饰
+                this.drawBackground();
+                
+                // 绘制方块
+                for (const block of this.level.blocks) {
+                    block.draw(this.ctx, this.cameraX);
+                }
+                
+                // 绘制旗子
+                if (this.level.flag) {
+                    this.level.flag.draw(this.ctx, this.cameraX);
+                }
+                
+                // 绘制金币
+                for (const coin of this.level.coins) {
+                    coin.draw(this.ctx, this.cameraX);
+                }
+                
+                // 绘制敌人
+                for (const enemy of this.level.enemies) {
+                    enemy.draw(this.ctx, this.cameraX);
+                }
+                
+                // 绘制马里奥
+                if (this.mario) {
+                    this.mario.draw(this.ctx, this.cameraX);
+                }
+            }
+            
+            drawBackground() {
+                this.ctx.fillStyle = '#fff';
+                
+                // 绘制云朵
+                const clouds = [100, 400, 700, 1100, 1500];
+                for (let i = 0; i < clouds.length; i++) {
+                    const x = clouds[i] - this.cameraX * 0.5;
+                    if (x > -100 && x < 868) {
+                        this.ctx.fillRect(x, 100 + i * 20, 60, 30);
+                        this.ctx.fillRect(x + 20, 80 + i * 20, 40, 30);
+                    }
+                }
+                
+                // 绘制山丘
+                const hills = [0, 500, 1000, 1500];
+                for (let i = 0; i < hills.length; i++) {
+                    const x = hills[i] - this.cameraX * 0.8;
+                    if (x > -200 && x < 968) {
+                        this.ctx.fillStyle = '#00aa00';
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(x, 500);
+                        this.ctx.lineTo(x + 100, 400);
+                        this.ctx.lineTo(x + 200, 500);
+                        this.ctx.fill();
+                    }
+                }
+            }
+            
+            gameLoop(timestamp) {
+                if (!this.lastTime) this.lastTime = timestamp;
+                const deltaTime = timestamp - this.lastTime;
+                this.lastTime = timestamp;
+                
+                this.update(deltaTime);
+                this.draw();
+                
+                if (this.running || this.mario?.dying) {
+                    requestAnimationFrame((t) => this.gameLoop(t));
+                }
+            }
+        }
+
+        // ==================== 初始化游戏 ====================
+        const game = new Game();
+    </script>
+</body>
+</html>

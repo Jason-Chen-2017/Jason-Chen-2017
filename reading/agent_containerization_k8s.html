@@ -1,0 +1,1573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent 容器化、K8s 与云原生部署</title>
+    <style>
+        :root {
+            --container-blue: #0284c7;
+            --k8s-purple: #a855f7;
+            --cloud-gold: #ca8a04;
+            --native-green: #16a34a;
+            --deploy-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-container: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--container-blue), var(--k8s-purple), var(--cloud-gold), var(--native-green), var(--deploy-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-container);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: containerRotate 140s linear infinite;
+        }
+        
+        @keyframes containerRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .deploy-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 11px;
+            margin-bottom: 42px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 8px 23px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.93em;
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-container {
+            background: linear-gradient(135deg, var(--container-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-k8s {
+            background: linear-gradient(135deg, var(--k8s-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-cloud {
+            background: linear-gradient(135deg, var(--cloud-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-native {
+            background: linear-gradient(135deg, var(--native-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-deploy {
+            background: linear-gradient(135deg, var(--deploy-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.2em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 24px;
+            text-shadow: 0 0 52px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.29;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.7em;
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .deploy-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 11px;
+            margin: 50px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .deploy-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 24px 30px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 140px;
+        }
+        
+        .deploy-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .deploy-box.container {
+            border-color: var(--container-blue);
+            box-shadow: 0 15px 32px rgba(2, 132, 199, 0.35);
+        }
+        
+        .deploy-box.k8s {
+            border-color: var(--k8s-purple);
+            box-shadow: 0 15px 32px rgba(168, 85, 247, 0.35);
+        }
+        
+        .deploy-box.cloud {
+            border-color: var(--cloud-gold);
+            box-shadow: 0 15px 32px rgba(202, 138, 4, 0.35);
+        }
+        
+        .deploy-box.native {
+            border-color: var(--native-green);
+            box-shadow: 0 15px 32px rgba(22, 163, 74, 0.35);
+        }
+        
+        .deploy-box.deploy {
+            border-color: var(--deploy-red);
+            box-shadow: 0 15px 32px rgba(220, 38, 38, 0.35);
+        }
+        
+        .deploy-label {
+            font-size: 1.34em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 7px;
+        }
+        
+        .deploy-box.container .deploy-label { color: var(--container-blue); }
+        .deploy-box.k8s .deploy-label { color: var(--k8s-purple); }
+        .deploy-box.cloud .deploy-label { color: var(--cloud-gold); }
+        .deploy-box.native .deploy-label { color: var(--native-green); }
+        .deploy-box.deploy .deploy-label { color: var(--deploy-red); }
+        
+        .deploy-desc {
+            font-size: 0.74em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.61;
+        }
+        
+        .deploy-arrow {
+            font-size: 1.62em;
+            color: var(--cloud-gold);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 50px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px 24px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 16px 42px var(--border-glow);
+            border-color: var(--container-blue);
+        }
+        
+        .meta-label {
+            color: var(--container-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.74em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.94em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 42px 38px;
+            margin-bottom: 62px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 40px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.6em;
+            color: var(--container-blue);
+            margin-bottom: 32px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 22px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 32px 0 21px 0;
+            padding: 15px 24px;
+            border-radius: 18px;
+            font-size: 1.52em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--container-blue); 
+            color: var(--container-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--k8s-purple); 
+            color: var(--k8s-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--cloud-gold); 
+            color: var(--cloud-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--native-green); 
+            color: var(--native-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--deploy-red); 
+            color: var(--deploy-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 11px;
+        }
+        
+        .toc-list li {
+            padding: 7px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.94em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 10px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--container-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--container-blue);
+            text-shadow: 0 0 7px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 52px 42px;
+            margin-bottom: 42px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 19px 66px var(--border-glow), 0 0 50px rgba(2, 132, 199, 0.2);
+            border-color: var(--container-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.4em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 30px;
+            border-bottom: 4px solid var(--container-blue);
+            padding-bottom: 15px;
+            font-weight: 800;
+            text-shadow: 0 0 19px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 32px 0;
+        }
+        
+        .section-title {
+            font-size: 1.82em;
+            color: var(--container-blue);
+            margin-bottom: 21px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--k8s-purple);
+            font-size: 0.61em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.02;
+            font-size: 1.01em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 21px;
+        }
+        
+        .deploy-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 17px;
+            margin: 32px 0;
+        }
+        
+        .deploy-box-card {
+            padding: 26px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .deploy-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .deploy-box-card.container {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--container-blue);
+            box-shadow: 0 8px 25px rgba(2, 132, 199, 0.3);
+        }
+        
+        .deploy-box-card.k8s {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--k8s-purple);
+            box-shadow: 0 8px 25px rgba(168, 85, 247, 0.3);
+        }
+        
+        .deploy-box-card.cloud {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--cloud-gold);
+            box-shadow: 0 8px 25px rgba(202, 138, 4, 0.3);
+        }
+        
+        .deploy-box-card.native {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--native-green);
+            box-shadow: 0 8px 25px rgba(22, 163, 74, 0.3);
+        }
+        
+        .deploy-box-card.deploy {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--deploy-red);
+            box-shadow: 0 8px 25px rgba(220, 38, 38, 0.3);
+        }
+        
+        .deploy-box-title {
+            font-size: 1.57em;
+            font-weight: 800;
+            margin-bottom: 9px;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .deploy-box-card.container .deploy-box-title { color: var(--container-blue); }
+        .deploy-box-card.k8s .deploy-box-title { color: var(--k8s-purple); }
+        .deploy-box-card.cloud .deploy-box-title { color: var(--cloud-gold); }
+        .deploy-box-card.native .deploy-box-title { color: var(--native-green); }
+        .deploy-box-card.deploy .deploy-box-title { color: var(--deploy-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 30px 36px;
+            border-left: 7px solid var(--container-blue);
+            border-radius: 19px;
+            margin: 30px 0;
+            box-shadow: 0 8px 25px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--container-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 13px;
+            padding: 26px;
+            margin: 28px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 23px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.81em;
+            line-height: 1.62;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--container-blue);
+            font-weight: 700;
+            margin-bottom: 12px;
+            font-family: 'Georgia', serif;
+            font-size: 0.98em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 30px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 13px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 11px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--container-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.02px;
+            font-size: 0.81em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--container-blue);
+            padding-left: 24px;
+            margin: 26px 0;
+            color: var(--text-secondary);
+            font-size: 1.04em;
+            font-family: 'Georgia', serif;
+            line-height: 1.92;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 12px;
+            color: var(--k8s-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 21px 0;
+            padding-left: 30px;
+        }
+        
+        li {
+            margin-bottom: 10px;
+            line-height: 1.92;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 62px 32px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 102px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 760px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 26px 17px;
+            }
+            
+            .book-title {
+                font-size: 2em;
+            }
+            
+            .deploy-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .deploy-diagram {
+                flex-direction: column;
+            }
+            
+            .deploy-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="deploy-spectrum">
+                <div class="spectrum-item spectrum-container">🔵 容器化</div>
+                <div class="spectrum-item spectrum-k8s">🟣 Kubernetes</div>
+                <div class="spectrum-item spectrum-cloud">🟡 云计算</div>
+                <div class="spectrum-item spectrum-native">🟢 云原生</div>
+                <div class="spectrum-item spectrum-deploy">🔴 部署运维</div>
+            </div>
+            <h1 class="book-title">Agent 容器化、K8s 与云原生部署</h1>
+            <h2 class="book-subtitle">从 Docker 到 Kubernetes 的规模化部署之道</h2>
+            
+            <div class="deploy-diagram">
+                <div class="deploy-box container">
+                    <span class="deploy-label">🔵 容器化</span>
+                    <span class="deploy-desc">Docker 镜像<br>容器编排<br>资源隔离</span>
+                </div>
+                <div class="deploy-arrow">→</div>
+                <div class="deploy-box k8s">
+                    <span class="deploy-label">🟣 Kubernetes</span>
+                    <span class="deploy-desc">Pod 调度<br>服务发现<br>自动扩缩容</span>
+                </div>
+                <div class="deploy-arrow">→</div>
+                <div class="deploy-box cloud">
+                    <span class="deploy-label">🟡 云计算</span>
+                    <span class="deploy-desc">云服务商<br>混合云<br>边缘计算</span>
+                </div>
+                <div class="deploy-arrow">→</div>
+                <div class="deploy-box native">
+                    <span class="deploy-label">🟢 云原生</span>
+                    <span class="deploy-desc">微服务<br>Service Mesh<br>DevOps</span>
+                </div>
+                <div class="deploy-arrow">→</div>
+                <div class="deploy-box deploy">
+                    <span class="deploy-label">🔴 部署运维</span>
+                    <span class="deploy-desc">CI/CD<br>监控告警<br>故障恢复</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">云原生部署版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">容器·K8s·云原生·微服务·DevOps</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 容器化基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：云原生——Agent 规模化的必由之路</a></li>
+                <li><a href="#chapter1">第 1 章 容器化技术概述</a></li>
+                <li><a href="#chapter2">第 2 章 Docker 容器化实践</a></li>
+                <li><a href="#chapter3">第 3 章 Agent 镜像优化</a></li>
+                
+                <div class="toc-part part2">第二编 K8s 部署架构</div>
+                <li><a href="#chapter4">第 4 章 Kubernetes 核心概念</a></li>
+                <li><a href="#chapter5">第 5 章 Agent Pod 设计与调度</a></li>
+                <li><a href="#chapter6">第 6 章 服务发现与负载均衡</a></li>
+                <li><a href="#chapter7">第 7 章 自动扩缩容策略</a></li>
+                
+                <div class="toc-part part3">第三编 云原生服务设计</div>
+                <li><a href="#chapter8">第 8 章 微服务架构设计</a></li>
+                <li><a href="#chapter9">第 9 章 Service Mesh 与 Istio</a></li>
+                <li><a href="#chapter10">第 10 章 无服务器与 FaaS</a></li>
+                <li><a href="#chapter11">第 11 章 多租户与资源隔离</a></li>
+                
+                <div class="toc-part part4">第四编 运维与监控</div>
+                <li><a href="#chapter12">第 12 章 CI/CD 流水线设计</a></li>
+                <li><a href="#chapter13">第 13 章 监控与可观测性</a></li>
+                <li><a href="#chapter14">第 14 章 日志聚合与分析</a></li>
+                <li><a href="#chapter15">第 15 章 故障恢复与灾备</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 32px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A K8s 配置模板</a></li>
+                <li><a href="#appendix-b">附录 B 最佳实践清单</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：云原生——Agent 规模化的必由之路</h2>
+            <div class="content">
+                <p>随着 AI Agent 系统从实验走向生产，一个根本性挑战日益凸显：<strong>如何实现 Agent 系统的规模化部署、弹性扩缩容、高可用运行？</strong>传统部署方式基于虚拟机或物理机，部署周期长、资源利用率低、扩缩容慢，无法满足 Agent 系统动态负载、快速迭代、高可用的需求。云原生技术体系——容器化、Kubernetes、微服务、DevOps——为 Agent 规模化提供了完整解决方案。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>Agent 云原生部署体系通过容器化实现环境一致性、通过 Kubernetes 实现自动化编排、通过微服务实现架构解耦、通过 DevOps 实现持续交付、通过可观测性实现运维透明，五层协同，构建可扩展、高可用、易运维的 Agent 系统。</p>
+                </div>
+                
+                <h3 class="section-title">云原生革命的兴起</h3>
+                
+                <p>从 Docker 的容器化革命到 Kubernetes 的编排标准，从 Istio 的服务网格到 Argo 的 GitOps，云原生技术快速演进。在 Agent 系统中，云原生部署面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>资源密集</strong>：LLM 推理需要 GPU 资源，调度复杂度高</li>
+                    <li><strong>负载波动</strong>：用户请求量波动大，需要快速弹性扩缩容</li>
+                    <li><strong>依赖复杂</strong>：向量数据库、缓存、消息队列等多组件依赖</li>
+                    <li><strong>版本管理</strong>：Prompt、模型、代码多版本并存，需要灰度发布</li>
+                </ul>
+                
+                <div class="quote">
+                    "云原生不是技术的堆砌，而是一种架构范式。从'单体部署'到'微服务化'，从'手动运维'到'自动化编排'，从'被动救火'到'主动预防'。这种转变让 Agent 系统从不可扩展走向无限扩展。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 容器化基础</strong>：阐述容器化技术概述、Docker 容器化实践、Agent 镜像优化等基础知识。</p>
+                
+                <p><strong>第二编 K8s 部署架构</strong>：深入剖析 Kubernetes 核心概念、Pod 设计与调度、服务发现与负载均衡、自动扩缩容策略等编排技术。</p>
+                
+                <p><strong>第三编 云原生服务设计</strong>：详细探讨微服务架构设计、Service Mesh 与 Istio、无服务器与 FaaS、多租户与资源隔离等架构模式。</p>
+                
+                <p><strong>第四编 运维与监控</strong>：涵盖 CI/CD 流水线设计、监控与可观测性、日志聚合与分析、故障恢复与灾备等运维实践。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从容器化到 Kubernetes，从微服务到 Service Mesh，从 CI/CD 到可观测性，Agent 云原生部署体系正在重塑软件交付的范式。未来的 Agent 系统将更加可扩展、更加可靠、更加易运维。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 42px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在云原生一线构建可扩展 Agent 系统的平台工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 5 章 -->
+        <div class="chapter" id="chapter5">
+            <h2 class="chapter-title">第 5 章 Agent Pod 设计与调度</h2>
+            <div class="content">
+                <h3 class="section-title">5.1 Pod 设计原则</h3>
+                
+                <p>Pod 是 Kubernetes 的最小调度单元，包含一个或多个共享网络和存储的容器。在 Agent 系统中，Pod 设计需要考虑：资源隔离（CPU/GPU/内存）、启动速度（镜像大小、初始化时间）、健康检查（就绪探针、存活探针）、日志收集（标准输出、Sidecar 采集）等因素。优秀的 Pod 设计能够提升调度效率、资源利用率、系统稳定性。</p>
+                
+                <div class="highlight">
+                    <p><strong>Pod 设计核心价值：</strong>资源隔离（避免资源争抢）、快速启动（秒级扩容）、健康保障（自动恢复）、可观测性（日志监控）。</p>
+                </div>
+                
+                <h3 class="section-title">5.2 Agent Pod 配置示例</h3>
+                
+                <div class="section">
+                    <h4>完整 Pod 配置</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">Agent Pod 完整配置示例</div>
+                        <pre>
+apiVersion: v1
+kind: Pod
+metadata:
+  name: agent-inference-pod
+  labels:
+    app: agent-inference
+    version: v1.2.0
+    tier: inference
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+spec:
+  # 节点选择与亲和性
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: gpu-type
+            operator: In
+            values:
+            - nvidia-a100
+            - nvidia-h100
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app: agent-inference
+          topologyKey: kubernetes.io/hostname
+  
+  # 容器定义
+  containers:
+  - name: agent
+    image: myregistry/agent-inference:v1.2.0
+    imagePullPolicy: IfNotPresent
+    
+    # 资源请求与限制
+    resources:
+      requests:
+        cpu: "2"
+        memory: "4Gi"
+        nvidia.com/gpu: "1"
+      limits:
+        cpu: "4"
+        memory: "8Gi"
+        nvidia.com/gpu: "1"
+    
+    # 端口定义
+    ports:
+    - containerPort: 8080
+      name: http
+      protocol: TCP
+    - containerPort: 9090
+      name: metrics
+      protocol: TCP
+    
+    # 环境变量
+    env:
+    - name: MODEL_PATH
+      value: "/models/llama-3-70b"
+    - name: MAX_BATCH_SIZE
+      value: "32"
+    - name: TEMPERATURE
+      value: "0.7"
+    - name: LOG_LEVEL
+      value: "INFO"
+    
+    # 健康检查
+    livenessProbe:
+      httpGet:
+        path: /health/live
+        port: 8080
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    
+    readinessProbe:
+      httpGet:
+        path: /health/ready
+        port: 8080
+      initialDelaySeconds: 10
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 3
+    
+    startupProbe:
+      httpGet:
+        path: /health/startup
+        port: 8080
+      initialDelaySeconds: 0
+      periodSeconds: 5
+      failureThreshold: 30
+    
+    # 存储卷挂载
+    volumeMounts:
+    - name: model-storage
+      mountPath: /models
+      readOnly: true
+    - name: cache-storage
+      mountPath: /cache
+    - name: config-storage
+      mountPath: /etc/agent
+      readOnly: true
+    
+    # 日志收集
+    lifecycle:
+      preStop:
+        exec:
+          command: ["/bin/sh", "-c", "sleep 10"]
+  
+  # Sidecar 容器（日志收集）
+  - name: log-collector
+    image: fluent/fluent-bit:latest
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+    volumeMounts:
+    - name: varlog
+      mountPath: /var/log
+    - name: containers
+      mountPath: /var/lib/docker/containers
+      readOnly: true
+  
+  # 存储卷定义
+  volumes:
+  - name: model-storage
+    persistentVolumeClaim:
+      claimName: agent-models-pvc
+  - name: cache-storage
+    emptyDir:
+      medium: Memory
+      sizeLimit: 2Gi
+  - name: config-storage
+    configMap:
+      name: agent-config
+  - name: varlog
+    hostPath:
+      path: /var/log
+  - name: containers
+    hostPath:
+      path: /var/lib/docker/containers
+  
+  # 服务账号
+  serviceAccountName: agent-service-account
+  
+  # 安全上下文
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+  
+  # 镜像拉取密钥
+  imagePullSecrets:
+  - name: registry-secret
+  
+  # 重启策略
+  restartPolicy: Always
+  
+  # 终止宽限期
+  terminationGracePeriodSeconds: 60
+  
+  # DNS 配置
+  dnsPolicy: ClusterFirst
+  dnsConfig:
+    options:
+    - name: ndots
+      value: "5"
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">5.3 GPU 调度优化</h3>
+                
+                <div class="section">
+                    <h4>GPU 资源管理策略</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>GPU 独占模式</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>每个 Pod 独占整张 GPU，避免资源争抢</li>
+                                <li>适用于大模型推理，保证性能稳定性</li>
+                                <li>资源利用率较低，但性能可预测</li>
+                            </ul>
+                        </li>
+                        <li><strong>GPU 共享模式</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>使用 NVIDIA MIG 或时间片共享</li>
+                                <li>多个 Pod 共享一张 GPU，提升利用率</li>
+                                <li>适用于小模型或低负载场景</li>
+                            </ul>
+                        </li>
+                        <li><strong>GPU 拓扑优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>多 GPU 场景下优化 NVLink 通信</li>
+                                <li>使用 nodeAffinity 确保相关 Pod 调度到同一节点</li>
+                                <li>减少跨节点通信延迟</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">5.4 调度策略优化</h3>
+                
+                <div class="section">
+                    <h4>高级调度配置</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>调度策略</th>
+                                <th>配置方式</th>
+                                <th>适用场景</th>
+                                <th>优化效果</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>节点亲和性</strong></td>
+                                <td>nodeAffinity</td>
+                                <td>GPU 节点选择、区域部署</td>
+                                <td>确保 Pod 调度到合适节点</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Pod 反亲和性</strong></td>
+                                <td>podAntiAffinity</td>
+                                <td>高可用部署、避免单点故障</td>
+                                <td>分散 Pod 到不同节点</td>
+                            </tr>
+                            <tr>
+                                <td><strong>拓扑分布约束</strong></td>
+                                <td>topologySpreadConstraints</td>
+                                <td>多可用区部署、负载均衡</td>
+                                <td>均匀分布 Pod 到不同区域</td>
+                            </tr>
+                            <tr>
+                                <td><strong>优先级与抢占</strong></td>
+                                <td>priorityClassName</td>
+                                <td>关键业务保障、资源紧张时</td>
+                                <td>高优先级 Pod 抢占低优先级资源</td>
+                            </tr>
+                            <tr>
+                                <td><strong>污点与容忍</strong></td>
+                                <td>taints/tolerations</td>
+                                <td>专用节点、隔离部署</td>
+                                <td>控制哪些 Pod 可以调度到特定节点</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h3 class="section-title">5.5 本章小结</h3>
+                <p>本章深入探讨了 Agent Pod 设计与调度。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>Pod 设计：资源隔离、快速启动、健康检查、日志收集四要素</li>
+                    <li>配置示例：完整的 Pod YAML，包含亲和性、资源限制、健康检查、存储卷</li>
+                    <li>GPU 调度：独占模式、共享模式、拓扑优化三种策略</li>
+                    <li>调度优化：节点亲和性、Pod 反亲和性、拓扑分布、优先级、污点容忍五种策略</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 12 章 -->
+        <div class="chapter" id="chapter12">
+            <h2 class="chapter-title">第 12 章 CI/CD 流水线设计</h2>
+            <div class="content">
+                <h3 class="section-title">12.1 CI/CD 概述</h3>
+                
+                <p>CI/CD（持续集成/持续交付）是云原生 DevOps 的核心实践，通过自动化构建、测试、部署流程，实现快速、可靠、频繁的软件交付。在 Agent 系统中，CI/CD 需要支持：多环境部署（开发/测试/生产）、灰度发布（金丝雀、蓝绿）、回滚机制、自动化测试（单元测试、集成测试、E2E 测试）、配置管理等特殊需求。</p>
+                
+                <div class="highlight">
+                    <p><strong>CI/CD 核心价值：</strong>快速交付（从代码到生产分钟级）、质量保障（自动化测试）、降低风险（小步快跑、快速回滚）、提升效率（减少人工干预）。</p>
+                </div>
+                
+                <h3 class="section-title">12.2 Agent CI/CD 流水线架构</h3>
+                
+                <div class="deploy-card">
+                    <div class="deploy-box-card container">
+                        <h3 class="deploy-box-title">🔵 持续集成阶段</h3>
+                        <p><strong>目标：</strong>代码提交后自动构建与测试。</p>
+                        <p style="margin-top: 8px;"><strong>关键步骤：</strong></p>
+                        <ul style="margin-left: 12px; margin-top: 2px; font-size: 0.87em;">
+                            <li>代码检出与依赖安装</li>
+                            <li>代码质量检查（Lint、格式化）</li>
+                            <li>单元测试与覆盖率报告</li>
+                            <li>Docker 镜像构建与扫描</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="deploy-box-card k8s">
+                        <h3 class="deploy-box-title">🟣 持续交付阶段</h3>
+                        <p><strong>目标：</strong>自动部署到测试环境。</p>
+                        <p style="margin-top: 8px;"><strong>关键步骤：</strong></p>
+                        <ul style="margin-left: 12px; margin-top: 2px; font-size: 0.87em;">
+                            <li>更新 K8s 配置（Helm/Kustomize）</li>
+                            <li>部署到测试环境</li>
+                            <li>集成测试与 E2E 测试</li>
+                            <li>性能测试与基准对比</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="deploy-box-card cloud">
+                        <h3 class="deploy-box-title">🟡 持续部署阶段</h3>
+                        <p><strong>目标：</strong>自动部署到生产环境。</p>
+                        <p style="margin-top: 8px;"><strong>关键步骤：</strong></p>
+                        <ul style="margin-left: 12px; margin-top: 2px; font-size: 0.87em;">
+                            <li>灰度发布（金丝雀/蓝绿）</li>
+                            <li>流量切换与监控</li>
+                            <li>自动化回滚（如果失败）</li>
+                            <li>部署完成通知</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="deploy-box-card native">
+                        <h3 class="deploy-box-title">🟢 运维监控阶段</h3>
+                        <p><strong>目标：</strong>部署后持续监控。</p>
+                        <p style="margin-top: 8px;"><strong>关键步骤：</strong></p>
+                        <ul style="margin-left: 12px; margin-top: 2px; font-size: 0.87em;">
+                            <li>指标监控（延迟、错误率）</li>
+                            <li>日志聚合与异常检测</li>
+                            <li>Trace 追踪与性能分析</li>
+                            <li>自动告警与故障恢复</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.3 GitOps 实践</h3>
+                
+                <div class="section">
+                    <h4>ArgoCD GitOps 工作流</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">ArgoCD Application 配置示例</div>
+                        <pre>
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agent-inference
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  # 项目配置
+  project: default
+  
+  # 源码仓库
+  source:
+    repoURL: https://github.com/myorg/agent-deployments.git
+    targetRevision: HEAD
+    path: environments/production
+    helm:
+      valueFiles:
+      - values-production.yaml
+      parameters:
+      - name: image.tag
+        value: v1.2.0
+      - name: replicaCount
+        value: "5"
+      - name: resources.requests.cpu
+        value: "2"
+      - name: resources.requests.memory
+        value: "4Gi"
+      - name: resources.limits.gpu
+        value: "1"
+  
+  # 目标集群
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agent-production
+  
+  # 同步策略
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  
+  # 忽略差异
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+    - /spec/replicas
+  
+  # 健康检查
+  healthChecks:
+  - group: apps
+    kind: Deployment
+    script: |
+      hs = {}
+      if obj.status.readyReplicas == obj.spec.replicas then
+        hs.status = "Healthy"
+        hs.message = "Deployment is healthy"
+      else
+        hs.status = "Progressing"
+        hs.message = "Waiting for rollout to complete"
+      end
+      return hs
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.4 灰度发布策略</h3>
+                
+                <div class="section">
+                    <h4>金丝雀发布配置</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>阶段一：5% 流量</strong>（10 分钟）
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>部署新版本 Pod，设置权重 5%</li>
+                                <li>监控错误率、延迟、业务指标</li>
+                                <li>如果指标正常，进入下一阶段</li>
+                            </ul>
+                        </li>
+                        <li><strong>阶段二：25% 流量</strong>（20 分钟）
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>提升新版本权重到 25%</li>
+                                <li>持续监控关键指标</li>
+                                <li>收集用户反馈</li>
+                            </ul>
+                        </li>
+                        <li><strong>阶段三：50% 流量</strong>（30 分钟）
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>提升新版本权重到 50%</li>
+                                <li>进行 A/B 测试对比</li>
+                                <li>验证性能提升效果</li>
+                            </ul>
+                        </li>
+                        <li><strong>阶段四：100% 流量</strong>（完成）
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>全量切换到新版本</li>
+                                <li>清理旧版本 Pod</li>
+                                <li>更新基线配置</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">12.5 本章小结</h3>
+                <p>本章深入探讨了 CI/CD 流水线设计。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>流水线架构：持续集成、持续交付、持续部署、运维监控四阶段</li>
+                    <li>GitOps 实践：使用 ArgoCD 实现声明式部署、自动同步、健康检查</li>
+                    <li>灰度发布：5%→25%→50%→100% 四阶段金丝雀发布策略</li>
+                    <li>自动化：自动化测试、自动化部署、自动化回滚、自动化监控</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：电商智能客服 Agent 云原生部署</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某大型电商平台智能客服 Agent，日均处理 1000 万 + 用户咨询</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>流量波动大：大促期间流量是平时 10 倍，需要快速扩容</li>
+                                <li>资源成本高：GPU 资源闲置率高，需要优化利用率</li>
+                                <li>部署周期长：手动部署需要 2 小时，无法快速迭代</li>
+                                <li>故障恢复慢：单点故障影响大，需要高可用架构</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>云原生解决方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>容器化改造</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>将 Agent 应用 Docker 化，镜像大小从 15GB 优化到 3GB</li>
+                                <li>启动时间从 10 分钟降到 90 秒</li>
+                                <li>实现环境一致性，消除"在我机器上能跑"问题</li>
+                            </ul>
+                        </li>
+                        <li><strong>K8s 编排</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>部署到 Kubernetes 集群，使用 HPA 自动扩缩容</li>
+                                <li>配置 Pod 反亲和性，确保高可用</li>
+                                <li>使用 GPU 共享模式，资源利用率从 30% 提升到 75%</li>
+                            </ul>
+                        </li>
+                        <li><strong>CI/CD 建设</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>基于 ArgoCD 实现 GitOps，部署时间从 2 小时降到 10 分钟</li>
+                                <li>实现灰度发布，降低上线风险</li>
+                                <li>自动化测试覆盖率 90%+，质量问题减少 80%</li>
+                            </ul>
+                        </li>
+                        <li><strong>监控体系</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>建设 Prometheus+Grafana 监控体系</li>
+                                <li>实现全链路 Trace 追踪（Jaeger）</li>
+                                <li>日志聚合（ELK Stack），问题定位时间从小时级降到分钟级</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>弹性能力</strong>：大促期间 5 分钟内从 50 副本扩容到 500 副本</li>
+                        <li><strong>资源优化</strong>：GPU 利用率从 30% 提升到 75%，成本降低 55%</li>
+                        <li><strong>部署效率</strong>：部署时间从 2 小时降到 10 分钟，效率提升 12 倍</li>
+                        <li><strong>可用性</strong>：系统可用性从 99.5% 提升到 99.99%，故障恢复时间从 30 分钟降到 2 分钟</li>
+                        <li><strong>迭代速度</strong>：从每周 1 次发布提升到每天 10+ 次发布</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：金融风控 Agent 多集群部署</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某金融机构智能风控 Agent，实时识别欺诈交易</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>合规要求：需要多地多活、数据隔离、灾备能力</li>
+                                <li>低延迟要求：风控决策需要在 50ms 内完成</li>
+                                <li>高可用要求：99.999% 可用性，不能容忍单点故障</li>
+                                <li>安全要求：严格访问控制、审计日志、加密传输</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>多集群架构设计</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>三地五中心部署</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>北京（主中心）：2 个集群，承载 60% 流量</li>
+                                <li>上海（备中心）：2 个集群，承载 30% 流量</li>
+                                <li>深圳（灾备中心）：1 个集群，承载 10% 流量</li>
+                                <li>使用 KubeFed 实现多集群联邦管理</li>
+                            </ul>
+                        </li>
+                        <li><strong>流量调度</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>基于 DNS 的智能流量调度</li>
+                                <li>就近接入，降低延迟</li>
+                                <li>故障自动切换，保证可用性</li>
+                            </ul>
+                        </li>
+                        <li><strong>数据同步</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>使用分布式数据库（TiDB）实现数据多活</li>
+                                <li>向量数据库（Milvus）主从复制</li>
+                                <li>消息队列（Kafka）跨集群同步</li>
+                            </ul>
+                        </li>
+                        <li><strong>安全加固</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>Istio Service Mesh 实现 mTLS 加密</li>
+                                <li>OPA 策略引擎实现细粒度访问控制</li>
+                                <li>审计日志全量记录，满足合规要求</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>可用性</strong>：系统可用性达到 99.999%，年停机时间<5 分钟</li>
+                        <li><strong>延迟</strong>：P99 延迟 38ms，满足 50ms SLA 要求</li>
+                        <li><strong>容灾能力</strong>：单数据中心故障，30 秒内自动切换，零数据丢失</li>
+                        <li><strong>合规</strong>：通过等保三级、金融行业合规审计</li>
+                        <li><strong>业务价值</strong>：年拦截欺诈交易 10 万 + 笔，保护资金 5 亿元</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>云原生部署最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>容器化优先</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>所有应用容器化，实现环境一致性</li>
+                                <li>优化镜像大小，提升启动速度</li>
+                                <li>使用多阶段构建，减少镜像层数</li>
+                            </ul>
+                        </li>
+                        <li><strong>声明式配置</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>使用 Helm/Kustomize 管理 K8s 配置</li>
+                                <li>配置版本化，支持回滚</li>
+                                <li>配置与代码分离，便于管理</li>
+                            </ul>
+                        </li>
+                        <li><strong>自动化一切</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>自动化构建、测试、部署</li>
+                                <li>自动化扩缩容、故障恢复</li>
+                                <li>自动化监控、告警、报告</li>
+                            </ul>
+                        </li>
+                        <li><strong>可观测性</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>建设 Metrics/Logs/Traces 三大支柱</li>
+                                <li>实现端到端追踪</li>
+                                <li>建立 SLO/SLI 体系</li>
+                            </ul>
+                        </li>
+                        <li><strong>安全左移</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>安全扫描集成到 CI/CD</li>
+                                <li>镜像漏洞扫描、依赖检查</li>
+                                <li>最小权限原则、零信任网络</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 40px; border-left-color: var(--container-blue);">
+                    "从电商客服到金融风控，从单集群到多集群，从手动部署到 GitOps，Agent 云原生部署体系正在重塑软件交付的范式。未来的 Agent 系统将更加可扩展、更加可靠、更加易运维。这不仅是技术的进步，更是工程文化的演进。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：电商客服，GPU 利用率 30%→75%，部署时间 2 小时→10 分钟，可用性 99.5%→99.99%</li>
+                    <li>案例二：金融风控，三地五中心多活，P99 延迟 38ms，可用性 99.999%</li>
+                    <li>最佳实践：容器化优先、声明式配置、自动化一切、可观测性、安全左移</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">容器化与 K8s</h3>
+                <ol style="margin-left: 20px; line-height: 2.02;">
+                    <li>Docker Inc (2026). "Docker Documentation." docker.com</li>
+                    <li>CNCF (2026). "Kubernetes Documentation." kubernetes.io</li>
+                </ol>
+                
+                <h3 class="section-title">云原生工具链</h3>
+                <ol style="margin-left: 20px; line-height: 2.02;" start="3">
+                    <li>Argo Project (2026). "ArgoCD GitOps." argoproj.github.io</li>
+                    <li>Istio Authors (2026). "Istio Service Mesh." istio.io</li>
+                </ol>
+                
+                <h3 class="section-title">监控与可观测性</h3>
+                <ol style="margin-left: 20px; line-height: 2.02;" start="5">
+                    <li>Prometheus Authors (2026). "Prometheus Monitoring." prometheus.io</li>
+                    <li>Grafana Labs (2026). "Grafana Observability." grafana.com</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.32em; margin-bottom: 16px; color: var(--container-blue); font-weight: 800; font-family: 'Georgia', serif;">Agent 容器化、K8s 与云原生部署</p>
+                <p style="font-size: 1.09em; margin-bottom: 8px; font-style: italic;">从 Docker 到 Kubernetes 的规模化部署之道</p>
+                <p>© 2026 超级代码智能体 | 云原生部署版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 23px; font-size: 0.91em; line-height: 1.82;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="deploy-spectrum" style="margin-top: 32px;">
+                    <div class="spectrum-item spectrum-container">🔵 容器化</div>
+                    <div class="spectrum-item spectrum-k8s">🟣 Kubernetes</div>
+                    <div class="spectrum-item spectrum-cloud">🟡 云计算</div>
+                    <div class="spectrum-item spectrum-native">🟢 云原生</div>
+                    <div class="spectrum-item spectrum-deploy">🔴 部署运维</div>
+                </div>
+                <p style="margin-top: 32px; font-size: 0.84em; color: var(--text-secondary);">
+                    谨以此书献给所有在云原生一线构建可扩展 Agent 系统的平台工程师们<br>
+                    从容器化到 Kubernetes，从微服务到 Service Mesh<br>
+                    云原生——让 Agent 系统从不可扩展走向无限扩展
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Agent Containerization & Cloud Native Deployment');
+        console.log('📚 From Docker to Kubernetes at Scale (2024-2026)');
+        console.log('✨ Container + K8s + Cloud Native + Microservices + DevOps = Scalability');
+    </script>
+</body>
+</html>

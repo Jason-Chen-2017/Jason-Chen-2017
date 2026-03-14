@@ -1,0 +1,1619 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>超级马里奥 - Super Mario Bros</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Press Start 2P', 'Arial', sans-serif;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            position: relative;
+            border: 4px solid #fff;
+            box-shadow: 0 0 20px rgba(255,255,255,0.3);
+        }
+        
+        #gameCanvas {
+            display: block;
+            background: #5c94fc;
+        }
+        
+        #startScreen, #gameOverScreen, #winScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            z-index: 10;
+        }
+        
+        #startScreen h1, #gameOverScreen h1, #winScreen h1 {
+            font-size: 36px;
+            margin-bottom: 20px;
+            color: #e52521;
+            text-shadow: 3px 3px 0 #000;
+        }
+        
+        #startScreen p, #gameOverScreen p, #winScreen p {
+            font-size: 14px;
+            margin: 10px 0;
+            color: #fff;
+        }
+        
+        .btn {
+            margin-top: 30px;
+            padding: 15px 40px;
+            font-size: 16px;
+            font-family: inherit;
+            background: #e52521;
+            color: #fff;
+            border: 4px solid #fff;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn:hover {
+            background: #fff;
+            color: #e52521;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: -80px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            text-align: center;
+            font-size: 12px;
+        }
+        
+        #controls p {
+            margin: 5px 0;
+        }
+        
+        .key {
+            display: inline-block;
+            padding: 5px 10px;
+            background: #333;
+            border: 2px solid #fff;
+            border-radius: 4px;
+            margin: 0 3px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="768" height="480"></canvas>
+        
+        <div id="startScreen">
+            <h1>超级马里奥</h1>
+            <p>SUPER MARIO BROS</p>
+            <p style="margin-top: 30px; color: #ffd700;">经典复刻版</p>
+            <p style="margin-top: 20px;">世界 1-1</p>
+            <button class="btn" onclick="game.start()">开始游戏</button>
+            <p style="margin-top: 30px; font-size: 12px; color: #aaa;">按 ENTER 键开始</p>
+        </div>
+        
+        <div id="gameOverScreen" class="hidden">
+            <h1>GAME OVER</h1>
+            <p>分数：<span id="finalScore">0</span></p>
+            <p>到达关卡：<span id="finalLevel">1-1</span></p>
+            <button class="btn" onclick="game.restart()">重新开始</button>
+        </div>
+        
+        <div id="winScreen" class="hidden">
+            <h1 style="color: #ffd700;">恭喜通关!</h1>
+            <p>最终分数：<span id="winScore">0</span></p>
+            <p>剩余生命：<span id="winLives">0</span></p>
+            <button class="btn" onclick="game.restart()">再玩一次</button>
+        </div>
+        
+        <div id="controls">
+            <p><span class="key">←</span> <span class="key">→</span> 移动 | <span class="key">空格</span> 跳跃 | <span class="key">SHIFT</span> 加速跑</p>
+            <p><span class="key">P</span> 暂停 | <span class="key">M</span> 静音</p>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 音效管理器 ====================
+        class SoundManager {
+            constructor() {
+                this.muted = false;
+                this.audioContext = null;
+                this.sounds = {};
+                this.initialized = false;
+            }
+            
+            init() {
+                if (this.initialized) return;
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.createSounds();
+                    this.initialized = true;
+                } catch(e) {
+                    console.log('Audio not supported');
+                }
+            }
+            
+            createSounds() {
+                // 使用 Web Audio API 生成经典音效
+                this.sounds = {
+                    jump: () => this.playTone(150, 300, 'square', 0.15),
+                    coin: () => this.playTone(900, 1200, 'square', 0.1, 0),
+                    powerup: () => this.playSequence([400, 500, 600, 800], 'square', 0.1),
+                    mushroom: () => this.playSequence([300, 400, 500, 600, 700], 'square', 0.08),
+                    stomp: () => this.playTone(200, 100, 'sawtooth', 0.1),
+                    die: () => this.playSequence([300, 250, 200, 150, 100], 'sawtooth', 0.2),
+                    break: () => this.playTone(100, 50, 'square', 0.05),
+                    bump: () => this.playTone(150, 100, 'square', 0.08),
+                    flagpole: () => this.playSequence([500, 600, 700, 800, 900, 1000], 'square', 0.1),
+                    levelComplete: () => this.playLevelComplete(),
+                    fireball: () => this.playTone(400, 300, 'square', 0.1),
+                    kick: () => this.playTone(250, 150, 'sawtooth', 0.08),
+                    pipe: () => this.playSequence([200, 250, 300, 350], 'square', 0.15)
+                };
+            }
+            
+            playTone(startFreq, endFreq, type, duration, delay = 0) {
+                if (this.muted || !this.audioContext) return;
+                
+                const osc = this.audioContext.createOscillator();
+                const gain = this.audioContext.createGain();
+                
+                osc.type = type;
+                osc.frequency.setValueAtTime(startFreq, this.audioContext.currentTime + delay);
+                if (endFreq !== startFreq) {
+                    osc.frequency.exponentialRampToValueAtTime(endFreq, this.audioContext.currentTime + delay + duration);
+                }
+                
+                gain.gain.setValueAtTime(0.3, this.audioContext.currentTime + delay);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + delay + duration);
+                
+                osc.connect(gain);
+                gain.connect(this.audioContext.destination);
+                
+                osc.start(this.audioContext.currentTime + delay);
+                osc.stop(this.audioContext.currentTime + delay + duration);
+            }
+            
+            playSequence(frequencies, type, duration) {
+                if (this.muted || !this.audioContext) return;
+                
+                frequencies.forEach((freq, i) => {
+                    this.playTone(freq, freq, type, duration, i * duration);
+                });
+            }
+            
+            playLevelComplete() {
+                if (this.muted || !this.audioContext) return;
+                const notes = [523, 659, 784, 1047, 784, 1047];
+                notes.forEach((freq, i) => {
+                    this.playTone(freq, freq, 'square', 0.15, i * 0.15);
+                });
+            }
+            
+            play(name) {
+                if (this.sounds[name]) {
+                    this.sounds[name]();
+                }
+            }
+            
+            toggleMute() {
+                this.muted = !this.muted;
+                return this.muted;
+            }
+        }
+
+        // ==================== 输入管理器 ====================
+        class InputManager {
+            constructor() {
+                this.keys = {};
+                this.setupListeners();
+            }
+            
+            setupListeners() {
+                document.addEventListener('keydown', (e) => {
+                    this.keys[e.code] = true;
+                    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+                        e.preventDefault();
+                    }
+                });
+                
+                document.addEventListener('keyup', (e) => {
+                    this.keys[e.code] = false;
+                });
+            }
+            
+            isDown(code) {
+                return this.keys[code] === true;
+            }
+            
+            isPressed(code) {
+                return this.keys[code];
+            }
+        }
+
+        // ==================== 游戏实体基类 ====================
+        class Entity {
+            constructor(x, y, width, height) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.vx = 0;
+                this.vy = 0;
+                this.markedForDeletion = false;
+            }
+            
+            update(deltaTime) {}
+            
+            draw(ctx, cameraX) {}
+            
+            getBounds() {
+                return {
+                    left: this.x,
+                    right: this.x + this.width,
+                    top: this.y,
+                    bottom: this.y + this.height
+                };
+            }
+            
+            collidesWith(other) {
+                const a = this.getBounds();
+                const b = other.getBounds();
+                return a.left < b.right && a.right > b.left && 
+                       a.top < b.bottom && a.bottom > b.top;
+            }
+        }
+
+        // ==================== 马里奥角色 ====================
+        class Mario extends Entity {
+            constructor(x, y) {
+                super(x, y, 32, 32);
+                this.isBig = false;
+                this.isFire = false;
+                this.isInvincible = false;
+                this.invincibleTimer = 0;
+                this.onGround = false;
+                this.isDead = false;
+                this.facingRight = true;
+                this.animFrame = 0;
+                this.animTimer = 0;
+                this.fireCooldown = 0;
+            }
+            
+            update(deltaTime, input, tiles) {
+                if (this.isDead) {
+                    this.vy += 0.5;
+                    this.y += this.vy;
+                    return;
+                }
+                
+                // 无敌时间
+                if (this.isInvincible) {
+                    this.invincibleTimer -= deltaTime;
+                    if (this.invincibleTimer <= 0) {
+                        this.isInvincible = false;
+                    }
+                }
+                
+                // 火球冷却
+                if (this.fireCooldown > 0) {
+                    this.fireCooldown -= deltaTime;
+                }
+                
+                // 水平移动
+                const speed = input.isDown('ShiftLeft') ? 5 : 3;
+                if (input.isDown('ArrowLeft')) {
+                    this.vx = -speed;
+                    this.facingRight = false;
+                } else if (input.isDown('ArrowRight')) {
+                    this.vx = speed;
+                    this.facingRight = true;
+                } else {
+                    this.vx = 0;
+                }
+                
+                // 跳跃
+                if (input.isDown('Space') && this.onGround) {
+                    this.vy = -13;
+                    this.onGround = false;
+                    game.sound.play('jump');
+                }
+                
+                // 重力
+                this.vy += 0.5;
+                if (this.vy > 15) this.vy = 15;
+                
+                // 应用速度
+                this.x += this.vx;
+                this.checkHorizontalCollision(tiles);
+                
+                this.y += this.vy;
+                this.onGround = false;
+                this.checkVerticalCollision(tiles);
+                
+                // 边界检查
+                if (this.x < 0) this.x = 0;
+                if (this.y > 600) {
+                    this.die();
+                }
+                
+                // 动画
+                if (this.vx !== 0) {
+                    this.animTimer += deltaTime;
+                    if (this.animTimer > 8) {
+                        this.animFrame = (this.animFrame + 1) % 3;
+                        this.animTimer = 0;
+                    }
+                } else {
+                    this.animFrame = 0;
+                }
+            }
+            
+            checkHorizontalCollision(tiles) {
+                const bounds = this.getBounds();
+                const tileLeft = Math.floor(bounds.left / 32);
+                const tileRight = Math.floor(bounds.right / 32);
+                const tileTop = Math.floor(bounds.top / 32);
+                const tileBottom = Math.floor(bounds.bottom / 32);
+                
+                for (let ty = tileTop; ty <= tileBottom; ty++) {
+                    for (let tx = tileLeft; tx <= tileRight; tx++) {
+                        const tile = tiles.get(`${tx},${ty}`);
+                        if (tile && tile.solid) {
+                            if (this.vx > 0) {
+                                this.x = tx * 32 - this.width;
+                            } else if (this.vx < 0) {
+                                this.x = (tx + 1) * 32;
+                            }
+                            this.vx = 0;
+                        }
+                    }
+                }
+            }
+            
+            checkVerticalCollision(tiles) {
+                const bounds = this.getBounds();
+                const tileLeft = Math.floor(bounds.left / 32);
+                const tileRight = Math.floor(bounds.right / 32);
+                const tileTop = Math.floor(bounds.top / 32);
+                const tileBottom = Math.floor(bounds.bottom / 32);
+                
+                for (let tx = tileLeft; tx <= tileRight; tx++) {
+                    for (let ty = tileTop; ty <= tileBottom; ty++) {
+                        const tile = tiles.get(`${tx},${ty}`);
+                        if (tile && tile.solid) {
+                            if (this.vy > 0) {
+                                this.y = ty * 32 - this.height;
+                                this.vy = 0;
+                                this.onGround = true;
+                            } else if (this.vy < 0) {
+                                this.y = (ty + 1) * 32;
+                                this.vy = 0;
+                                // 顶砖块
+                                if (tile.type === 'brick') {
+                                    tile.hit();
+                                } else if (tile.type === 'question') {
+                                    tile.hit();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            makeBig() {
+                if (!this.isBig) {
+                    this.isBig = true;
+                    this.y -= 16;
+                    this.height = 48;
+                    game.sound.play('powerup');
+                }
+            }
+            
+            makeFire() {
+                if (this.isBig && !this.isFire) {
+                    this.isFire = true;
+                    game.sound.play('powerup');
+                }
+            }
+            
+            takeDamage() {
+                if (this.isInvincible || this.isDead) return;
+                
+                if (this.isFire) {
+                    this.isFire = false;
+                    this.isInvincible = true;
+                    this.invincibleTimer = 120;
+                    game.sound.play('pipe');
+                } else if (this.isBig) {
+                    this.isBig = false;
+                    this.isFire = false;
+                    this.height = 32;
+                    this.y += 16;
+                    this.isInvincible = true;
+                    this.invincibleTimer = 120;
+                    game.sound.play('pipe');
+                } else {
+                    this.die();
+                }
+            }
+            
+            die() {
+                if (this.isDead) return;
+                this.isDead = true;
+                this.vy = -10;
+                game.sound.play('die');
+                game.lives--;
+                if (game.lives <= 0) {
+                    game.gameOver();
+                }
+            }
+            
+            draw(ctx, cameraX) {
+                if (this.isDead) {
+                    // 死亡动画
+                    ctx.fillStyle = this.isFire ? '#ff8800' : (this.isBig ? '#e52521' : '#e52521');
+                    ctx.fillRect(this.x - cameraX, this.y, this.width, this.height);
+                    return;
+                }
+                
+                if (this.isInvincible && Math.floor(Date.now() / 50) % 2 === 0) {
+                    return; // 闪烁效果
+                }
+                
+                const drawX = this.x - cameraX;
+                
+                // 绘制马里奥
+                ctx.save();
+                
+                // 身体
+                if (this.isFire) {
+                    ctx.fillStyle = '#ff8800';
+                } else if (this.isBig) {
+                    ctx.fillStyle = '#e52521';
+                } else {
+                    ctx.fillStyle = '#e52521';
+                }
+                
+                // 根据大小绘制不同高度
+                const height = this.isBig ? 48 : 32;
+                
+                // 身体
+                ctx.fillRect(drawX + 4, this.y + (this.isBig ? 16 : 0), 24, height - (this.isBig ? 16 : 0));
+                
+                // 头部
+                ctx.fillStyle = '#ffcc99';
+                ctx.fillRect(drawX + 6, this.y, 20, 16);
+                
+                // 帽子
+                ctx.fillStyle = this.isFire ? '#ff8800' : '#e52521';
+                ctx.fillRect(drawX + 4, this.y, 24, 8);
+                
+                // 眼睛
+                ctx.fillStyle = '#000';
+                if (this.facingRight) {
+                    ctx.fillRect(drawX + 18, this.y + 6, 4, 4);
+                } else {
+                    ctx.fillRect(drawX + 10, this.y + 6, 4, 4);
+                }
+                
+                // 胡子
+                ctx.fillStyle = '#000';
+                if (this.facingRight) {
+                    ctx.fillRect(drawX + 16, this.y + 12, 10, 3);
+                } else {
+                    ctx.fillRect(drawX + 6, this.y + 12, 10, 3);
+                }
+                
+                // 腿部动画
+                if (this.vx !== 0 && this.onGround) {
+                    ctx.fillStyle = '#654321';
+                    if (this.animFrame === 1) {
+                        ctx.fillRect(drawX + 4, this.y + height, 10, 6);
+                    } else if (this.animFrame === 2) {
+                        ctx.fillRect(drawX + 18, this.y + height, 10, 6);
+                    } else {
+                        ctx.fillRect(drawX + 4, this.y + height, 10, 6);
+                        ctx.fillRect(drawX + 18, this.y + height, 10, 6);
+                    }
+                } else {
+                    ctx.fillStyle = '#654321';
+                    ctx.fillRect(drawX + 4, this.y + height, 10, 6);
+                    ctx.fillRect(drawX + 18, this.y + height, 10, 6);
+                }
+                
+                ctx.restore();
+            }
+            
+            shootFireball() {
+                if (!this.isFire || this.fireCooldown > 0) return null;
+                this.fireCooldown = 30;
+                game.sound.play('fireball');
+                const vx = this.facingRight ? 6 : -6;
+                return new Fireball(this.x + (this.facingRight ? this.width : 0), this.y + 16, vx);
+            }
+        }
+
+        // ==================== 火球 ====================
+        class Fireball extends Entity {
+            constructor(x, y, vx) {
+                super(x, y, 16, 16);
+                this.vx = vx;
+                this.vy = 0;
+                this.bounceTimer = 0;
+            }
+            
+            update(deltaTime, tiles) {
+                this.x += this.vx;
+                this.vy += 0.3;
+                this.y += this.vy;
+                
+                // 碰撞检测
+                const bounds = this.getBounds();
+                const tileLeft = Math.floor(bounds.left / 32);
+                const tileRight = Math.floor(bounds.right / 32);
+                const tileTop = Math.floor(bounds.top / 32);
+                const tileBottom = Math.floor(bounds.bottom / 32);
+                
+                for (let tx = tileLeft; tx <= tileRight; tx++) {
+                    for (let ty = tileTop; ty <= tileBottom; ty++) {
+                        const tile = tiles.get(`${tx},${ty}`);
+                        if (tile && tile.solid) {
+                            this.vy = -5;
+                            this.y = ty * 32 - this.height;
+                            game.sound.play('bump');
+                        }
+                    }
+                }
+                
+                // 超出屏幕
+                if (this.x < game.cameraX - 100 || this.x > game.cameraX + 900) {
+                    this.markedForDeletion = true;
+                }
+            }
+            
+            draw(ctx, cameraX) {
+                ctx.fillStyle = '#ff6600';
+                ctx.beginPath();
+                ctx.arc(this.x - cameraX + 8, this.y + 8, 8, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#ffcc00';
+                ctx.beginPath();
+                ctx.arc(this.x - cameraX + 8, this.y + 8, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // ==================== 敌人基类 ====================
+        class Enemy extends Entity {
+            constructor(x, y) {
+                super(x, y, 32, 32);
+                this.vx = -1;
+                this.type = 'enemy';
+            }
+            
+            update(deltaTime, tiles, mario) {
+                this.vy += 0.3;
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // 水平碰撞
+                const bounds = this.getBounds();
+                const tileLeft = Math.floor(bounds.left / 32);
+                const tileRight = Math.floor(bounds.right / 32);
+                const tileTop = Math.floor(bounds.top / 32);
+                const tileBottom = Math.floor(bounds.bottom / 32);
+                
+                for (let ty = tileTop; ty <= tileBottom; ty++) {
+                    for (let tx = tileLeft; tx <= tileRight; tx++) {
+                        const tile = tiles.get(`${tx},${ty}`);
+                        if (tile && tile.solid) {
+                            this.vx = -this.vx;
+                            this.x += this.vx * 2;
+                        }
+                    }
+                }
+                
+                // 垂直碰撞
+                for (let tx = tileLeft; tx <= tileRight; tx++) {
+                    for (let ty = tileTop; ty <= tileBottom; ty++) {
+                        const tile = tiles.get(`${tx},${ty}`);
+                        if (tile && tile.solid) {
+                            if (this.vy > 0) {
+                                this.y = ty * 32 - this.height;
+                                this.vy = 0;
+                            }
+                        }
+                    }
+                }
+                
+                // 掉落死亡
+                if (this.y > 600) {
+                    this.markedForDeletion = true;
+                }
+            }
+            
+            stomped() {
+                this.markedForDeletion = true;
+                game.sound.play('stomp');
+                game.addScore(100);
+            }
+        }
+
+        // ==================== Goomba ====================
+        class Goomba extends Enemy {
+            constructor(x, y) {
+                super(x, y);
+                this.animFrame = 0;
+                this.animTimer = 0;
+            }
+            
+            draw(ctx, cameraX) {
+                const drawX = this.x - cameraX;
+                
+                // 身体
+                ctx.fillStyle = '#8B4513';
+                ctx.beginPath();
+                ctx.arc(drawX + 16, this.y + 16, 14, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 头部
+                ctx.fillStyle = '#CD853F';
+                ctx.beginPath();
+                ctx.arc(drawX + 16, this.y + 12, 12, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 眼睛
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(drawX + 10, this.y + 10, 5, 0, Math.PI * 2);
+                ctx.arc(drawX + 22, this.y + 10, 5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(drawX + 11, this.y + 11, 2, 0, Math.PI * 2);
+                ctx.arc(drawX + 21, this.y + 11, 2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 脚动画
+                ctx.fillStyle = '#000';
+                this.animTimer++;
+                if (this.animTimer > 10) {
+                    this.animFrame = (this.animFrame + 1) % 2;
+                    this.animTimer = 0;
+                }
+                
+                if (this.animFrame === 0) {
+                    ctx.fillRect(drawX + 4, this.y + 26, 10, 6);
+                    ctx.fillRect(drawX + 18, this.y + 26, 10, 6);
+                } else {
+                    ctx.fillRect(drawX + 2, this.y + 26, 10, 6);
+                    ctx.fillRect(drawX + 20, this.y + 26, 10, 6);
+                }
+            }
+        }
+
+        // ==================== Koopa Troopa ====================
+        class Koopa extends Enemy {
+            constructor(x, y) {
+                super(x, y);
+                this.inShell = false;
+                this.shellTimer = 0;
+            }
+            
+            stomped() {
+                if (!this.inShell) {
+                    this.inShell = true;
+                    this.vx = 0;
+                    this.shellTimer = 120;
+                    game.sound.play('kick');
+                    game.addScore(100);
+                } else {
+                    this.markedForDeletion = true;
+                    game.sound.play('stomp');
+                    game.addScore(200);
+                }
+            }
+            
+            update(deltaTime, tiles, mario) {
+                if (this.inShell) {
+                    this.shellTimer -= deltaTime;
+                    if (this.shellTimer <= 0) {
+                        this.inShell = false;
+                        this.vx = -1;
+                    }
+                } else {
+                    super.update(deltaTime, tiles, mario);
+                }
+            }
+            
+            draw(ctx, cameraX) {
+                const drawX = this.x - cameraX;
+                
+                if (this.inShell) {
+                    // 龟壳
+                    ctx.fillStyle = '#228B22';
+                    ctx.beginPath();
+                    ctx.ellipse(drawX + 16, this.y + 20, 14, 10, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#90EE90';
+                    ctx.beginPath();
+                    ctx.ellipse(drawX + 16, this.y + 18, 8, 5, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // 头部
+                    ctx.fillStyle = '#FFD700';
+                    ctx.beginPath();
+                    ctx.arc(drawX + 16, this.y + 10, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // 眼睛
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(drawX + 12, this.y + 8, 3, 0, Math.PI * 2);
+                    ctx.arc(drawX + 20, this.y + 8, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // 龟壳
+                    ctx.fillStyle = '#228B22';
+                    ctx.beginPath();
+                    ctx.ellipse(drawX + 16, this.y + 24, 12, 10, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // 脚
+                    ctx.fillStyle = '#FFD700';
+                    ctx.fillRect(drawX + 6, this.y + 28, 8, 6);
+                    ctx.fillRect(drawX + 18, this.y + 28, 8, 6);
+                }
+            }
+        }
+
+        // ==================== 道具 ====================
+        class PowerUp extends Entity {
+            constructor(x, y, type) {
+                super(x, y, 32, 32);
+                this.type = type; // 'mushroom', 'flower', 'star'
+                this.vx = 2;
+                this.emerging = true;
+                this.emergeY = y;
+                this.targetY = y - 32;
+            }
+            
+            update(deltaTime, tiles) {
+                if (this.emerging) {
+                    this.y -= 1;
+                    if (this.y <= this.targetY) {
+                        this.emerging = false;
+                        this.y = this.targetY;
+                    }
+                    return;
+                }
+                
+                this.vy += 0.3;
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // 碰撞
+                const bounds = this.getBounds();
+                const tileLeft = Math.floor(bounds.left / 32);
+                const tileRight = Math.floor(bounds.right / 32);
+                const tileTop = Math.floor(bounds.top / 32);
+                const tileBottom = Math.floor(bounds.bottom / 32);
+                
+                for (let ty = tileTop; ty <= tileBottom; ty++) {
+                    for (let tx = tileLeft; tx <= tileRight; tx++) {
+                        const tile = tiles.get(`${tx},${ty}`);
+                        if (tile && tile.solid) {
+                            if (this.vy > 0) {
+                                this.y = ty * 32 - this.height;
+                                this.vy = 0;
+                            } else {
+                                this.vx = -this.vx;
+                            }
+                        }
+                    }
+                }
+                
+                if (this.y > 600) {
+                    this.markedForDeletion = true;
+                }
+            }
+            
+            draw(ctx, cameraX) {
+                const drawX = this.x - cameraX;
+                
+                if (this.type === 'mushroom') {
+                    // 蘑菇
+                    ctx.fillStyle = '#e52521';
+                    ctx.beginPath();
+                    ctx.arc(drawX + 16, this.y + 12, 14, Math.PI, 0);
+                    ctx.fill();
+                    
+                    // 白点
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.arc(drawX + 10, this.y + 8, 4, 0, Math.PI * 2);
+                    ctx.arc(drawX + 22, this.y + 8, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // 茎
+                    ctx.fillStyle = '#ffcc99';
+                    ctx.fillRect(drawX + 10, this.y + 12, 12, 16);
+                    
+                    // 眼睛
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(drawX + 12, this.y + 18, 3, 4);
+                    ctx.fillRect(drawX + 18, this.y + 18, 3, 4);
+                } else if (this.type === 'flower') {
+                    // 花
+                    ctx.fillStyle = '#228B22';
+                    ctx.fillRect(drawX + 14, this.y + 16, 4, 16);
+                    
+                    ctx.fillStyle = '#fff';
+                    for (let i = 0; i < 5; i++) {
+                        const angle = (i / 5) * Math.PI * 2;
+                        const px = drawX + 16 + Math.cos(angle) * 10;
+                        const py = this.y + 12 + Math.sin(angle) * 10;
+                        ctx.beginPath();
+                        ctx.arc(px, py, 6, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    
+                    ctx.fillStyle = '#ffd700';
+                    ctx.beginPath();
+                    ctx.arc(drawX + 16, this.y + 12, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (this.type === 'star') {
+                    // 星星
+                    ctx.fillStyle = '#ffd700';
+                    const cx = drawX + 16;
+                    const cy = this.y + 16;
+                    const spikes = 5;
+                    const outerRadius = 14;
+                    const innerRadius = 6;
+                    
+                    ctx.beginPath();
+                    for (let i = 0; i < spikes * 2; i++) {
+                        const r = i % 2 === 0 ? outerRadius : innerRadius;
+                        const angle = (i / spikes * 2 - 0.5) * Math.PI;
+                        const x = cx + Math.cos(angle) * r;
+                        const y = cy + Math.sin(angle) * r;
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    // 眼睛
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(drawX + 12, this.y + 14, 3, 3);
+                    ctx.fillRect(drawX + 18, this.y + 14, 3, 3);
+                }
+            }
+        }
+
+        // ==================== 砖块/瓦片 ====================
+        class Tile {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.solid = ['ground', 'brick', 'question', 'hard', 'pipe', 'pipe_top'].includes(type);
+                this.hit = false;
+                this.animTimer = 0;
+                this.contents = null; // question 块内容
+            }
+            
+            hit() {
+                if (this.hit) return;
+                
+                if (this.type === 'question') {
+                    this.hit = true;
+                    this.type = 'question_empty';
+                    game.sound.play('bump');
+                    
+                    if (this.contents) {
+                        const powerUp = new PowerUp(this.x * 32, this.y * 32 - 32, this.contents);
+                        game.powerUps.push(powerUp);
+                        game.sound.play('mushroom');
+                        game.addScore(1000);
+                    } else {
+                        game.addScore(200);
+                        game.coins++;
+                        game.sound.play('coin');
+                    }
+                } else if (this.type === 'brick') {
+                    game.sound.play('break');
+                    if (game.mario.isBig) {
+                        this.type = 'empty';
+                        this.solid = false;
+                        // 创建砖块碎片
+                        for (let i = 0; i < 4; i++) {
+                            game.particles.push({
+                                x: this.x * 32 + 16,
+                                y: this.y * 32 + 16,
+                                vx: (i % 2 === 0 ? -3 : 3) + Math.random() * 2,
+                                vy: -5 - Math.random() * 3,
+                                life: 60,
+                                type: 'brick_piece'
+                            });
+                        }
+                        game.addScore(50);
+                    } else {
+                        game.sound.play('bump');
+                    }
+                }
+            }
+            
+            draw(ctx, cameraX) {
+                const drawX = this.x * 32 - cameraX;
+                const drawY = this.y * 32;
+                
+                if (drawX < -32 || drawX > 800) return;
+                
+                switch(this.type) {
+                    case 'ground':
+                        ctx.fillStyle = '#c84c0c';
+                        ctx.fillRect(drawX, drawY, 32, 32);
+                        ctx.fillStyle = '#f8b800';
+                        ctx.fillRect(drawX + 2, drawY + 2, 28, 28);
+                        ctx.fillStyle = '#c84c0c';
+                        ctx.fillRect(drawX + 4, drawY + 4, 24, 24);
+                        break;
+                        
+                    case 'brick':
+                        ctx.fillStyle = '#b83800';
+                        ctx.fillRect(drawX, drawY, 32, 32);
+                        ctx.fillStyle = '#f8b800';
+                        ctx.fillRect(drawX + 1, drawY + 1, 14, 14);
+                        ctx.fillRect(drawX + 17, drawY + 1, 14, 14);
+                        ctx.fillRect(drawX + 1, drawY + 17, 14, 14);
+                        ctx.fillRect(drawX + 17, drawY + 17, 14, 14);
+                        break;
+                        
+                    case 'question':
+                        ctx.fillStyle = '#f8b800';
+                        ctx.fillRect(drawX, drawY, 32, 32);
+                        ctx.fillStyle = '#b83800';
+                        ctx.font = 'bold 24px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('?', drawX + 16, drawY + 24);
+                        // 闪烁效果
+                        if (Math.floor(Date.now() / 100) % 2 === 0) {
+                            ctx.fillStyle = '#ffd700';
+                            ctx.fillRect(drawX + 2, drawY + 2, 4, 4);
+                            ctx.fillRect(drawX + 26, drawY + 2, 4, 4);
+                            ctx.fillRect(drawX + 2, drawY + 26, 4, 4);
+                            ctx.fillRect(drawX + 26, drawY + 26, 4, 4);
+                        }
+                        break;
+                        
+                    case 'question_empty':
+                        ctx.fillStyle = '#b88800';
+                        ctx.fillRect(drawX, drawY, 32, 32);
+                        ctx.strokeStyle = '#886800';
+                        ctx.strokeRect(drawX + 2, drawY + 2, 28, 28);
+                        break;
+                        
+                    case 'hard':
+                        ctx.fillStyle = '#b88800';
+                        ctx.fillRect(drawX, drawY, 32, 32);
+                        ctx.strokeStyle = '#886800';
+                        ctx.strokeRect(drawX + 2, drawY + 2, 28, 28);
+                        break;
+                        
+                    case 'pipe':
+                        ctx.fillStyle = '#00aa00';
+                        ctx.fillRect(drawX, drawY, 32, 32);
+                        ctx.fillStyle = '#00dd00';
+                        ctx.fillRect(drawX + 4, drawY, 8, 32);
+                        ctx.fillStyle = '#008800';
+                        ctx.fillRect(drawX + 24, drawY, 4, 32);
+                        break;
+                        
+                    case 'pipe_top':
+                        ctx.fillStyle = '#00aa00';
+                        ctx.fillRect(drawX, drawY, 32, 32);
+                        ctx.fillStyle = '#00dd00';
+                        ctx.fillRect(drawX + 4, drawY, 8, 32);
+                        ctx.fillStyle = '#008800';
+                        ctx.fillRect(drawX + 24, drawY, 4, 32);
+                        ctx.strokeStyle = '#006600';
+                        ctx.strokeRect(drawX + 2, drawY + 2, 28, 28);
+                        break;
+                        
+                    case 'block':
+                        ctx.fillStyle = '#8B4513';
+                        ctx.fillRect(drawX, drawY, 32, 32);
+                        break;
+                        
+                    case 'empty':
+                        // 空
+                        break;
+                }
+            }
+        }
+
+        // ==================== 关卡数据 ====================
+        const LEVELS = [
+            // 世界 1-1
+            {
+                name: '1-1',
+                width: 220,
+                entities: [
+                    {type: 'goomba', x: 22, y: 12},
+                    {type: 'goomba', x: 40, y: 12},
+                    {type: 'goomba', x: 42, y: 12},
+                    {type: 'goomba', x: 52, y: 12},
+                    {type: 'koopa', x: 68, y: 12},
+                    {type: 'goomba', x: 80, y: 12},
+                    {type: 'goomba', x: 82, y: 12},
+                    {type: 'koopa', x: 90, y: 12},
+                    {type: 'goomba', x: 105, y: 12},
+                    {type: 'goomba', x: 107, y: 12},
+                    {type: 'koopa', x: 120, y: 12},
+                    {type: 'goomba', x: 135, y: 12},
+                    {type: 'goomba', x: 150, y: 12},
+                    {type: 'koopa', x: 165, y: 12},
+                    {type: 'goomba', x: 180, y: 12},
+                ],
+                tiles: [
+                    // 地面
+                    {x: 0, y: 14, w: 69, h: 2, type: 'ground'},
+                    {x: 71, y: 14, w: 55, h: 2, type: 'ground'},
+                    {x: 128, y: 14, w: 92, h: 2, type: 'ground'},
+                    
+                    // 砖块平台
+                    {x: 16, y: 10, w: 1, h: 1, type: 'question', content: 'mushroom'},
+                    {x: 20, y: 10, w: 5, h: 1, type: 'brick'},
+                    {x: 22, y: 10, w: 1, h: 1, type: 'question', content: 'coin'},
+                    {x: 24, y: 10, w: 1, h: 1, type: 'brick'},
+                    
+                    {x: 22, y: 6, w: 1, h: 1, type: 'question', content: 'flower'},
+                    
+                    {x: 64, y: 10, w: 1, h: 1, type: 'question', content: 'mushroom'},
+                    
+                    {x: 77, y: 10, w: 3, h: 1, type: 'brick'},
+                    {x: 79, y: 6, w: 1, h: 1, type: 'question', content: 'star'},
+                    
+                    {x: 91, y: 10, w: 5, h: 1, type: 'brick'},
+                    {x: 93, y: 10, w: 1, h: 1, type: 'question', content: 'mushroom'},
+                    
+                    {x: 100, y: 6, w: 1, h: 1, type: 'question', content: 'coin'},
+                    
+                    // 水管
+                    {x: 28, y: 12, w: 2, h: 2, type: 'pipe'},
+                    {x: 38, y: 11, w: 2, h: 3, type: 'pipe'},
+                    {x: 46, y: 10, w: 2, h: 4, type: 'pipe'},
+                    {x: 57, y: 10, w: 2, h: 4, type: 'pipe'},
+                    
+                    // 台阶
+                    {x: 134, y: 13, w: 1, h: 1, type: 'hard'},
+                    {x: 135, y: 12, w: 1, h: 2, type: 'hard'},
+                    {x: 136, y: 11, w: 1, h: 3, type: 'hard'},
+                    {x: 137, y: 10, w: 1, h: 4, type: 'hard'},
+                    {x: 138, y: 9, w: 3, h: 5, type: 'hard'},
+                    {x: 141, y: 10, w: 1, h: 4, type: 'hard'},
+                    {x: 142, y: 11, w: 1, h: 3, type: 'hard'},
+                    {x: 143, y: 12, w: 1, h: 2, type: 'hard'},
+                    {x: 144, y: 13, w: 1, h: 1, type: 'hard'},
+                    
+                    {x: 152, y: 13, w: 1, h: 1, type: 'hard'},
+                    {x: 153, y: 12, w: 1, h: 2, type: 'hard'},
+                    {x: 154, y: 11, w: 1, h: 3, type: 'hard'},
+                    {x: 155, y: 10, w: 1, h: 4, type: 'hard'},
+                    {x: 156, y: 9, w: 3, h: 5, type: 'hard'},
+                    {x: 159, y: 10, w: 1, h: 4, type: 'hard'},
+                    {x: 160, y: 11, w: 1, h: 3, type: 'hard'},
+                    {x: 161, y: 12, w: 1, h: 2, type: 'hard'},
+                    {x: 162, y: 13, w: 1, h: 1, type: 'hard'},
+                    
+                    // 旗杆
+                    {x: 198, y: 3, w: 1, h: 11, type: 'flagpole'},
+                    {x: 203, y: 13, w: 3, h: 2, type: 'castle'},
+                ]
+            },
+            
+            // 世界 1-2
+            {
+                name: '1-2',
+                width: 200,
+                entities: [
+                    {type: 'goomba', x: 15, y: 12},
+                    {type: 'koopa', x: 30, y: 12},
+                    {type: 'goomba', x: 45, y: 12},
+                    {type: 'koopa', x: 60, y: 12},
+                    {type: 'goomba', x: 75, y: 12},
+                    {type: 'koopa', x: 90, y: 12},
+                    {type: 'goomba', x: 105, y: 12},
+                    {type: 'koopa', x: 120, y: 12},
+                ],
+                tiles: [
+                    // 地面
+                    {x: 0, y: 14, w: 20, h: 2, type: 'ground'},
+                    {x: 25, y: 14, w: 15, h: 2, type: 'ground'},
+                    {x: 45, y: 14, w: 20, h: 2, type: 'ground'},
+                    {x: 70, y: 14, w: 25, h: 2, type: 'ground'},
+                    {x: 100, y: 14, w: 100, h: 2, type: 'ground'},
+                    
+                    // 地下元素
+                    {x: 10, y: 10, w: 3, h: 1, type: 'brick'},
+                    {x: 11, y: 10, w: 1, h: 1, type: 'question', content: 'mushroom'},
+                    
+                    {x: 30, y: 8, w: 5, h: 1, type: 'brick'},
+                    {x: 32, y: 8, w: 1, h: 1, type: 'question', content: 'flower'},
+                    
+                    {x: 50, y: 10, w: 1, h: 1, type: 'question', content: 'star'},
+                    
+                    {x: 80, y: 6, w: 3, h: 1, type: 'brick'},
+                    {x: 81, y: 6, w: 1, h: 1, type: 'question', content: 'coin'},
+                    
+                    // 水管
+                    {x: 20, y: 12, w: 2, h: 2, type: 'pipe'},
+                    {x: 40, y: 11, w: 2, h: 3, type: 'pipe'},
+                    {x: 65, y: 10, w: 2, h: 4, type: 'pipe'},
+                    
+                    // 旗杆
+                    {x: 190, y: 3, w: 1, h: 11, type: 'flagpole'},
+                    {x: 195, y: 13, w: 3, h: 2, type: 'castle'},
+                ]
+            },
+            
+            // 世界 1-3
+            {
+                name: '1-3',
+                width: 220,
+                entities: [
+                    {type: 'goomba', x: 20, y: 12},
+                    {type: 'koopa', x: 35, y: 12},
+                    {type: 'goomba', x: 50, y: 12},
+                    {type: 'koopa', x: 65, y: 12},
+                    {type: 'goomba', x: 80, y: 12},
+                    {type: 'koopa', x: 95, y: 12},
+                    {type: 'goomba', x: 110, y: 12},
+                    {type: 'koopa', x: 125, y: 12},
+                    {type: 'goomba', x: 140, y: 12},
+                    {type: 'koopa', x: 155, y: 12},
+                ],
+                tiles: [
+                    // 地面
+                    {x: 0, y: 14, w: 30, h: 2, type: 'ground'},
+                    {x: 35, y: 14, w: 25, h: 2, type: 'ground'},
+                    {x: 65, y: 14, w: 30, h: 2, type: 'ground'},
+                    {x: 100, y: 14, w: 120, h: 2, type: 'ground'},
+                    
+                    // 高台
+                    {x: 15, y: 10, w: 5, h: 1, type: 'hard'},
+                    {x: 16, y: 10, w: 1, h: 1, type: 'question', content: 'mushroom'},
+                    
+                    {x: 40, y: 8, w: 5, h: 1, type: 'brick'},
+                    {x: 42, y: 8, w: 1, h: 1, type: 'question', content: 'flower'},
+                    
+                    {x: 70, y: 10, w: 3, h: 1, type: 'hard'},
+                    {x: 71, y: 10, w: 1, h: 1, type: 'question', content: 'star'},
+                    
+                    {x: 110, y: 6, w: 5, h: 1, type: 'brick'},
+                    {x: 112, y: 6, w: 1, h: 1, type: 'question', content: 'coin'},
+                    
+                    // 水管
+                    {x: 25, y: 12, w: 2, h: 2, type: 'pipe'},
+                    {x: 55, y: 11, w: 2, h: 3, type: 'pipe'},
+                    
+                    // 旗杆
+                    {x: 210, y: 3, w: 1, h: 11, type: 'flagpole'},
+                    {x: 215, y: 13, w: 3, h: 2, type: 'castle'},
+                ]
+            }
+        ];
+
+        // ==================== 主游戏类 ====================
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.input = new InputManager();
+                this.sound = new SoundManager();
+                
+                this.state = 'start'; // start, playing, paused, gameover, win, levelComplete
+                this.currentLevel = 0;
+                this.score = 0;
+                this.coins = 0;
+                this.lives = 3;
+                this.time = 400;
+                this.timeTimer = 0;
+                
+                this.cameraX = 0;
+                this.mario = null;
+                this.tiles = new Map();
+                this.enemies = [];
+                this.powerUps = [];
+                this.fireballs = [];
+                this.particles = [];
+                
+                this.lastTime = 0;
+                
+                this.setupKeyboard();
+                this.gameLoop = this.gameLoop.bind(this);
+            }
+            
+            setupKeyboard() {
+                document.addEventListener('keydown', (e) => {
+                    if (e.code === 'Enter' && this.state === 'start') {
+                        this.start();
+                    }
+                    if (e.code === 'KeyP' && this.state === 'playing') {
+                        this.state = 'paused';
+                    } else if (e.code === 'KeyP' && this.state === 'paused') {
+                        this.state = 'playing';
+                    }
+                    if (e.code === 'KeyM') {
+                        const muted = this.sound.toggleMute();
+                        console.log('Muted:', muted);
+                    }
+                    if (e.code === 'KeyZ' && this.state === 'playing') {
+                        if (this.mario) {
+                            const fireball = this.mario.shootFireball();
+                            if (fireball) {
+                                this.fireballs.push(fireball);
+                            }
+                        }
+                    }
+                });
+            }
+            
+            start() {
+                this.sound.init();
+                document.getElementById('startScreen').classList.add('hidden');
+                this.resetGame();
+                this.loadLevel(0);
+                this.state = 'playing';
+                this.lastTime = performance.now();
+                requestAnimationFrame(this.gameLoop);
+            }
+            
+            restart() {
+                document.getElementById('gameOverScreen').classList.add('hidden');
+                document.getElementById('winScreen').classList.add('hidden');
+                this.resetGame();
+                this.loadLevel(0);
+                this.state = 'playing';
+                this.lastTime = performance.now();
+                requestAnimationFrame(this.gameLoop);
+            }
+            
+            resetGame() {
+                this.score = 0;
+                this.coins = 0;
+                this.lives = 3;
+                this.currentLevel = 0;
+            }
+            
+            loadLevel(levelIndex) {
+                if (levelIndex >= LEVELS.length) {
+                    this.win();
+                    return;
+                }
+                
+                this.currentLevel = levelIndex;
+                const levelData = LEVELS[levelIndex];
+                this.time = 400;
+                
+                // 创建马里奥
+                this.mario = new Mario(100, 100);
+                
+                // 创建瓦片
+                this.tiles.clear();
+                levelData.tiles.forEach(tileData => {
+                    if (tileData.w && tileData.h) {
+                        for (let y = 0; y < tileData.h; y++) {
+                            for (let x = 0; x < tileData.w; x++) {
+                                const tile = new Tile(tileData.x + x, tileData.y + y, tileData.type);
+                                if (tileData.type === 'question' && tileData.content) {
+                                    tile.contents = tileData.content;
+                                }
+                                this.tiles.set(`${tile.x},${tile.y}`, tile);
+                            }
+                        }
+                    } else {
+                        const tile = new Tile(tileData.x, tileData.y, tileData.type);
+                        if (tileData.type === 'question' && tileData.content) {
+                            tile.contents = tileData.content;
+                        }
+                        this.tiles.set(`${tile.x},${tile.y}`, tile);
+                    }
+                });
+                
+                // 创建敌人
+                this.enemies = [];
+                levelData.entities.forEach(entityData => {
+                    if (entityData.type === 'goomba') {
+                        this.enemies.push(new Goomba(entityData.x * 32, entityData.y * 32));
+                    } else if (entityData.type === 'koopa') {
+                        this.enemies.push(new Koopa(entityData.x * 32, entityData.y * 32));
+                    }
+                });
+                
+                this.powerUps = [];
+                this.fireballs = [];
+                this.particles = [];
+                this.cameraX = 0;
+                
+                // 播放关卡音乐
+                this.sound.play('levelComplete');
+            }
+            
+            update(deltaTime) {
+                if (this.state !== 'playing') return;
+                
+                // 时间倒计时
+                this.timeTimer += deltaTime;
+                if (this.timeTimer >= 60) {
+                    this.time--;
+                    this.timeTimer = 0;
+                    if (this.time <= 0) {
+                        this.mario.takeDamage();
+                        this.time = 400;
+                    }
+                }
+                
+                // 更新马里奥
+                this.mario.update(deltaTime, this.input, this.tiles);
+                
+                // 更新相机
+                const targetCameraX = this.mario.x - 300;
+                if (targetCameraX > this.cameraX) {
+                    this.cameraX = targetCameraX;
+                }
+                const maxCameraX = LEVELS[this.currentLevel].width * 32 - 768;
+                if (this.cameraX > maxCameraX) {
+                    this.cameraX = maxCameraX;
+                }
+                if (this.cameraX < 0) this.cameraX = 0;
+                
+                // 检查旗杆
+                const marioTileX = Math.floor((this.mario.x + 16) / 32);
+                const marioTileY = Math.floor((this.mario.y + 16) / 32);
+                const tile = this.tiles.get(`${marioTileX},${marioTileY}`);
+                if (tile && tile.type === 'flagpole') {
+                    this.levelComplete();
+                    return;
+                }
+                
+                // 更新敌人
+                this.enemies.forEach(enemy => {
+                    enemy.update(deltaTime, this.tiles, this.mario);
+                    
+                    // 与马里奥碰撞
+                    if (enemy.collidesWith(this.mario)) {
+                        // 从上方踩
+                        if (this.mario.vy > 0 && this.mario.y + this.mario.height - 10 < enemy.y + enemy.height / 2) {
+                            enemy.stomped();
+                            this.mario.vy = -8;
+                        } else {
+                            this.mario.takeDamage();
+                        }
+                    }
+                });
+                
+                // 更新火球
+                this.fireballs.forEach(fireball => {
+                    fireball.update(deltaTime, this.tiles);
+                    
+                    // 火球与敌人碰撞
+                    this.enemies.forEach(enemy => {
+                        if (fireball.collidesWith(enemy)) {
+                            enemy.stomped();
+                            fireball.markedForDeletion = true;
+                            this.addScore(200);
+                        }
+                    });
+                });
+                
+                // 更新道具
+                this.powerUps.forEach(powerUp => {
+                    powerUp.update(deltaTime, this.tiles);
+                    
+                    if (powerUp.collidesWith(this.mario) && !powerUp.emerging) {
+                        if (powerUp.type === 'mushroom') {
+                            this.mario.makeBig();
+                        } else if (powerUp.type === 'flower') {
+                            this.mario.makeFire();
+                        } else if (powerUp.type === 'star') {
+                            this.mario.isInvincible = true;
+                            this.mario.invincibleTimer = 600;
+                        }
+                        powerUp.markedForDeletion = true;
+                        this.addScore(1000);
+                    }
+                });
+                
+                // 更新粒子
+                this.particles.forEach(particle => {
+                    particle.x += particle.vx;
+                    particle.y += particle.vy;
+                    particle.vy += 0.5;
+                    particle.life--;
+                });
+                
+                // 清理标记删除的对象
+                this.enemies = this.enemies.filter(e => !e.markedForDeletion);
+                this.fireballs = this.fireballs.filter(f => !f.markedForDeletion);
+                this.powerUps = this.powerUps.filter(p => !p.markedForDeletion);
+                this.particles = this.particles.filter(p => p.life > 0);
+                
+                // 检查马里奥是否死亡完成动画
+                if (this.mario.isDead && this.mario.y > 500) {
+                    if (this.lives > 0) {
+                        setTimeout(() => {
+                            if (this.lives > 0) {
+                                this.loadLevel(this.currentLevel);
+                            }
+                        }, 1000);
+                    }
+                }
+            }
+            
+            draw() {
+                // 清空画布
+                this.ctx.fillStyle = '#5c94fc';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // 绘制瓦片
+                this.tiles.forEach(tile => {
+                    tile.draw(this.ctx, this.cameraX);
+                });
+                
+                // 绘制道具
+                this.powerUps.forEach(powerUp => {
+                    powerUp.draw(this.ctx, this.cameraX);
+                });
+                
+                // 绘制敌人
+                this.enemies.forEach(enemy => {
+                    enemy.draw(this.ctx, this.cameraX);
+                });
+                
+                // 绘制火球
+                this.fireballs.forEach(fireball => {
+                    fireball.draw(this.ctx, this.cameraX);
+                });
+                
+                // 绘制粒子
+                this.particles.forEach(particle => {
+                    if (particle.type === 'brick_piece') {
+                        this.ctx.fillStyle = '#b83800';
+                        this.ctx.fillRect(particle.x - this.cameraX, particle.y, 8, 8);
+                    }
+                });
+                
+                // 绘制马里奥
+                if (this.mario) {
+                    this.mario.draw(this.ctx, this.cameraX);
+                }
+                
+                // 绘制 UI
+                this.drawUI();
+                
+                // 暂停画面
+                if (this.state === 'paused') {
+                    this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                    this.ctx.fillStyle = '#fff';
+                    this.ctx.font = '30px Arial';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('PAUSED', this.canvas.width / 2, this.canvas.height / 2);
+                }
+            }
+            
+            drawUI() {
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '16px "Press Start 2P", Arial';
+                this.ctx.textAlign = 'left';
+                
+                // 分数
+                this.ctx.fillText('MARIO', 20, 25);
+                this.ctx.fillText(this.score.toString().padStart(6, '0'), 20, 45);
+                
+                // 金币
+                this.ctx.fillText('COINS', 150, 25);
+                this.ctx.fillText('× ' + this.coins.toString().padStart(2, '0'), 150, 45);
+                
+                // 世界关卡
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('WORLD', 384, 25);
+                this.ctx.fillText(LEVELS[this.currentLevel].name, 384, 45);
+                
+                // 时间
+                this.ctx.textAlign = 'right';
+                this.ctx.fillText('TIME', 748, 25);
+                this.ctx.fillText(this.time.toString().padStart(3, '0'), 748, 45);
+                
+                // 生命
+                this.ctx.textAlign = 'left';
+                this.ctx.fillText('LIVES', 20, 70);
+                this.ctx.fillText('× ' + this.lives, 20, 90);
+            }
+            
+            addScore(points) {
+                this.score += points;
+            }
+            
+            levelComplete() {
+                this.state = 'levelComplete';
+                this.sound.play('flagpole');
+                
+                // 时间奖励
+                const timeBonus = this.time * 10;
+                this.score += timeBonus;
+                
+                setTimeout(() => {
+                    this.sound.play('levelComplete');
+                    setTimeout(() => {
+                        this.loadLevel(this.currentLevel + 1);
+                        this.state = 'playing';
+                    }, 2000);
+                }, 500);
+            }
+            
+            gameOver() {
+                this.state = 'gameover';
+                document.getElementById('finalScore').textContent = this.score;
+                document.getElementById('finalLevel').textContent = LEVELS[this.currentLevel].name;
+                document.getElementById('gameOverScreen').classList.remove('hidden');
+            }
+            
+            win() {
+                this.state = 'win';
+                document.getElementById('winScore').textContent = this.score;
+                document.getElementById('winLives').textContent = this.lives;
+                document.getElementById('winScreen').classList.remove('hidden');
+            }
+            
+            gameLoop(currentTime) {
+                if (this.state === 'start') return;
+                
+                const deltaTime = Math.min((currentTime - this.lastTime) / 16.67, 3);
+                this.lastTime = currentTime;
+                
+                this.update(deltaTime);
+                this.draw();
+                
+                if (this.state === 'playing' || this.state === 'levelComplete') {
+                    requestAnimationFrame(this.gameLoop);
+                }
+            }
+        }
+
+        // ==================== 启动游戏 ====================
+        const game = new Game();
+    </script>
+</body>
+</html>

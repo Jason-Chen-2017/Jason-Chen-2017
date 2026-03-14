@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基于 OpenClaw + Claude Code 的端到端研发自动化系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #00f5ff;
+            --secondary-color: #7b2cbf;
+            --accent-color: #ff006e;
+            --bg-dark: #0a0a1a;
+            --bg-card: rgba(20, 20, 40, 0.8);
+            --text-primary: #ffffff;
+            --text-secondary: #b8b8d0;
+            --success: #00ff88;
+            --warning: #ffaa00;
+            --error: #ff4444;
+            --quantum-glow: 0 0 20px rgba(0, 245, 255, 0.5);
+            --neon-border: 0 0 10px rgba(123, 44, 191, 0.6);
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a1a3e 50%, #0f0f2d 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(0, 245, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(123, 44, 191, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(255, 0, 110, 0.08) 0%, transparent 40%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 60px;
+            padding: 40px;
+            background: var(--bg-card);
+            border-radius: 20px;
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            box-shadow: var(--neon-border), var(--quantum-glow);
+            backdrop-filter: blur(10px);
+            animation: headerGlow 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes headerGlow {
+            from { box-shadow: 0 0 10px rgba(0, 245, 255, 0.3), 0 0 20px rgba(123, 44, 191, 0.4); }
+            to { box-shadow: 0 0 20px rgba(0, 245, 255, 0.6), 0 0 40px rgba(123, 44, 191, 0.6); }
+        }
+
+        .header h1 {
+            font-size: 2.8em;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(0, 245, 255, 0.5);
+            animation: titlePulse 2s ease-in-out infinite;
+        }
+
+        @keyframes titlePulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        .header .subtitle {
+            font-size: 1.3em;
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+
+        .section {
+            background: var(--bg-card);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(123, 44, 191, 0.3);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .section:hover {
+            transform: translateY(-5px);
+            border-color: rgba(0, 245, 255, 0.5);
+            box-shadow: 0 12px 40px rgba(0, 245, 255, 0.2);
+        }
+
+        .section-title {
+            font-size: 1.8em;
+            color: var(--primary-color);
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(0, 245, 255, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .section-title::before {
+            content: '◈';
+            color: var(--accent-color);
+            font-size: 1.2em;
+            animation: rotate 10s linear infinite;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .workflow-diagram {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .node-card {
+            background: linear-gradient(135deg, rgba(30, 30, 60, 0.9) 0%, rgba(20, 20, 40, 0.95) 100%);
+            border-radius: 12px;
+            padding: 25px;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .node-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(0, 245, 255, 0.1), transparent);
+            transform: rotate(45deg);
+            animation: shimmer 3s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) rotate(45deg); }
+        }
+
+        .node-card:hover {
+            transform: scale(1.03);
+            border-color: var(--primary-color);
+            box-shadow: 0 0 30px rgba(0, 245, 255, 0.4);
+        }
+
+        .node-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .node-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            background: linear-gradient(135deg, var(--secondary-color), var(--accent-color));
+            box-shadow: 0 4px 15px rgba(123, 44, 191, 0.5);
+        }
+
+        .node-title {
+            font-size: 1.3em;
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
+        .node-phase {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-bottom: 12px;
+            background: rgba(0, 245, 255, 0.15);
+            color: var(--primary-color);
+            border: 1px solid rgba(0, 245, 255, 0.3);
+        }
+
+        .node-description {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .node-details {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .detail-item:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: var(--text-secondary);
+            font-size: 0.9em;
+        }
+
+        .detail-value {
+            color: var(--primary-color);
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        .agent-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            margin: 5px 5px 5px 0;
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.3), rgba(255, 0, 110, 0.2));
+            border: 1px solid rgba(123, 44, 191, 0.5);
+            color: var(--text-primary);
+        }
+
+        .flow-arrow {
+            text-align: center;
+            font-size: 2em;
+            color: var(--primary-color);
+            margin: 10px 0;
+            animation: flowMove 2s ease-in-out infinite;
+        }
+
+        @keyframes flowMove {
+            0%, 100% { transform: translateX(0); opacity: 0.6; }
+            50% { transform: translateX(10px); opacity: 1; }
+        }
+
+        .transition-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .transition-table th,
+        .transition-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .transition-table th {
+            background: linear-gradient(90deg, rgba(0, 245, 255, 0.2), rgba(123, 44, 191, 0.2));
+            color: var(--primary-color);
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .transition-table tr:hover {
+            background: rgba(0, 245, 255, 0.1);
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-auto { background: var(--success); }
+        .status-manual { background: var(--warning); }
+        .status-hybrid { background: var(--primary-color); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.2); }
+        }
+
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .tech-item {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.15), rgba(123, 44, 191, 0.15));
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            border-radius: 25px;
+            padding: 10px 20px;
+            font-size: 0.95em;
+            color: var(--primary-color);
+            transition: all 0.3s ease;
+        }
+
+        .tech-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 20px rgba(0, 245, 255, 0.4);
+        }
+
+        .human-collab {
+            background: linear-gradient(135deg, rgba(255, 170, 0, 0.1), rgba(255, 0, 110, 0.1));
+            border: 2px solid rgba(255, 170, 0, 0.4);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+        }
+
+        .human-collab h4 {
+            color: var(--warning);
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .collab-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .collab-card {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            border-left: 4px solid var(--warning);
+        }
+
+        .architecture-diagram {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+        }
+
+        .arch-layer {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 20px;
+            margin: 10px 0;
+            background: linear-gradient(90deg, rgba(0, 245, 255, 0.1), rgba(123, 44, 191, 0.1));
+            border-radius: 10px;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+        }
+
+        .arch-layer-title {
+            font-size: 1.2em;
+            color: var(--primary-color);
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .metric-card {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(123, 44, 191, 0.1));
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            border-radius: 12px;
+            padding: 25px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(0, 245, 255, 0.3);
+        }
+
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .metric-label {
+            color: var(--text-secondary);
+            font-size: 1em;
+        }
+
+        ul {
+            list-style: none;
+            padding-left: 20px;
+        }
+
+        ul li {
+            position: relative;
+            padding: 8px 0;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        ul li::before {
+            content: '▸';
+            position: absolute;
+            left: -20px;
+            color: var(--accent-color);
+            font-size: 1.2em;
+        }
+
+        .highlight {
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 40px;
+            margin-top: 60px;
+            background: var(--bg-card);
+            border-radius: 15px;
+            border: 1px solid rgba(123, 44, 191, 0.3);
+            color: var(--text-secondary);
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .workflow-diagram {
+                grid-template-columns: 1fr;
+            }
+            
+            .transition-table {
+                font-size: 0.9em;
+            }
+            
+            .transition-table th,
+            .transition-table td {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚡ 基于 OpenClaw + Claude Code 的<br>端到端研发自动化系统</h1>
+            <p class="subtitle">全流程自动化工作流节点定义与流转规则设计<br>从需求到部署的智能化研发闭环</p>
+        </div>
+
+        <!-- 系统架构概览 -->
+        <div class="section">
+            <h2 class="section-title">系统架构概览</h2>
+            <div class="architecture-diagram">
+                <div class="arch-layer">
+                    <div class="arch-layer-title">🎯 需求管理与 PRD 设计层</div>
+                </div>
+                <div class="arch-layer">
+                    <div class="arch-layer-title">🏗️ 技术方案设计层（前端/后端）</div>
+                </div>
+                <div class="arch-layer">
+                    <div class="arch-layer-title">🔌 API 接口协议设计层</div>
+                </div>
+                <div class="arch-layer">
+                    <div class="arch-layer-title">💻 AI Coding 代码生成层（OpenClaw + Claude Code）</div>
+                </div>
+                <div class="arch-layer">
+                    <div class="arch-layer-title">✅ 测试验证层（单元测试/集成测试/UI 自动化）</div>
+                </div>
+                <div class="arch-layer">
+                    <div class="arch-layer-title">🚀 CI/CD 部署层（Jenkins + Docker + K8S/KubeSphere）</div>
+                </div>
+            </div>
+            
+            <div class="tech-stack">
+                <div class="tech-item">🤖 OpenClaw</div>
+                <div class="tech-item">🧠 Claude Code</div>
+                <div class="tech-item">🔄 Jenkins</div>
+                <div class="tech-item">🐳 Docker</div>
+                <div class="tech-item">☸️ Kubernetes/KubeSphere</div>
+                <div class="tech-item">📊 Prometheus</div>
+                <div class="tech-item">📈 Grafana</div>
+                <div class="tech-item">🔍 SonarQube</div>
+                <div class="tech-item">🧪 Selenium/Playwright</div>
+                <div class="tech-item">📝 Swagger/OpenAPI</div>
+            </div>
+        </div>
+
+        <!-- 工作流节点定义 -->
+        <div class="section">
+            <h2 class="section-title">工作流节点详细定义</h2>
+            <div class="workflow-diagram">
+                <!-- 节点 1: 需求收集与分析 -->
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">📋</div>
+                        <div class="node-title">需求收集与分析</div>
+                    </div>
+                    <span class="node-phase">Phase 1 - 需求阶段</span>
+                    <p class="node-description">通过 AI Agent 自动收集、整理和分析业务需求，生成结构化需求文档</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">执行 Agent:</span>
+                            <span class="detail-value">RequirementAgent</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">自动化程度:</span>
+                            <span class="detail-value"><span class="status-indicator status-hybrid"></span>人机协同</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输入:</span>
+                            <span class="detail-value">业务需求描述、用户反馈</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出:</span>
+                            <span class="detail-value">结构化需求清单</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">预计耗时:</span>
+                            <span class="detail-value">2-4 小时</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 节点 2: PRD 设计 -->
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">📄</div>
+                        <div class="node-title">PRD 产品设计</div>
+                    </div>
+                    <span class="node-phase">Phase 1 - 需求阶段</span>
+                    <p class="node-description">基于需求清单自动生成产品需求文档（PRD），包含功能规格、用户故事、验收标准</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">执行 Agent:</span>
+                            <span class="detail-value">ProductAgent</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">自动化程度:</span>
+                            <span class="detail-value"><span class="status-indicator status-hybrid"></span>人机协同</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输入:</span>
+                            <span class="detail-value">结构化需求清单</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出:</span>
+                            <span class="detail-value">PRD 文档 v1.0</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">预计耗时:</span>
+                            <span class="detail-value">4-8 小时</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 节点 3: 后端技术方案设计 -->
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">⚙️</div>
+                        <div class="node-title">后端技术方案设计</div>
+                    </div>
+                    <span class="node-phase">Phase 2 - 设计阶段</span>
+                    <p class="node-description">设计系统架构、数据库模型、微服务划分、技术选型等后端技术方案</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">执行 Agent:</span>
+                            <span class="detail-value">BackendArchitectAgent</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">自动化程度:</span>
+                            <span class="detail-value"><span class="status-indicator status-hybrid"></span>人机协同</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输入:</span>
+                            <span class="detail-value">PRD 文档</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出:</span>
+                            <span class="detail-value">后端技术方案文档</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">预计耗时:</span>
+                            <span class="detail-value">8-16 小时</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 节点 4: 前端技术方案设计 -->
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">🎨</div>
+                        <div class="node-title">前端技术方案设计</div>
+                    </div>
+                    <span class="node-phase">Phase 2 - 设计阶段</span>
+                    <p class="node-description">设计前端架构、组件结构、状态管理、UI/UX规范等前端技术方案</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">执行 Agent:</span>
+                            <span class="detail-value">FrontendArchitectAgent</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">自动化程度:</span>
+                            <span class="detail-value"><span class="status-indicator status-hybrid"></span>人机协同</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输入:</span>
+                            <span class="detail-value">PRD 文档、后端技术方案</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出:</span>
+                            <span class="detail-value">前端技术方案文档</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">预计耗时:</span>
+                            <span class="detail-value">6-12 小时</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 节点 5: API 接口协议设计 -->
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">🔌</div>
+                        <div class="node-title">前后端 API 接口设计</div>
+                    </div>
+                    <span class="node-phase">Phase 2 - 设计阶段</span>
+                    <p class="node-description">基于 OpenAPI/Swagger 规范自动生成 RESTful API 接口协议文档</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">执行 Agent:</span>
+                            <span class="detail-value">APIArchitectAgent</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">自动化程度:</span>
+                            <span class="detail-value"><span class="status-indicator status-auto"></span>全自动</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输入:</span>
+                            <span class="detail-value">前后端技术方案</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出:</span>
+                            <span class="detail-value">OpenAPI 3.0 规范文档</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">预计耗时:</span>
+                            <span class="detail-value">2-4 小时</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 节点 6: AI Coding 代码生成 -->
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">💻</div>
+                        <div class="node-title">AI Coding 代码生成</div>
+                    </div>
+                    <span class="node-phase">Phase 3 - 开发阶段</span>
+                    <p class="node-description">基于 OpenClaw + Claude Code 自动生成前后端代码、配置文件、数据库脚本</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">执行 Agent:</span>
+                            <span class="detail-value">CodingAgent (Claude Code)</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">自动化程度:</span>
+                            <span class="detail-value"><span class="status-indicator status-hybrid"></span>人机协同</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输入:</span>
+                            <span class="detail-value">API 协议、技术方案</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出:</span>
+                            <span class="detail-value">完整源代码</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">预计耗时:</span>
+                            <span class="detail-value">12-24 小时</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 节点 7: 单元测试 -->
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">✅</div>
+                        <div class="node-title">单元测试生成与执行</div>
+                    </div>
+                    <span class="node-phase">Phase 4 - 测试阶段</span>
+                    <p class="node-description">自动生成单元测试用例并执行，确保代码质量和覆盖率</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">执行 Agent:</span>
+                            <span class="detail-value">UnitTestAgent</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">自动化程度:</span>
+                            <span class="detail-value"><span class="status-indicator status-auto"></span>全自动</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输入:</span>
+                            <span class="detail-value">源代码</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出:</span>
+                            <span class="detail-value">测试报告、覆盖率报告</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">预计耗时:</span>
+                            <span class="detail-value">4-8 小时</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 节点 8: 集成测试 -->
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">🔗</div>
+                        <div class="node-title">集成测试</div>
+                    </div>
+                    <span class="node-phase">Phase 4 - 测试阶段</span>
+                    <p class="node-description">执行模块间集成测试、接口测试、性能测试等</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">执行 Agent:</span>
+                            <span class="detail-value">IntegrationTestAgent</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">自动化程度:</span>
+                            <span class="detail-value"><span class="status-indicator status-auto"></span>全自动</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输入:</span>
+                            <span class="detail-value">源代码、API 协议</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出:</span>
+                            <span class="detail-value">集成测试报告</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">预计耗时:</span>
+                            <span class="detail-value">6-12 小时</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 节点 9: CI/CD 流水线 -->
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">🔄</div>
+                        <div class="node-title">CI/CD 流水线构建</div>
+                    </div>
+                    <span class="node-phase">Phase 5 - 部署阶段</span>
+                    <p class="node-description">Jenkins 自动化构建、Docker 镜像打包、K8S 部署配置生成</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">执行 Agent:</span>
+                            <span class="detail-value">CICDAgent</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">自动化程度:</span>
+                            <span class="detail-value"><span class="status-indicator status-auto"></span>全自动</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输入:</span>
+                            <span class="detail-value">源代码、测试报告</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出:</span>
+                            <span class="detail-value">Docker 镜像、K8S 配置</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">预计耗时:</span>
+                            <span class="detail-value">2-4 小时</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 节点 10: K8S 自动部署 -->
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">☸️</div>
+                        <div class="node-title">K8S 自动部署</div>
+                    </div>
+                    <span class="node-phase">Phase 5 - 部署阶段</span>
+                    <p class="node-description">通过 KubeSphere 实现容器化应用的自动化部署、扩缩容、服务发现</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">执行 Agent:</span>
+                            <span class="detail-value">DeployAgent</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">自动化程度:</span>
+                            <span class="detail-value"><span class="status-indicator status-hybrid"></span>人机协同</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输入:</span>
+                            <span class="detail-value">Docker 镜像、K8S 配置</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出:</span>
+                            <span class="detail-value">运行中的应用</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">预计耗时:</span>
+                            <span class="detail-value">1-2 小时</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 节点 11: UI 自动化测试 -->
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">🖥️</div>
+                        <div class="node-title">UI 自动化测试验收</div>
+                    </div>
+                    <span class="node-phase">Phase 6 - 验收阶段</span>
+                    <p class="node-description">基于 Selenium/Playwright 的 UI 自动化测试，验证用户交互流程</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">执行 Agent:</span>
+                            <span class="detail-value">UITestAgent</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">自动化程度:</span>
+                            <span class="detail-value"><span class="status-indicator status-auto"></span>全自动</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输入:</span>
+                            <span class="detail-value">部署环境、PRD 验收标准</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出:</span>
+                            <span class="detail-value">UI 测试报告、截图证据</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">预计耗时:</span>
+                            <span class="detail-value">4-8 小时</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 节点 12: 发布上线 -->
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">🚀</div>
+                        <div class="node-title">发布上线</div>
+                    </div>
+                    <span class="node-phase">Phase 6 - 验收阶段</span>
+                    <p class="node-description">最终审批后正式发布到生产环境，开启监控告警</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">执行 Agent:</span>
+                            <span class="detail-value">ReleaseAgent</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">自动化程度:</span>
+                            <span class="detail-value"><span class="status-indicator status-manual"></span>人工审批</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输入:</span>
+                            <span class="detail-value">所有测试报告</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出:</span>
+                            <span class="detail-value">生产环境应用</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">预计耗时:</span>
+                            <span class="detail-value">1-2 小时</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 流转规则定义 -->
+        <div class="section">
+            <h2 class="section-title">节点流转规则定义</h2>
+            <table class="transition-table">
+                <thead>
+                    <tr>
+                        <th>源节点</th>
+                        <th>目标节点</th>
+                        <th>触发条件</th>
+                        <th>审批要求</th>
+                        <th>超时处理</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="status-indicator status-hybrid"></span>需求收集与分析</td>
+                        <td><span class="status-indicator status-hybrid"></span>PRD 产品设计</td>
+                        <td>需求清单评审通过</td>
+                        <td>产品经理确认</td>
+                        <td>自动提醒 + 升级</td>
+                    </tr>
+                    <tr>
+                        <td><span class="status-indicator status-hybrid"></span>PRD 产品设计</td>
+                        <td><span class="status-indicator status-hybrid"></span>后端技术方案</td>
+                        <td>PRD 文档定稿</td>
+                        <td>技术委员会评审</td>
+                        <td>自动提醒 + 升级</td>
+                    </tr>
+                    <tr>
+                        <td><span class="status-indicator status-hybrid"></span>PRD 产品设计</td>
+                        <td><span class="status-indicator status-hybrid"></span>前端技术方案</td>
+                        <td>PRD 文档定稿</td>
+                        <td>技术委员会评审</td>
+                        <td>自动提醒 + 升级</td>
+                    </tr>
+                    <tr>
+                        <td><span class="status-indicator status-hybrid"></span>后端技术方案</td>
+                        <td><span class="status-indicator status-auto"></span>API 接口设计</td>
+                        <td>后端方案评审通过</td>
+                        <td>架构师确认</td>
+                        <td>自动流转</td>
+                    </tr>
+                    <tr>
+                        <td><span class="status-indicator status-hybrid"></span>前端技术方案</td>
+                        <td><span class="status-indicator status-auto"></span>API 接口设计</td>
+                        <td>前端方案评审通过</td>
+                        <td>架构师确认</td>
+                        <td>自动流转</td>
+                    </tr>
+                    <tr>
+                        <td><span class="status-indicator status-auto"></span>API 接口设计</td>
+                        <td><span class="status-indicator status-hybrid"></span>AI Coding</td>
+                        <td>API 协议定稿</td>
+                        <td>技术负责人确认</td>
+                        <td>自动流转</td>
+                    </tr>
+                    <tr>
+                        <td><span class="status-indicator status-hybrid"></span>AI Coding</td>
+                        <td><span class="status-indicator status-auto"></span>单元测试</td>
+                        <td>代码提交完成</td>
+                        <td>Code Review 通过</td>
+                        <td>自动流转</td>
+                    </tr>
+                    <tr>
+                        <td><span class="status-indicator status-auto"></span>单元测试</td>
+                        <td><span class="status-indicator status-auto"></span>集成测试</td>
+                        <td>单元测试覆盖率≥85%</td>
+                        <td>无</td>
+                        <td>失败自动回滚</td>
+                    </tr>
+                    <tr>
+                        <td><span class="status-indicator status-auto"></span>集成测试</td>
+                        <td><span class="status-indicator status-auto"></span>CI/CD 流水线</td>
+                        <td>集成测试全部通过</td>
+                        <td>无</td>
+                        <td>失败自动回滚</td>
+                    </tr>
+                    <tr>
+                        <td><span class="status-indicator status-auto"></span>CI/CD 流水线</td>
+                        <td><span class="status-indicator status-hybrid"></span>K8S 部署</td>
+                        <td>镜像构建成功</td>
+                        <td>运维确认</td>
+                        <td>自动流转</td>
+                    </tr>
+                    <tr>
+                        <td><span class="status-indicator status-hybrid"></span>K8S 部署</td>
+                        <td><span class="status-indicator status-auto"></span>UI 自动化测试</td>
+                        <td>部署成功且健康检查通过</td>
+                        <td>无</td>
+                        <td>自动回滚</td>
+                    </tr>
+                    <tr>
+                        <td><span class="status-indicator status-auto"></span>UI 自动化测试</td>
+                        <td><span class="status-indicator status-manual"></span>发布上线</td>
+                        <td>UI 测试通过率≥95%</td>
+                        <td>产品 + 技术 + 运维三方审批</td>
+                        <td>人工介入</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 人机协同机制 -->
+        <div class="section">
+            <h2 class="section-title">🤝 人机协同机制设计</h2>
+            <div class="human-collab">
+                <h4>⚡ 关键节点人工介入策略</h4>
+                <p style="color: var(--text-secondary); line-height: 1.8;">
+                    在自动化流程中，以下节点设置人机协同机制，确保关键决策点有人工审核和干预能力：
+                </p>
+                <div class="collab-grid">
+                    <div class="collab-card">
+                        <h5 style="color: var(--primary-color); margin-bottom: 10px;">📋 需求评审节点</h5>
+                        <ul>
+                            <li>AI 生成需求初稿 → 产品经理审核修改</li>
+                            <li>需求优先级人工确认</li>
+                            <li>业务规则最终确认</li>
+                        </ul>
+                    </div>
+                    <div class="collab-card">
+                        <h5 style="color: var(--primary-color); margin-bottom: 10px;">🏗️ 技术方案评审</h5>
+                        <ul>
+                            <li>架构设计方案 AI 生成 → 架构师评审</li>
+                            <li>技术选型建议 → 技术委员会决策</li>
+                            <li>风险评估人工确认</li>
+                        </ul>
+                    </div>
+                    <div class="collab-card">
+                        <h5 style="color: var(--primary-color); margin-bottom: 10px;">💻 Code Review 节点</h5>
+                        <ul>
+                            <li>AI 生成代码 → 高级工程师 Review</li>
+                            <li>代码规范自动检查 + 人工抽查</li>
+                            <li>安全漏洞扫描 + 人工确认</li>
+                        </ul>
+                    </div>
+                    <div class="collab-card">
+                        <h5 style="color: var(--primary-color); margin-bottom: 10px;">🚀 部署审批节点</h5>
+                        <ul>
+                            <li>预发环境验证 → 运维确认</li>
+                            <li>灰度发布策略人工制定</li>
+                            <li>生产发布三方会签（产品/技术/运维）</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 各研发角色 Agent 定义 -->
+        <div class="section">
+            <h2 class="section-title">🤖 各研发岗位 Agent 详细定义</h2>
+            
+            <div class="workflow-diagram">
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">📊</div>
+                        <div class="node-title">RequirementAgent</div>
+                    </div>
+                    <p class="node-description">需求分析师 Agent</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">核心能力:</span>
+                            <span class="detail-value">需求挖掘、用户故事生成</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">使用模型:</span>
+                            <span class="detail-value">Claude Code + 领域知识库</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出产物:</span>
+                            <span class="detail-value">需求清单、用户画像</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">📝</div>
+                        <div class="node-title">ProductAgent</div>
+                    </div>
+                    <p class="node-description">产品经理 Agent</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">核心能力:</span>
+                            <span class="detail-value">PRD 撰写、原型设计</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">使用模型:</span>
+                            <span class="detail-value">Claude Code + UI 生成模型</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出产物:</span>
+                            <span class="detail-value">PRD 文档、原型图</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">⚙️</div>
+                        <div class="node-title">BackendArchitectAgent</div>
+                    </div>
+                    <p class="node-description">后端架构师 Agent</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">核心能力:</span>
+                            <span class="detail-value">系统架构、数据库设计</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">使用模型:</span>
+                            <span class="detail-value">Claude Code + 架构模式库</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出产物:</span>
+                            <span class="detail-value">架构图、ER 图、API 设计</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">🎨</div>
+                        <div class="node-title">FrontendArchitectAgent</div>
+                    </div>
+                    <p class="node-description">前端架构师 Agent</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">核心能力:</span>
+                            <span class="detail-value">组件设计、状态管理</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">使用模型:</span>
+                            <span class="detail-value">Claude Code + UI 组件库</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出产物:</span>
+                            <span class="detail-value">组件树、状态流图</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">🔌</div>
+                        <div class="node-title">APIArchitectAgent</div>
+                    </div>
+                    <p class="node-description">API 架构师 Agent</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">核心能力:</span>
+                            <span class="detail-value">RESTful 设计、OpenAPI 生成</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">使用模型:</span>
+                            <span class="detail-value">Claude Code + OpenAPI 规范</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出产物:</span>
+                            <span class="detail-value">Swagger 文档、Mock 数据</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">💻</div>
+                        <div class="node-title">CodingAgent</div>
+                    </div>
+                    <p class="node-description">全栈开发工程师 Agent</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">核心能力:</span>
+                            <span class="detail-value">代码生成、重构优化</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">使用模型:</span>
+                            <span class="detail-value">OpenClaw + Claude Code</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出产物:</span>
+                            <span class="detail-value">完整源代码、配置文件</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">✅</div>
+                        <div class="node-title">UnitTestAgent</div>
+                    </div>
+                    <p class="node-description">测试工程师 Agent（单元）</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">核心能力:</span>
+                            <span class="detail-value">测试用例生成、覆盖率分析</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">使用模型:</span>
+                            <span class="detail-value">Claude Code + 测试框架</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出产物:</span>
+                            <span class="detail-value">单元测试代码、覆盖率报告</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">🔗</div>
+                        <div class="node-title">IntegrationTestAgent</div>
+                    </div>
+                    <p class="node-description">测试工程师 Agent（集成）</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">核心能力:</span>
+                            <span class="detail-value">接口测试、性能测试</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">使用模型:</span>
+                            <span class="detail-value">Claude Code + JMeter/Postman</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出产物:</span>
+                            <span class="detail-value">集成测试报告、性能基准</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">🔄</div>
+                        <div class="node-title">CICDAgent</div>
+                    </div>
+                    <p class="node-description">DevOps 工程师 Agent</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">核心能力:</span>
+                            <span class="detail-value">流水线编排、镜像构建</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">使用模型:</span>
+                            <span class="detail-value">Claude Code + Jenkins API</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出产物:</span>
+                            <span class="detail-value">Jenkinsfile、Dockerfile</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">☸️</div>
+                        <div class="node-title">DeployAgent</div>
+                    </div>
+                    <p class="node-description">SRE 工程师 Agent</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">核心能力:</span>
+                            <span class="detail-value">K8S 编排、服务网格</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">使用模型:</span>
+                            <span class="detail-value">Claude Code + KubeSphere API</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出产物:</span>
+                            <span class="detail-value">Deployment YAML、Service Mesh 配置</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">🖥️</div>
+                        <div class="node-title">UITestAgent</div>
+                    </div>
+                    <p class="node-description">UI 测试工程师 Agent</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">核心能力:</span>
+                            <span class="detail-value">E2E 测试、视觉回归</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">使用模型:</span>
+                            <span class="detail-value">Claude Code + Playwright</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出产物:</span>
+                            <span class="detail-value">UI 测试脚本、截图对比</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="node-card">
+                    <div class="node-header">
+                        <div class="node-icon">🚀</div>
+                        <div class="node-title">ReleaseAgent</div>
+                    </div>
+                    <p class="node-description">发布经理 Agent</p>
+                    <div class="node-details">
+                        <div class="detail-item">
+                            <span class="detail-label">核心能力:</span>
+                            <span class="detail-value">发布编排、灰度策略</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">使用模型:</span>
+                            <span class="detail-value">Claude Code + 发布管理系统</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">输出产物:</span>
+                            <span class="detail-value">发布计划、回滚方案</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 预期效果指标 -->
+        <div class="section">
+            <h2 class="section-title">📊 预期效果与关键指标</h2>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value">70%</div>
+                    <div class="metric-label">研发效率提升</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">85%</div>
+                    <div class="metric-label">代码自动生成率</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">60%</div>
+                    <div class="metric-label">测试用例自动生成率</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">50%</div>
+                    <div class="metric-label">整体交付周期缩短</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">95%</div>
+                    <div class="metric-label">自动化测试覆盖率</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">99.9%</div>
+                    <div class="metric-label">部署成功率</div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 30px; padding: 20px; background: rgba(0, 245, 255, 0.1); border-radius: 10px; border-left: 4px solid var(--primary-color);">
+                <h4 style="color: var(--primary-color); margin-bottom: 15px;">💡 核心价值主张</h4>
+                <ul>
+                    <li><span class="highlight">加速交付</span>：从需求到上线的全流程自动化，大幅缩短交付周期</li>
+                    <li><span class="highlight">质量保障</span>：多层自动化测试 + 代码审查，确保交付质量</li>
+                    <li><span class="highlight">人机协同</span>：AI 处理重复性工作，人类专注创造性决策</li>
+                    <li><span class="highlight">可追溯性</span>：全流程数字化记录，每个环节可追溯可审计</li>
+                    <li><span class="highlight">持续优化</span>：基于历史数据不断优化 AI 模型和工作流</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 实施路线图 -->
+        <div class="section">
+            <h2 class="section-title">🗺️ 实施路线图</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 20px;">
+                <div class="collab-card" style="border-left-color: var(--primary-color);">
+                    <h5 style="color: var(--primary-color); margin-bottom: 10px;">Phase 1: 基础建设 (1-2 月)</h5>
+                    <ul>
+                        <li>搭建 OpenClaw + Claude Code 环境</li>
+                        <li>配置 Jenkins CI/CD 流水线</li>
+                        <li>部署 KubeSphere K8S 集群</li>
+                        <li>建立基础 Agent 框架</li>
+                    </ul>
+                </div>
+                <div class="collab-card" style="border-left-color: var(--secondary-color);">
+                    <h5 style="color: var(--secondary-color); margin-bottom: 10px;">Phase 2: 核心能力 (2-3 月)</h5>
+                    <ul>
+                        <li>实现需求→PRD 自动化</li>
+                        <li>实现技术方案自动生成</li>
+                        <li>实现 API 协议自动化设计</li>
+                        <li>实现 AI Coding 代码生成</li>
+                    </ul>
+                </div>
+                <div class="collab-card" style="border-left-color: var(--accent-color);">
+                    <h5 style="color: var(--accent-color); margin-bottom: 10px;">Phase 3: 测试自动化 (1-2 月)</h5>
+                    <ul>
+                        <li>实现单元测试自动生成</li>
+                        <li>实现集成测试自动化</li>
+                        <li>实现 UI 自动化测试</li>
+                        <li>建立质量门禁体系</li>
+                    </ul>
+                </div>
+                <div class="collab-card" style="border-left-color: var(--success);">
+                    <h5 style="color: var(--success); margin-bottom: 10px;">Phase 4: 全面集成 (1-2 月)</h5>
+                    <ul>
+                        <li>全流程打通与优化</li>
+                        <li>人机协同机制完善</li>
+                        <li>监控告警体系建设</li>
+                        <li>持续改进与迭代</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>© 2026 端到端研发自动化系统设计 | 基于 OpenClaw + Claude Code 构建</p>
+            <p style="margin-top: 10px; font-size: 0.9em;">打造智能化、自动化、高效能的现代研发体系</p>
+        </div>
+    </div>
+
+    <script>
+        // 添加动态效果
+        document.addEventListener('DOMContentLoaded', function() {
+            const nodeCards = document.querySelectorAll('.node-card');
+            
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.opacity = '1';
+                        entry.target.style.transform = 'translateY(0)';
+                    }
+                });
+            }, { threshold: 0.1 });
+
+            nodeCards.forEach(card => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(20px)';
+                card.style.transition = 'all 0.6s ease';
+                observer.observe(card);
+            });
+
+            // 添加点击展开详情功能
+            nodeCards.forEach(card => {
+                card.addEventListener('click', function() {
+                    const details = this.querySelector('.node-details');
+                    if (details) {
+                        details.style.maxHeight = details.style.maxHeight ? '' : '500px';
+                        details.style.overflow = details.style.overflow ? '' : 'auto';
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

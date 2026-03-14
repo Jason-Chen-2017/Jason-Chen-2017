@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>侘寂风室内 VR 3D 渲染 | Wabi-Sabi Interior Design</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Serif SC', 'Songti SC', serif;
+            background: #1a1816;
+            color: #d4c4b0;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* 加载界面 */
+        .loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #2a2622 0%, #1a1816 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 1s ease;
+        }
+
+        .loading-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loading-title {
+            font-size: 36px;
+            font-weight: 300;
+            letter-spacing: 10px;
+            color: #b8a890;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .loading-subtitle {
+            font-size: 14px;
+            color: #8a7a6a;
+            letter-spacing: 5px;
+            margin-bottom: 60px;
+        }
+
+        .loading-bar {
+            width: 300px;
+            height: 2px;
+            background: rgba(184, 168, 144, 0.2);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .loading-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #b8a890, #d4c4b0);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .loading-text {
+            margin-top: 20px;
+            color: #8a7a6a;
+            font-size: 12px;
+            letter-spacing: 3px;
+        }
+
+        /* UI 覆盖层 */
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 30px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .ui-left, .ui-right {
+            pointer-events: auto;
+        }
+
+        .title-block {
+            margin-bottom: 30px;
+        }
+
+        .title-main {
+            font-size: 28px;
+            font-weight: 300;
+            letter-spacing: 8px;
+            color: #d4c4b0;
+            margin-bottom: 10px;
+        }
+
+        .title-sub {
+            font-size: 12px;
+            color: #8a7a6a;
+            letter-spacing: 5px;
+            text-transform: uppercase;
+        }
+
+        .info-card {
+            background: rgba(30, 26, 22, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(184, 168, 144, 0.2);
+            border-radius: 2px;
+            padding: 20px 25px;
+            margin-bottom: 20px;
+            max-width: 320px;
+        }
+
+        .info-title {
+            font-size: 14px;
+            color: #b8a890;
+            letter-spacing: 3px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(184, 168, 144, 0.2);
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+
+        .info-label {
+            color: #8a7a6a;
+        }
+
+        .info-value {
+            color: #d4c4b0;
+        }
+
+        /* 控制按钮 */
+        .control-panel {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            z-index: 100;
+        }
+
+        .control-btn {
+            padding: 12px 25px;
+            background: rgba(30, 26, 22, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(184, 168, 144, 0.3);
+            border-radius: 2px;
+            color: #b8a890;
+            font-size: 12px;
+            letter-spacing: 3px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .control-btn:hover {
+            background: rgba(184, 168, 144, 0.1);
+            border-color: rgba(184, 168, 144, 0.5);
+        }
+
+        .control-btn.active {
+            background: rgba(184, 168, 144, 0.2);
+            border-color: rgba(184, 168, 144, 0.6);
+        }
+
+        /* 视角提示 */
+        .view-hint {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #8a7a6a;
+            font-size: 12px;
+            letter-spacing: 3px;
+            text-align: center;
+            opacity: 0.7;
+        }
+
+        /* 材质选择器 */
+        .material-selector {
+            position: absolute;
+            right: 40px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        .material-btn {
+            width: 50px;
+            height: 50px;
+            border: 2px solid rgba(184, 168, 144, 0.3);
+            border-radius: 2px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .material-btn:hover {
+            border-color: rgba(184, 168, 144, 0.6);
+            transform: scale(1.1);
+        }
+
+        .material-btn.active {
+            border-color: rgba(184, 168, 144, 0.8);
+            box-shadow: 0 0 20px rgba(184, 168, 144, 0.3);
+        }
+
+        .material-tooltip {
+            position: absolute;
+            right: 60px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(30, 26, 22, 0.9);
+            padding: 8px 15px;
+            border-radius: 2px;
+            font-size: 11px;
+            color: #b8a890;
+            letter-spacing: 2px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .material-btn:hover .material-tooltip {
+            opacity: 1;
+        }
+
+        /* 侘寂哲学卡片 */
+        .philosophy-card {
+            position: absolute;
+            left: 40px;
+            bottom: 120px;
+            background: rgba(30, 26, 22, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(184, 168, 144, 0.2);
+            border-radius: 2px;
+            padding: 25px 30px;
+            max-width: 350px;
+            z-index: 100;
+        }
+
+        .philosophy-title {
+            font-size: 16px;
+            color: #b8a890;
+            letter-spacing: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .philosophy-text {
+            font-size: 13px;
+            color: #a09080;
+            line-height: 2;
+            text-align: justify;
+        }
+
+        .philosophy-quote {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(184, 168, 144, 0.2);
+            font-size: 12px;
+            color: #8a7a6a;
+            font-style: italic;
+            text-align: center;
+        }
+
+        /* 全屏按钮 */
+        .fullscreen-btn {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            width: 45px;
+            height: 45px;
+            background: rgba(30, 26, 22, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(184, 168, 144, 0.3);
+            border-radius: 2px;
+            cursor: pointer;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: #b8a890;
+            transition: all 0.3s ease;
+        }
+
+        .fullscreen-btn:hover {
+            border-color: rgba(184, 168, 144, 0.6);
+            background: rgba(184, 168, 144, 0.1);
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .ui-overlay {
+                padding: 20px;
+            }
+
+            .title-main {
+                font-size: 20px;
+                letter-spacing: 5px;
+            }
+
+            .info-card {
+                display: none;
+            }
+
+            .material-selector {
+                display: none;
+            }
+
+            .philosophy-card {
+                display: none;
+            }
+
+            .control-panel {
+                bottom: 20px;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .control-btn {
+                padding: 10px 15px;
+                font-size: 11px;
+            }
+        }
+
+        /* 禅意装饰 */
+        .zen-decoration {
+            position: absolute;
+            font-size: 100px;
+            opacity: 0.03;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .zen-1 {
+            top: 10%;
+            right: 10%;
+            color: #d4c4b0;
+        }
+
+        .zen-2 {
+            bottom: 10%;
+            left: 10%;
+            color: #b8a890;
+        }
+    </style>
+</head>
+<body>
+    <!-- 加载界面 -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loading-title">侘 寂</div>
+        <div class="loading-subtitle">WABI-SABI INTERIOR</div>
+        <div class="loading-bar">
+            <div class="loading-progress" id="loadingProgress"></div>
+        </div>
+        <div class="loading-text" id="loadingText">正在渲染空间...</div>
+    </div>
+
+    <!-- 画布容器 -->
+    <div id="canvas-container"></div>
+
+    <!-- UI 覆盖层 -->
+    <div class="ui-overlay">
+        <div class="ui-left">
+            <div class="title-block">
+                <div class="title-main">侘寂 · 居</div>
+                <div class="title-sub">Wabi-Sabi Living Space</div>
+            </div>
+            
+            <div class="info-card">
+                <div class="info-title">空间信息</div>
+                <div class="info-item">
+                    <span class="info-label">风格</span>
+                    <span class="info-value">侘寂风</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">面积</span>
+                    <span class="info-value">85㎡</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">层高</span>
+                    <span class="info-value">3.2m</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">主材</span>
+                    <span class="info-value">原木/微水泥/亚麻</span>
+                </div>
+            </div>
+
+            <div class="philosophy-card">
+                <div class="philosophy-title">侘寂哲学</div>
+                <div class="philosophy-text">
+                    侘寂，是一种接受不完美、接受短暂、接受残缺的美学。
+                    它源于日本茶道，强调朴素、自然、谦逊的生活态度。
+                    在这个空间里，每一处痕迹都是时间的礼物，
+                    每一处不完美都是独特的美。
+                </div>
+                <div class="philosophy-quote">
+                    "不完美之物，方显真实之美"
+                </div>
+            </div>
+        </div>
+
+        <div class="ui-right">
+            <button class="fullscreen-btn" id="fullscreenBtn" title="全屏">⛶</button>
+        </div>
+    </div>
+
+    <!-- 材质选择器 -->
+    <div class="material-selector">
+        <div class="material-btn active" data-material="day" style="background: linear-gradient(135deg, #e8dcc8, #c4b5a0);">
+            <div class="material-tooltip">日间模式</div>
+        </div>
+        <div class="material-btn" data-material="sunset" style="background: linear-gradient(135deg, #d4a574, #a67c52);">
+            <div class="material-tooltip">黄昏模式</div>
+        </div>
+        <div class="material-btn" data-material="night" style="background: linear-gradient(135deg, #4a4a5a, #2a2a3a);">
+            <div class="material-tooltip">夜间模式</div>
+        </div>
+        <div class="material-btn" data-material="zen" style="background: linear-gradient(135deg, #a8b8a8, #789878);">
+            <div class="material-tooltip">禅意模式</div>
+        </div>
+    </div>
+
+    <!-- 控制按钮 -->
+    <div class="control-panel">
+        <button class="control-btn active" data-view="living">客厅</button>
+        <button class="control-btn" data-view="bedroom">卧室</button>
+        <button class="control-btn" data-view="tea">茶室</button>
+        <button class="control-btn" data-view="courtyard">庭院</button>
+        <button class="control-btn" id="autoRotateBtn">🔄 自动旋转</button>
+    </div>
+
+    <!-- 视角提示 -->
+    <div class="view-hint">🖱️ 鼠标拖拽旋转视角 · 滚轮缩放 · 右键平移</div>
+
+    <!-- 禅意装饰 -->
+    <div class="zen-decoration zen-1">寂</div>
+    <div class="zen-decoration zen-2">侘</div>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- OrbitControls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // ==================== 侘寂风室内 VR 渲染系统 ====================
+        class WabiSabiInteriorVR {
+            constructor() {
+                this.container = document.getElementById('canvas-container');
+                
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.controls = null;
+                
+                this.currentView = 'living';
+                this.currentMaterial = 'day';
+                this.autoRotate = false;
+                
+                this.rooms = {};
+                this.lights = {};
+                
+                this.init();
+            }
+
+            init() {
+                // 创建场景
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x1a1816);
+                this.scene.fog = new THREE.Fog(0x1a1816, 20, 60);
+
+                // 创建相机
+                this.camera = new THREE.PerspectiveCamera(
+                    60,
+                    window.innerWidth / window.innerHeight,
+                    0.1,
+                    1000
+                );
+                this.camera.position.set(8, 3, 8);
+
+                // 创建渲染器
+                this.renderer = new THREE.WebGLRenderer({ 
+                    antialias: true, 
+                    alpha: true 
+                });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(window.devicePixelRatio);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.toneMappingExposure = 1.2;
+                this.container.appendChild(this.renderer.domElement);
+
+                // 创建控制器
+                this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.dampingFactor = 0.05;
+                this.controls.minDistance = 3;
+                this.controls.maxDistance = 20;
+                this.controls.maxPolarAngle = Math.PI / 2;
+
+                // 添加光源
+                this.addLighting();
+
+                // 创建房间
+                this.createRooms();
+
+                // 创建家具
+                this.createFurniture();
+
+                // 创建装饰
+                this.createDecorations();
+
+                // 设置事件监听
+                this.setupEventListeners();
+
+                // 模拟加载
+                this.simulateLoading();
+
+                // 开始动画
+                this.animate();
+            }
+
+            simulateLoading() {
+                let progress = 0;
+                const loadingProgress = document.getElementById('loadingProgress');
+                const loadingText = document.getElementById('loadingText');
+                
+                const texts = [
+                    '正在渲染空间...',
+                    '加载材质...',
+                    '布置家具...',
+                    '调整灯光...',
+                    '准备就绪...'
+                ];
+
+                const interval = setInterval(() => {
+                    progress += 2;
+                    loadingProgress.style.width = progress + '%';
+                    
+                    if (progress < 20) {
+                        loadingText.textContent = texts[0];
+                    } else if (progress < 40) {
+                        loadingText.textContent = texts[1];
+                    } else if (progress < 60) {
+                        loadingText.textContent = texts[2];
+                    } else if (progress < 80) {
+                        loadingText.textContent = texts[3];
+                    } else {
+                        loadingText.textContent = texts[4];
+                    }
+                    
+                    if (progress >= 100) {
+                        clearInterval(interval);
+                        setTimeout(() => {
+                            document.getElementById('loadingScreen').classList.add('hidden');
+                        }, 500);
+                    }
+                }, 50);
+            }
+
+            addLighting() {
+                // 环境光
+                const ambientLight = new THREE.AmbientLight(0xd4c4b0, 0.4);
+                this.scene.add(ambientLight);
+                this.lights.ambient = ambientLight;
+
+                // 主光源（模拟自然光）
+                const mainLight = new THREE.DirectionalLight(0xf5e6d3, 0.8);
+                mainLight.position.set(10, 15, 10);
+                mainLight.castShadow = true;
+                mainLight.shadow.mapSize.width = 2048;
+                mainLight.shadow.mapSize.height = 2048;
+                mainLight.shadow.camera.near = 0.5;
+                mainLight.shadow.camera.far = 50;
+                mainLight.shadow.camera.left = -15;
+                mainLight.shadow.camera.right = 15;
+                mainLight.shadow.camera.top = 15;
+                mainLight.shadow.camera.bottom = -15;
+                this.scene.add(mainLight);
+                this.lights.main = mainLight;
+
+                // 补光
+                const fillLight = new THREE.DirectionalLight(0xb8a890, 0.3);
+                fillLight.position.set(-10, 10, -10);
+                this.scene.add(fillLight);
+                this.lights.fill = fillLight;
+
+                // 室内点光源
+                const indoorLight1 = new THREE.PointLight(0xffeedd, 0.5, 20);
+                indoorLight1.position.set(0, 4, 0);
+                this.scene.add(indoorLight1);
+
+                const indoorLight2 = new THREE.PointLight(0xffeedd, 0.4, 15);
+                indoorLight2.position.set(-5, 3.5, -5);
+                this.scene.add(indoorLight2);
+
+                const indoorLight3 = new THREE.PointLight(0xffeedd, 0.4, 15);
+                indoorLight3.position.set(5, 3.5, 5);
+                this.scene.add(indoorLight3);
+            }
+
+            createRooms() {
+                // 客厅
+                this.rooms.living = this.createRoom('living', {
+                    width: 12,
+                    height: 3.5,
+                    depth: 10,
+                    wallColor: 0xc4b5a0,
+                    floorColor: 0x8b7355
+                });
+
+                // 卧室
+                this.rooms.bedroom = this.createRoom('bedroom', {
+                    width: 8,
+                    height: 3.2,
+                    depth: 8,
+                    wallColor: 0xb8a890,
+                    floorColor: 0x7d6545,
+                    position: { x: -15, z: 0 }
+                });
+
+                // 茶室
+                this.rooms.tea = this.createRoom('tea', {
+                    width: 6,
+                    height: 3,
+                    depth: 6,
+                    wallColor: 0xa89880,
+                    floorColor: 0x6b5344,
+                    position: { x: 15, z: -10 }
+                });
+
+                // 庭院
+                this.rooms.courtyard = this.createCourtyard({
+                    width: 10,
+                    depth: 10,
+                    position: { x: 0, z: 15 }
+                });
+
+                // 默认只显示客厅
+                this.showRoom('living');
+            }
+
+            createRoom(name, config) {
+                const room = new THREE.Group();
+                room.name = name;
+
+                const { width, height, depth, wallColor, floorColor, position } = config;
+
+                // 地板
+                const floorGeometry = new THREE.PlaneGeometry(width, depth);
+                const floorMaterial = new THREE.MeshStandardMaterial({ 
+                    color: floorColor,
+                    roughness: 0.9,
+                    metalness: 0.1
+                });
+                const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                floor.rotation.x = -Math.PI / 2;
+                floor.receiveShadow = true;
+                room.add(floor);
+
+                // 墙壁（侘寂风 - 微水泥质感）
+                const wallMaterial = new THREE.MeshStandardMaterial({ 
+                    color: wallColor,
+                    roughness: 0.95,
+                    metalness: 0.05
+                });
+
+                // 后墙
+                const backWall = new THREE.Mesh(
+                    new THREE.PlaneGeometry(width, height),
+                    wallMaterial
+                );
+                backWall.position.set(0, height / 2, -depth / 2);
+                backWall.receiveShadow = true;
+                room.add(backWall);
+
+                // 左墙
+                const leftWall = new THREE.Mesh(
+                    new THREE.PlaneGeometry(depth, height),
+                    wallMaterial
+                );
+                leftWall.rotation.y = Math.PI / 2;
+                leftWall.position.set(-width / 2, height / 2, 0);
+                leftWall.receiveShadow = true;
+                room.add(leftWall);
+
+                // 右墙
+                const rightWall = new THREE.Mesh(
+                    new THREE.PlaneGeometry(depth, height),
+                    wallMaterial
+                );
+                rightWall.rotation.y = -Math.PI / 2;
+                rightWall.position.set(width / 2, height / 2, 0);
+                rightWall.receiveShadow = true;
+                room.add(rightWall);
+
+                if (position) {
+                    room.position.set(position.x, 0, position.z);
+                }
+
+                room.visible = false;
+                this.scene.add(room);
+                return room;
+            }
+
+            createCourtyard(config) {
+                const courtyard = new THREE.Group();
+                courtyard.name = 'courtyard';
+
+                const { width, depth, position } = config;
+
+                // 地面（石板）
+                const groundGeometry = new THREE.PlaneGeometry(width, depth);
+                const groundMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x6b6b6b,
+                    roughness: 0.9,
+                    metalness: 0.1
+                });
+                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+                ground.rotation.x = -Math.PI / 2;
+                ground.receiveShadow = true;
+                courtyard.add(ground);
+
+                // 枯山水
+                this.createZenGarden(courtyard, width, depth);
+
+                // 竹篱笆
+                this.createBambooFence(courtyard, width, depth);
+
+                // 石灯笼
+                this.createStoneLantern(courtyard);
+
+                if (position) {
+                    courtyard.position.set(position.x, 0, position.z);
+                }
+
+                courtyard.visible = false;
+                this.scene.add(courtyard);
+                return courtyard;
+            }
+
+            createZenGarden(parent, width, depth) {
+                // 白沙
+                const sandGeometry = new THREE.PlaneGeometry(width * 0.6, depth * 0.6);
+                const sandMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0xe8dcc8,
+                    roughness: 1,
+                    metalness: 0
+                });
+                const sand = new THREE.Mesh(sandGeometry, sandMaterial);
+                sand.rotation.x = -Math.PI / 2;
+                sand.position.set(0, 0.02, 0);
+                sand.receiveShadow = true;
+                parent.add(sand);
+
+                // 耙纹（用线条表示）
+                for (let i = -3; i <= 3; i++) {
+                    const lineGeometry = new THREE.PlaneGeometry(width * 0.5, 0.05);
+                    const lineMaterial = new THREE.MeshBasicMaterial({ 
+                        color: 0xd4c4b0,
+                        transparent: true,
+                        opacity: 0.5
+                    });
+                    const line = new THREE.Mesh(lineGeometry, lineMaterial);
+                    line.rotation.x = -Math.PI / 2;
+                    line.position.set(i * 0.8, 0.03, 0);
+                    parent.add(line);
+                }
+
+                // 石头
+                const stonePositions = [
+                    { x: -1.5, z: 1 },
+                    { x: 1, z: -1.5 },
+                    { x: 2, z: 0.5 }
+                ];
+
+                stonePositions.forEach(pos => {
+                    const stoneGeometry = new THREE.DodecahedronGeometry(0.3 + Math.random() * 0.2);
+                    const stoneMaterial = new THREE.MeshStandardMaterial({ 
+                        color: 0x5a5a5a,
+                        roughness: 0.9,
+                        metalness: 0.1
+                    });
+                    const stone = new THREE.Mesh(stoneGeometry, stoneMaterial);
+                    stone.position.set(pos.x, 0.2, pos.z);
+                    stone.castShadow = true;
+                    parent.add(stone);
+                });
+            }
+
+            createBambooFence(parent, width, depth) {
+                const fenceGroup = new THREE.Group();
+                
+                // 竹竿
+                for (let i = -4; i <= 4; i++) {
+                    const bambooGeometry = new THREE.CylinderGeometry(0.05, 0.06, 2, 8);
+                    const bambooMaterial = new THREE.MeshStandardMaterial({ 
+                        color: 0xc4a880,
+                        roughness: 0.8,
+                        metalness: 0.1
+                    });
+                    const bamboo = new THREE.Mesh(bambooGeometry, bambooMaterial);
+                    bamboo.position.set(i * 0.6, 1, -depth / 2 + 0.5);
+                    bamboo.castShadow = true;
+                    fenceGroup.add(bamboo);
+                }
+
+                parent.add(fenceGroup);
+            }
+
+            createStoneLantern(parent) {
+                const lantern = new THREE.Group();
+
+                // 基座
+                const baseGeometry = new THREE.CylinderGeometry(0.3, 0.35, 0.1, 6);
+                const baseMaterial = new THREE.MeshStandardMaterial({ color: 0x6b6b6b });
+                const base = new THREE.Mesh(baseGeometry, baseMaterial);
+                lantern.add(base);
+
+                // 柱身
+                const pillarGeometry = new THREE.CylinderGeometry(0.15, 0.2, 0.8, 6);
+                const pillar = new THREE.Mesh(pillarGeometry, baseMaterial);
+                pillar.position.y = 0.45;
+                lantern.add(pillar);
+
+                // 灯室
+                const roomGeometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+                const room = new THREE.Mesh(roomGeometry, baseMaterial);
+                room.position.y = 0.9;
+                lantern.add(room);
+
+                // 顶盖
+                const roofGeometry = new THREE.ConeGeometry(0.35, 0.3, 6);
+                const roof = new THREE.Mesh(roofGeometry, baseMaterial);
+                roof.position.y = 1.15;
+                lantern.add(roof);
+
+                lantern.position.set(3, 0, 3);
+                parent.add(lantern);
+            }
+
+            createFurniture() {
+                // 客厅家具
+                this.createLivingRoomFurniture();
+                
+                // 卧室家具
+                this.createBedroomFurniture();
+                
+                // 茶室家具
+                this.createTeaRoomFurniture();
+            }
+
+            createLivingRoomFurniture() {
+                const living = this.rooms.living;
+
+                // 低矮沙发（侘寂风）
+                const sofaGroup = new THREE.Group();
+                
+                // 沙发座
+                const sofaGeometry = new THREE.BoxGeometry(3, 0.4, 1);
+                const sofaMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x8b7355,
+                    roughness: 0.9,
+                    metalness: 0.1
+                });
+                const sofa = new THREE.Mesh(sofaGeometry, sofaMaterial);
+                sofa.position.y = 0.2;
+                sofa.castShadow = true;
+                sofaGroup.add(sofa);
+
+                // 沙发靠背
+                const backGeometry = new THREE.BoxGeometry(3, 0.5, 0.3);
+                const back = new THREE.Mesh(backGeometry, sofaMaterial);
+                back.position.set(0, 0.55, -0.35);
+                back.castShadow = true;
+                sofaGroup.add(back);
+
+                sofaGroup.position.set(0, 0, 3);
+                living.add(sofaGroup);
+
+                // 茶几（原木）
+                const tableGeometry = new THREE.CylinderGeometry(0.6, 0.7, 0.35, 8);
+                const tableMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x6b5344,
+                    roughness: 0.8,
+                    metalness: 0.1
+                });
+                const table = new THREE.Mesh(tableGeometry, tableMaterial);
+                table.position.set(0, 0.175, 1.5);
+                table.castShadow = true;
+                living.add(table);
+
+                // 桌腿
+                for (let i = 0; i < 3; i++) {
+                    const legGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.35, 8);
+                    const leg = new THREE.Mesh(legGeometry, tableMaterial);
+                    const angle = (i / 3) * Math.PI * 2;
+                    leg.position.set(
+                        Math.cos(angle) * 0.4,
+                        -0.175,
+                        Math.sin(angle) * 0.4
+                    );
+                    table.add(leg);
+                }
+
+                // 陶罐装饰
+                this.createPottery(living, { x: -2, y: 0.3, z: -3 });
+                this.createPottery(living, { x: 2, y: 0.25, z: -3.5 });
+            }
+
+            createBedroomFurniture() {
+                const bedroom = this.rooms.bedroom;
+
+                // 低矮床（榻榻米风格）
+                const bedGroup = new THREE.Group();
+                
+                // 床架
+                const bedGeometry = new THREE.BoxGeometry(2.5, 0.3, 3);
+                const bedMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x7d6545,
+                    roughness: 0.85,
+                    metalness: 0.1
+                });
+                const bed = new THREE.Mesh(bedGeometry, bedMaterial);
+                bed.position.y = 0.15;
+                bed.castShadow = true;
+                bedGroup.add(bed);
+
+                // 床垫/被褥
+                const mattressGeometry = new THREE.BoxGeometry(2.4, 0.15, 2.8);
+                const mattressMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0xd4c4b0,
+                    roughness: 0.95,
+                    metalness: 0.05
+                });
+                const mattress = new THREE.Mesh(mattressGeometry, mattressMaterial);
+                mattress.position.y = 0.375;
+                mattress.castShadow = true;
+                bedGroup.add(mattress);
+
+                bedGroup.position.set(0, 0, 0);
+                bedroom.add(bedGroup);
+
+                // 床头柜
+                const nightstandGeometry = new THREE.BoxGeometry(0.6, 0.5, 0.5);
+                const nightstand = new THREE.Mesh(nightstandGeometry, bedMaterial);
+                nightstand.position.set(1.6, 0.25, 1);
+                nightstand.castShadow = true;
+                bedroom.add(nightstand);
+
+                // 台灯
+                this.createLamp(bedroom, { x: 1.6, y: 0.8, z: 1 });
+            }
+
+            createTeaRoomFurniture() {
+                const tea = this.rooms.tea;
+
+                // 茶桌（矮桌）
+                const teaTableGeometry = new THREE.BoxGeometry(1.5, 0.3, 1);
+                const teaTableMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x5a4635,
+                    roughness: 0.9,
+                    metalness: 0.1
+                });
+                const teaTable = new THREE.Mesh(teaTableGeometry, teaTableMaterial);
+                teaTable.position.set(0, 0.15, 0);
+                teaTable.castShadow = true;
+                tea.add(teaTable);
+
+                // 桌腿
+                for (let i = 0; i < 4; i++) {
+                    const legGeometry = new THREE.CylinderGeometry(0.04, 0.04, 0.3, 8);
+                    const leg = new THREE.Mesh(legGeometry, teaTableMaterial);
+                    const x = (i % 2 === 0 ? -1 : 1) * 0.6;
+                    const z = (i < 2 ? -1 : 1) * 0.35;
+                    leg.position.set(x, -0.15, z);
+                    teaTable.add(leg);
+                }
+
+                // 坐垫
+                for (let i = 0; i < 4; i++) {
+                    const cushionGeometry = new THREE.CylinderGeometry(0.35, 0.35, 0.1, 16);
+                    const cushionMaterial = new THREE.MeshStandardMaterial({ 
+                        color: 0x8b7355,
+                        roughness: 0.95,
+                        metalness: 0.05
+                    });
+                    const cushion = new THREE.Mesh(cushionGeometry, cushionMaterial);
+                    const angle = (i / 4) * Math.PI * 2;
+                    cushion.position.set(
+                        Math.cos(angle) * 1.2,
+                        0.05,
+                        Math.sin(angle) * 1.2
+                    );
+                    cushion.castShadow = true;
+                    tea.add(cushion);
+                }
+
+                // 茶具
+                this.createTeaSet(tea);
+            }
+
+            createPottery(parent, position) {
+                const potteryGeometry = new THREE.CylinderGeometry(0.15, 0.2, 0.5, 8);
+                const potteryMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x6b5344,
+                    roughness: 0.9,
+                    metalness: 0.1
+                });
+                const pottery = new THREE.Mesh(potteryGeometry, potteryMaterial);
+                pottery.position.set(position.x, position.y, position.z);
+                pottery.castShadow = true;
+                parent.add(pottery);
+            }
+
+            createLamp(parent, position) {
+                const lampGroup = new THREE.Group();
+
+                // 灯座
+                const baseGeometry = new THREE.CylinderGeometry(0.1, 0.12, 0.15, 8);
+                const baseMaterial = new THREE.MeshStandardMaterial({ color: 0x5a4635 });
+                const base = new THREE.Mesh(baseGeometry, baseMaterial);
+                lampGroup.add(base);
+
+                // 灯罩（和纸质感）
+                const shadeGeometry = new THREE.CylinderGeometry(0.15, 0.2, 0.3, 8);
+                const shadeMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0xf5e6d3,
+                    roughness: 0.8,
+                    metalness: 0,
+                    transparent: true,
+                    opacity: 0.9
+                });
+                const shade = new THREE.Mesh(shadeGeometry, shadeMaterial);
+                shade.position.y = 0.25;
+                lampGroup.add(shade);
+
+                // 光源
+                const light = new THREE.PointLight(0xffeedd, 0.5, 3);
+                light.position.y = 0.3;
+                lampGroup.add(light);
+
+                lampGroup.position.set(position.x, position.y, position.z);
+                parent.add(lampGroup);
+            }
+
+            createTeaSet(parent) {
+                // 茶壶
+                const teapotGeometry = new THREE.SphereGeometry(0.12, 16, 16);
+                const teapotMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x4a3a2a,
+                    roughness: 0.85,
+                    metalness: 0.1
+                });
+                const teapot = new THREE.Mesh(teapotGeometry, teapotMaterial);
+                teapot.position.set(0, 0.35, 0);
+                teapot.castShadow = true;
+                parent.add(teapot);
+
+                // 茶杯
+                for (let i = 0; i < 3; i++) {
+                    const cupGeometry = new THREE.CylinderGeometry(0.06, 0.05, 0.08, 12);
+                    const cup = new THREE.Mesh(cupGeometry, teapotMaterial);
+                    cup.position.set((i - 1) * 0.25, 0.34, 0.3);
+                    cup.castShadow = true;
+                    parent.add(cup);
+                }
+            }
+
+            createDecorations() {
+                // 客厅装饰
+                this.createWallArt(this.rooms.living, { x: -5, y: 1.5, z: -4.9 });
+                
+                // 干花/枝条
+                this.createDriedFlowers(this.rooms.living, { x: -2.5, y: 0.8, z: -4.5 });
+                
+                // 卷轴画
+                this.createScrollPainting(this.rooms.tea, { x: -2.9, y: 1.2, z: 0 });
+            }
+
+            createWallArt(parent, position) {
+                // 画框
+                const frameGeometry = new THREE.BoxGeometry(1.2, 1.5, 0.05);
+                const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x5a4635 });
+                const frame = new THREE.Mesh(frameGeometry, frameMaterial);
+                
+                // 画心（留白）
+                const canvasGeometry = new THREE.PlaneGeometry(1, 1.3);
+                const canvasMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0xe8dcc8,
+                    roughness: 0.95
+                });
+                const canvas = new THREE.Mesh(canvasGeometry, canvasMaterial);
+                canvas.position.z = 0.03;
+                frame.add(canvas);
+
+                // 简单墨迹
+                const inkGeometry = new THREE.PlaneGeometry(0.3, 0.5);
+                const inkMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0x3a3a3a,
+                    transparent: true,
+                    opacity: 0.6
+                });
+                const ink = new THREE.Mesh(inkGeometry, inkMaterial);
+                ink.position.set(0.2, 0.1, 0.04);
+                ink.rotation.z = 0.3;
+                frame.add(ink);
+
+                frame.position.set(position.x, position.y, position.z);
+                parent.add(frame);
+            }
+
+            createDriedFlowers(parent, position) {
+                const flowerGroup = new THREE.Group();
+
+                // 花瓶
+                const vaseGeometry = new THREE.CylinderGeometry(0.1, 0.12, 0.4, 8);
+                const vaseMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x5a4635,
+                    roughness: 0.9
+                });
+                const vase = new THREE.Mesh(vaseGeometry, vaseMaterial);
+                vase.castShadow = true;
+                flowerGroup.add(vase);
+
+                // 干枝
+                for (let i = 0; i < 5; i++) {
+                    const branchGeometry = new THREE.CylinderGeometry(0.01, 0.015, 0.8, 6);
+                    const branchMaterial = new THREE.MeshStandardMaterial({ color: 0x6b5344 });
+                    const branch = new THREE.Mesh(branchGeometry, branchMaterial);
+                    branch.position.y = 0.4;
+                    branch.rotation.z = (Math.random() - 0.5) * 0.5;
+                    branch.rotation.x = (Math.random() - 0.5) * 0.3;
+                    flowerGroup.add(branch);
+                }
+
+                flowerGroup.position.set(position.x, position.y, position.z);
+                parent.add(flowerGroup);
+            }
+
+            createScrollPainting(parent, position) {
+                // 卷轴
+                const scrollGeometry = new THREE.PlaneGeometry(0.8, 1.8);
+                const scrollMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0xd4c4b0,
+                    roughness: 0.9,
+                    side: THREE.DoubleSide
+                });
+                const scroll = new THREE.Mesh(scrollGeometry, scrollMaterial);
+
+                // 上下轴
+                const rodGeometry = new THREE.CylinderGeometry(0.04, 0.04, 0.85, 8);
+                const rodMaterial = new THREE.MeshStandardMaterial({ color: 0x5a4635 });
+                
+                const topRod = new THREE.Mesh(rodGeometry, rodMaterial);
+                topRod.rotation.z = Math.PI / 2;
+                topRod.position.y = 0.9;
+                scroll.add(topRod);
+
+                const bottomRod = new THREE.Mesh(rodGeometry, rodMaterial);
+                bottomRod.rotation.z = Math.PI / 2;
+                bottomRod.position.y = -0.9;
+                scroll.add(bottomRod);
+
+                // 简单书法（用线条表示）
+                for (let i = 0; i < 3; i++) {
+                    const lineGeometry = new THREE.PlaneGeometry(0.03, 0.4);
+                    const lineMaterial = new THREE.MeshBasicMaterial({ color: 0x3a3a3a });
+                    const line = new THREE.Mesh(lineGeometry, lineMaterial);
+                    line.position.set(-0.2 + i * 0.2, 0, 0.01);
+                    scroll.add(line);
+                }
+
+                scroll.position.set(position.x, position.y, position.z);
+                scroll.rotation.y = Math.PI / 2;
+                parent.add(scroll);
+            }
+
+            showRoom(roomName) {
+                // 隐藏所有房间
+                Object.values(this.rooms).forEach(room => {
+                    room.visible = false;
+                });
+
+                // 显示选定房间
+                if (this.rooms[roomName]) {
+                    this.rooms[roomName].visible = true;
+                    
+                    // 调整相机位置
+                    const positions = {
+                        living: { x: 8, y: 3, z: 8 },
+                        bedroom: { x: -12, y: 2.5, z: 5 },
+                        tea: { x: 18, y: 2.5, z: -5 },
+                        courtyard: { x: 5, y: 3, z: 20 }
+                    };
+
+                    if (positions[roomName]) {
+                        this.camera.position.set(
+                            positions[roomName].x,
+                            positions[roomName].y,
+                            positions[roomName].z
+                        );
+                        this.controls.target.set(0, 1, 0);
+                    }
+                }
+
+                this.currentView = roomName;
+            }
+
+            setLightingMode(mode) {
+                const modes = {
+                    day: {
+                        ambient: 0.4,
+                        main: 0.8,
+                        color: 0xf5e6d3,
+                        background: 0x1a1816
+                    },
+                    sunset: {
+                        ambient: 0.5,
+                        main: 0.6,
+                        color: 0xd4a574,
+                        background: 0x2a1f1a
+                    },
+                    night: {
+                        ambient: 0.2,
+                        main: 0.3,
+                        color: 0x8a94b0,
+                        background: 0x0a0a1a
+                    },
+                    zen: {
+                        ambient: 0.35,
+                        main: 0.5,
+                        color: 0xb8c8b8,
+                        background: 0x1a2a1a
+                    }
+                };
+
+                const config = modes[mode];
+                if (config) {
+                    this.lights.ambient.intensity = config.ambient;
+                    this.lights.main.intensity = config.main;
+                    this.lights.main.color.setHex(config.color);
+                    this.scene.background = new THREE.Color(config.background);
+                    this.scene.fog.color.setHex(config.background);
+                }
+
+                this.currentMaterial = mode;
+            }
+
+            setupEventListeners() {
+                // 窗口大小调整
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+
+                // 视图切换
+                document.querySelectorAll('[data-view]').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelectorAll('[data-view]').forEach(b => b.classList.remove('active'));
+                        e.currentTarget.classList.add('active');
+                        this.showRoom(e.currentTarget.dataset.view);
+                        this.playSound('click');
+                    });
+                });
+
+                // 材质模式切换
+                document.querySelectorAll('[data-material]').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelectorAll('[data-material]').forEach(b => b.classList.remove('active'));
+                        e.currentTarget.classList.add('active');
+                        this.setLightingMode(e.currentTarget.dataset.material);
+                        this.playSound('click');
+                    });
+                });
+
+                // 自动旋转
+                document.getElementById('autoRotateBtn').addEventListener('click', (e) => {
+                    this.autoRotate = !this.autoRotate;
+                    e.currentTarget.classList.toggle('active');
+                    e.currentTarget.textContent = this.autoRotate ? '⏸️ 暂停旋转' : '🔄 自动旋转';
+                });
+
+                // 全屏
+                document.getElementById('fullscreenBtn').addEventListener('click', () => {
+                    if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen();
+                    } else {
+                        document.exitFullscreen();
+                    }
+                });
+            }
+
+            playSound(type) {
+                // 简单的点击音效
+                if (!this.audioContext) {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(this.audioContext.destination);
+
+                oscillator.frequency.value = type === 'click' ? 800 : 600;
+                gainNode.gain.setValueAtTime(0.1, this.audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.1);
+
+                oscillator.start(this.audioContext.currentTime);
+                oscillator.stop(this.audioContext.currentTime + 0.1);
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+
+                // 自动旋转
+                if (this.autoRotate) {
+                    const time = Date.now() * 0.0002;
+                    this.camera.position.x = Math.cos(time) * 10;
+                    this.camera.position.z = Math.sin(time) * 10;
+                    this.controls.target.set(0, 1, 0);
+                }
+
+                this.controls.update();
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        // ==================== 初始化 ====================
+        window.addEventListener('load', () => {
+            const vr = new WabiSabiInteriorVR();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,2029 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jenkins + Docker + K8s + KubeSphere 工具链版本选型与部署架构设计</title>
+    <style>
+        :root {
+            --primary: #d97706;
+            --secondary: #7c3aed;
+            --accent: #f59e0b;
+            --dark: #1e1b4b;
+            --light: #fef3c7;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --jenkins: #d24939;
+            --docker: #2496ed;
+            --k8s: #326ce5;
+            --kubesphere: #0073e3;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--jenkins), var(--docker), var(--k8s), var(--kubesphere));
+            color: white;
+            padding: 70px 50px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 60%;
+            height: 200%;
+            background: rgba(255,255,255,0.1);
+            transform: rotate(-15deg);
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 1;
+        }
+
+        header .subtitle {
+            font-size: 1.2em;
+            opacity: 0.95;
+            max-width: 900px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .meta-info {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            margin-top: 35px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+        }
+
+        .meta-tag {
+            background: rgba(255,255,255,0.2);
+            padding: 10px 25px;
+            border-radius: 25px;
+            font-size: 0.95em;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        nav.toc {
+            background: var(--dark);
+            padding: 35px 50px;
+        }
+
+        nav.toc h2 {
+            color: var(--accent);
+            margin-bottom: 25px;
+            font-size: 1.6em;
+        }
+
+        nav.toc ul {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 18px;
+        }
+
+        nav.toc li a {
+            color: white;
+            text-decoration: none;
+            padding: 15px 25px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            display: block;
+            transition: all 0.3s;
+            border-left: 4px solid transparent;
+        }
+
+        nav.toc li a:hover {
+            background: rgba(255,255,255,0.2);
+            border-left-color: var(--primary);
+            transform: translateX(8px);
+        }
+
+        main {
+            padding: 50px;
+        }
+
+        section {
+            margin-bottom: 60px;
+            scroll-margin-top: 20px;
+        }
+
+        section h2 {
+            color: var(--secondary);
+            font-size: 2.2em;
+            margin-bottom: 30px;
+            padding-bottom: 18px;
+            border-bottom: 4px solid var(--primary);
+        }
+
+        section h3 {
+            color: var(--dark);
+            font-size: 1.6em;
+            margin: 35px 0 22px 0;
+        }
+
+        section h4 {
+            color: var(--dark);
+            font-size: 1.3em;
+            margin: 28px 0 18px 0;
+            font-weight: 600;
+        }
+
+        p {
+            line-height: 1.9;
+            color: #333;
+            margin-bottom: 18px;
+            text-align: justify;
+            font-size: 1.05em;
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(217,119,6,0.1), rgba(124,58,237,0.1));
+            border-left: 5px solid var(--primary);
+            padding: 30px;
+            border-radius: 10px;
+            margin: 30px 0;
+        }
+
+        .highlight-box.success {
+            border-left-color: var(--success);
+            background: linear-gradient(135deg, rgba(16,185,129,0.1), rgba(16,185,129,0.05));
+        }
+
+        .highlight-box.warning {
+            border-left-color: var(--warning);
+            background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(245,158,11,0.05));
+        }
+
+        .highlight-box.info {
+            border-left-color: var(--k8s);
+            background: linear-gradient(135deg, rgba(50,108,229,0.1), rgba(50,108,229,0.05));
+        }
+
+        .code-block {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 25px 0;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.92em;
+            line-height: 1.7;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 30px 0;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 3px 15px rgba(0,0,0,0.1);
+        }
+
+        thead {
+            background: var(--secondary);
+            color: white;
+        }
+
+        th, td {
+            padding: 18px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        tbody tr:hover {
+            background: rgba(124,58,237,0.05);
+        }
+
+        .version-card {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 25px 35px;
+            border-radius: 15px;
+            margin: 15px 10px;
+            text-align: center;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            min-width: 200px;
+        }
+
+        .version-card .version-number {
+            font-size: 2.5em;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .version-card .version-label {
+            font-size: 1.1em;
+            opacity: 0.95;
+        }
+
+        .version-card.jenkins {
+            background: linear-gradient(135deg, var(--jenkins), #ff6b6b);
+        }
+
+        .version-card.docker {
+            background: linear-gradient(135deg, var(--docker), #00bcd4);
+        }
+
+        .version-card.k8s {
+            background: linear-gradient(135deg, var(--k8s), #64b5f6);
+        }
+
+        .version-card.kubesphere {
+            background: linear-gradient(135deg, var(--kubesphere), #42a5f5);
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin: 35px 0;
+        }
+
+        .feature-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 15px;
+            padding: 30px;
+            transition: all 0.3s;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .feature-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+            transform: translateY(-8px);
+        }
+
+        .feature-card h4 {
+            color: var(--primary);
+            margin-bottom: 18px;
+            font-size: 1.3em;
+        }
+
+        .feature-card ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .feature-card li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+            color: #555;
+        }
+
+        .feature-card li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--success);
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .architecture-diagram {
+            background: #f8fafc;
+            padding: 35px;
+            border-radius: 12px;
+            margin: 35px 0;
+            border: 2px solid #e2e8f0;
+        }
+
+        .architecture-diagram pre {
+            font-family: 'Consolas', monospace;
+            font-size: 0.85em;
+            line-height: 1.6;
+            color: #2d3748;
+            overflow-x: auto;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 25px;
+            margin: 35px 0;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 35px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+        }
+
+        .stat-value {
+            font-size: 3em;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            font-size: 1.1em;
+            opacity: 0.95;
+        }
+
+        .deployment-option {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 15px;
+            padding: 30px;
+            margin: 25px 0;
+        }
+
+        .deployment-option h4 {
+            color: var(--k8s);
+            font-size: 1.4em;
+            margin-bottom: 20px;
+        }
+
+        .pros-cons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            margin-top: 20px;
+        }
+
+        .pros, .cons {
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .pros {
+            background: rgba(16,185,129,0.05);
+            border-left: 4px solid var(--success);
+        }
+
+        .cons {
+            background: rgba(239,68,68,0.05);
+            border-left: 4px solid var(--danger);
+        }
+
+        .pros h5, .cons h5 {
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        .pros h5 {
+            color: var(--success);
+        }
+
+        .cons h5 {
+            color: var(--danger);
+        }
+
+        .pros ul, .cons ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .pros li::before {
+            content: '✅ ';
+        }
+
+        .cons li::before {
+            content: '⚠️ ';
+        }
+
+        footer {
+            background: var(--dark);
+            color: white;
+            padding: 50px;
+            text-align: center;
+        }
+
+        footer p {
+            color: rgba(255,255,255,0.8);
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2em;
+            }
+
+            main {
+                padding: 25px;
+            }
+
+            section h2 {
+                font-size: 1.8em;
+            }
+
+            .pros-cons {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔧 Jenkins + Docker + K8s + KubeSphere<br/>工具链版本选型与部署架构设计</h1>
+            <p class="subtitle">基于 OpenClaw + Claude Code 的端到端研发自动化系统基础设施篇 —— CI/CD 流水线与容器化部署平台完整方案</p>
+            <div class="meta-info">
+                <span class="meta-tag">调研日期：2026 年 3 月 12 日</span>
+                <span class="meta-tag">文档类型：架构设计报告</span>
+                <span class="meta-tag">适用对象：DevOps 工程师/架构师</span>
+                <span class="meta-tag">部署规模：企业级生产环境</span>
+            </div>
+        </header>
+
+        <nav class="toc">
+            <h2>📋 目录导航</h2>
+            <ul>
+                <li><a href="#section1">1. 工具链版本选型总览</a></li>
+                <li><a href="#section2">2. Jenkins CI/CD 服务器选型与配置</a></li>
+                <li><a href="#section3">3. Docker 容器运行时选型</a></li>
+                <li><a href="#section4">4. Kubernetes 集群架构设计</a></li>
+                <li><a href="#section5">5. KubeSphere 容器平台部署</a></li>
+                <li><a href="#section6">6. 整体部署架构设计</a></li>
+                <li><a href="#section7">7. 高可用与灾备方案</a></li>
+                <li><a href="#section8">8. 安全加固策略</a></li>
+                <li><a href="#section9">9. 在研发自动化系统中的集成</a></li>
+            </ul>
+        </nav>
+
+        <main>
+            <!-- 第 1 章 -->
+            <section id="section1">
+                <h2>1. 工具链版本选型总览</h2>
+                
+                <h3>1.1 推荐版本矩阵</h3>
+                <p>基于 2026 年 3 月的最新稳定版本，以下是为企业级生产环境推荐的工具链版本组合：</p>
+
+                <div style="text-align: center; margin: 40px 0;">
+                    <div class="version-card jenkins">
+                        <div class="version-number">2.479.x</div>
+                        <div class="version-label">Jenkins LTS</div>
+                        <div style="font-size: 0.9em; margin-top: 10px; opacity: 0.9;">长期支持版<br/>2026 年 2 月发布</div>
+                    </div>
+
+                    <div class="version-card docker">
+                        <div class="version-number">27.x</div>
+                        <div class="version-label">Docker Engine</div>
+                        <div style="font-size: 0.9em; margin-top: 10px; opacity: 0.9;">稳定版<br/>Containerd 集成</div>
+                    </div>
+
+                    <div class="version-card k8s">
+                        <div class="version-number">v1.31.x</div>
+                        <div class="version-label">Kubernetes</div>
+                        <div style="font-size: 0.9em; margin-top: 10px; opacity: 0.9;">生产就绪<br/>2026 年主流版本</div>
+                    </div>
+
+                    <div class="version-card kubesphere">
+                        <div class="version-number">v4.2.x</div>
+                        <div class="version-label">KubeSphere</div>
+                        <div style="font-size: 0.9em; margin-top: 10px; opacity: 0.9;">企业版<br/>LuBan 架构</div>
+                    </div>
+                </div>
+
+                <h3>1.2 版本兼容性矩阵</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>组件</th>
+                            <th>推荐版本</th>
+                            <th>兼容版本范围</th>
+                            <th>生命周期</th>
+                            <th>关键特性</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Jenkins</strong></td>
+                            <td>2.479.x LTS</td>
+                            <td>2.46x - 2.49x</td>
+                            <td>至 2027 年 9 月</td>
+                            <td>Kubernetes 原生集成、Pipeline 增强</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Docker Engine</strong></td>
+                            <td>27.x</td>
+                            <td>26.x - 28.x</td>
+                            <td>持续更新</td>
+                            <td>Containerd 默认、BuildKit 增强</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Kubernetes</strong></td>
+                            <td>v1.31.x</td>
+                            <td>v1.30 - v1.32</td>
+                            <td>15 个月支持</td>
+                            <td>DRA 资源分配、AI 工作负载优化</td>
+                        </tr>
+                        <tr>
+                            <td><strong>KubeSphere</strong></td>
+                            <td>v4.2.x</td>
+                            <td>v4.1 - v4.3</td>
+                            <td>至 2028 年</td>
+                            <td>多云管理、微服务治理、可观测性</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Helm</strong></td>
+                            <td>v3.15.x</td>
+                            <td>v3.14 - v3.16</td>
+                            <td>持续更新</td>
+                            <td>OCI Registry、依赖管理</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Calico</strong></td>
+                            <td>v3.28.x</td>
+                            <td>v3.27 - v3.29</td>
+                            <td>持续更新</td>
+                            <td>eBPF 数据面、网络策略</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="highlight-box info">
+                    <strong>💡 选型原则：</strong>
+                    <ul style="margin-top: 15px; padding-left: 20px;">
+                        <li><strong>稳定性优先</strong>：生产环境选择 LTS（长期支持）版本，避免使用最新版</li>
+                        <li><strong>向后兼容</strong>：确保各组件版本在官方支持的兼容范围内</li>
+                        <li><strong>生态成熟度</strong>：选择插件和工具链最丰富的版本</li>
+                        <li><strong>安全补丁</strong>：定期跟进安全更新，保持在小版本内升级</li>
+                    </ul>
+                </div>
+
+                <h3>1.3 硬件资源配置建议</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>环境规模</th>
+                            <th>节点数量</th>
+                            <th>CPU</th>
+                            <th>内存</th>
+                            <th>存储</th>
+                            <th>适用场景</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>开发/测试</strong></td>
+                            <td>3 节点</td>
+                            <td>8 核 × 3</td>
+                            <td>16GB × 3</td>
+                            <td>100GB SSD × 3</td>
+                            <td>个人开发、小团队测试</td>
+                        </tr>
+                        <tr>
+                            <td><strong>小型生产</strong></td>
+                            <td>5 节点</td>
+                            <td>16 核 × 5</td>
+                            <td>32GB × 5</td>
+                            <td>200GB SSD × 5</td>
+                            <td>初创公司、日活<10 万</td>
+                        </tr>
+                        <tr>
+                            <td><strong>中型生产</strong></td>
+                            <td>10 节点</td>
+                            <td>32 核 × 10</td>
+                            <td>64GB × 10</td>
+                            <td>500GB SSD × 10</td>
+                            <td>成长型企业、日活 10-100 万</td>
+                        </tr>
+                        <tr>
+                            <td><strong>大型生产</strong></td>
+                            <td>20+ 节点</td>
+                            <td>64 核 × 20+</td>
+                            <td>128GB × 20+</td>
+                            <td>1TB NVMe × 20+</td>
+                            <td>大型企业、日活>100 万</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 第 2 章 -->
+            <section id="section2">
+                <h2>2. Jenkins CI/CD 服务器选型与配置</h2>
+
+                <h3>2.1 Jenkins 架构模式选择</h3>
+                
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>🏗️ Controller-Agent 架构</h4>
+                        <p>推荐用于生产环境。Controller 负责任务调度和 UI，Agent 负责实际构建任务执行。</p>
+                        <ul>
+                            <li>Controller: 2 核 CPU, 4GB 内存</li>
+                            <li>Agent: 动态伸缩（Kubernetes Pod）</li>
+                            <li>支持并发构建数：10-50</li>
+                            <li>故障隔离：Agent 失败不影响 Controller</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>🚀 Kubernetes 原生模式</h4>
+                        <p>使用 Kubernetes Plugin 动态创建 Agent Pod，实现弹性伸缩和资源隔离。</p>
+                        <ul>
+                            <li>按需创建构建 Agent</li>
+                            <li>构建完成后自动销毁</li>
+                            <li>资源利用率提升 60%</li>
+                            <li>支持多语言环境隔离</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3>2.2 核心插件清单</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>插件名称</th>
+                            <th>用途</th>
+                            <th>必需程度</th>
+                            <th>版本要求</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Kubernetes Plugin</strong></td>
+                            <td>Kubernetes Agent 动态调度</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>>=1.30.0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Pipeline Plugin</strong></td>
+                            <td>声明式 Pipeline 支持</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>>=2.8</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Docker Pipeline</strong></td>
+                            <td>Docker 镜像构建与推送</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>>=1.5</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Git Plugin</strong></td>
+                            <td>Git 代码库集成</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>>=5.0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>GitHub Plugin</strong></td>
+                            <td>GitHub Webhook 触发</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>>=1.37.0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>SonarQube Scanner</strong></td>
+                            <td>代码质量扫描</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>>=2.16</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Nexus Artifact Uploader</strong></td>
+                            <td>制品上传到 Nexus</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>>=12.4</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Kubernetes CD Plugin</strong></td>
+                            <td>K8S 应用部署</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>>=1.5.0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Blue Ocean</strong></td>
+                            <td>现代化 UI 界面</td>
+                            <td>⭐⭐⭐</td>
+                            <td>>=1.27.0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Credentials Binding</strong></td>
+                            <td>凭证安全管理</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>>=1.33</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>2.3 Jenkinsfile 模板示例</h3>
+                <div class="code-block">
+                    <code>// Jenkinsfile for Microservice CI/CD Pipeline
+// 适用于 Spring Boot + React 全栈项目
+
+pipeline {
+    agent none  // 使用 Kubernetes 动态 Agent
+
+    environment {
+        REGISTRY = 'harbor.internal.com'
+        IMAGE_NAME = 'myapp/backend'
+        KUBE_CONFIG_CREDENTIALS_ID = 'kubeconfig-prod'
+        SONAR_HOST_URL = 'https://sonarqube.internal.com'
+    }
+
+    stages {
+        stage('Checkout') {
+            agent { label 'jenkins-agent' }
+            steps {
+                checkout scm
+                script {
+                    env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.BUILD_VERSION = "${env.BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}"
+                }
+            }
+        }
+
+        stage('Code Quality') {
+            agent { label 'jenkins-agent' }
+            steps {
+                withSonarQubeEnv('SonarQube Server') {
+                    sh '''
+                        mvn sonar:sonar \
+                          -Dsonar.projectKey=myapp-backend \
+                          -Dsonar.sources=src/main/java \
+                          -Dsonar.tests=src/test/java \
+                          -Dsonar.java.binaries=target/classes
+                    '''
+                }
+            }
+        }
+
+        stage('Unit Test') {
+            agent { label 'jenkins-agent' }
+            steps {
+                sh 'mvn test -DskipTests=false'
+                junit '**/target/surefire-reports/*.xml'
+                publishHTML(target: [
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: 'target/site/jacoco',
+                    reportFiles: 'index.html',
+                    reportName: '单元测试覆盖率报告'
+                ])
+            }
+        }
+
+        stage('Build Docker Image') {
+            agent { label 'docker-agent' }
+            steps {
+                script {
+                    docker.withRegistry("https://${REGISTRY}", 'harbor-credentials') {
+                        def customImage = docker.build("${IMAGE_NAME}:${BUILD_VERSION}")
+                        customImage.push()
+                        customImage.push('latest')
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Dev') {
+            agent { label 'kubectl-agent' }
+            steps {
+                withKubeConfig([credentialsId: KUBE_CONFIG_CREDENTIALS_ID]) {
+                    sh '''
+                        kubectl set image deployment/backend backend=${REGISTRY}/${IMAGE_NAME}:${BUILD_VERSION} -n dev
+                        kubectl rollout status deployment/backend -n dev --timeout=300s
+                    '''
+                }
+            }
+        }
+
+        stage('Integration Test') {
+            agent { label 'jenkins-agent' }
+            steps {
+                sh 'mvn verify -DskipTests=false -Pintegration-test'
+            }
+        }
+
+        stage('Deploy to Staging') {
+            when {
+                branch 'main'
+            }
+            agent { label 'kubectl-agent' }
+            steps {
+                input message: '确认部署到预发布环境？', ok: '确认部署'
+                withKubeConfig([credentialsId: KUBE_CONFIG_CREDENTIALS_ID]) {
+                    sh '''
+                        kubectl set image deployment/backend backend=${REGISTRY}/${IMAGE_NAME}:${BUILD_VERSION} -n staging
+                        kubectl rollout status deployment/backend -n staging --timeout=300s
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to Production') {
+            when {
+                branch 'main'
+                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+            }
+            agent { label 'kubectl-agent' }
+            steps {
+                input message: '【生产环境】确认部署？', ok: '确认部署', submitter: 'admin,release-manager'
+                withKubeConfig([credentialsId: KUBE_CONFIG_CREDENTIALS_ID]) {
+                    sh '''
+                        kubectl set image deployment/backend backend=${REGISTRY}/${IMAGE_NAME}:${BUILD_VERSION} -n production
+                        kubectl rollout status deployment/backend -n production --timeout=600s
+                        
+                        # 发送部署通知
+                        curl -X POST https://hooks.slack.com/services/xxx \
+                          -H 'Content-Type: application/json' \
+                          -d '{"text":"🚀 ${JOB_NAME} v${BUILD_VERSION} 已部署到生产环境"}'
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            echo '✅ 构建成功！'
+        }
+        failure {
+            echo '❌ 构建失败！请检查日志。'
+            // 发送失败通知
+            mail to: 'dev-team@company.com',
+                 subject: "构建失败：${JOB_NAME} #${BUILD_NUMBER}",
+                 body: "请查看：${BUILD_URL}/console"
+        }
+    }
+}</code>
+                </div>
+
+                <h3>2.4 Jenkins 高可用配置</h3>
+                <div class="highlight-box">
+                    <strong>HA 架构要点：</strong>
+                    <ul style="margin-top: 15px; padding-left: 20px;">
+                        <li><strong>Controller 主备</strong>：使用 Active-Passive 模式，共享外部数据库（PostgreSQL/MySQL）</li>
+                        <li><strong>配置持久化</strong>：JENKINS_HOME 挂载到 NFS 或云存储（S3/OSS）</li>
+                        <li><strong>Agent 弹性</strong>：Kubernetes Plugin 动态创建，无需固定 Agent 节点</li>
+                        <li><strong>负载均衡</strong>：Nginx/HAProxy 前置，SSL 终止</li>
+                        <li><strong>备份策略</strong>：每日全量备份 + 每小时增量备份，保留 30 天</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- 第 3 章 -->
+            <section id="section3">
+                <h2>3. Docker 容器运行时选型</h2>
+
+                <h3>3.1 容器运行时对比</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>运行时</th>
+                            <th>成熟度</th>
+                            <th>性能</th>
+                            <th>安全性</th>
+                            <th>推荐场景</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Docker Engine 27.x</strong></td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>开发环境、CI/CD 构建</td>
+                        </tr>
+                        <tr>
+                            <td><strong>containerd 1.7.x</strong></td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>生产环境、Kubernetes 节点</td>
+                        </tr>
+                        <tr>
+                            <td><strong>CRI-O 1.30.x</strong></td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>Kubernetes 专用场景</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Podman 4.x</strong></td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>无守护进程场景</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>3.2 推荐配置方案</h3>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>🔧 CI/CD 构建节点</h4>
+                        <p>使用 Docker Engine 27.x，提供完整的 Docker CLI 体验和 BuildKit 加速。</p>
+                        <ul>
+                            <li>Docker Engine 27.x + BuildKit</li>
+                            <li>启用 Docker Buildx 多架构构建</li>
+                            <li>配置 Harbor 私有镜像仓库</li>
+                            <li>启用镜像层缓存加速</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>🚀 Kubernetes 工作节点</h4>
+                        <p>使用 containerd 作为 CRI 运行时，轻量高效，与 K8S 深度集成。</p>
+                        <ul>
+                            <li>containerd 1.7.x + runc</li>
+                            <li>配置 systemd cgroup 驱动</li>
+                            <li>启用镜像垃圾回收</li>
+                            <li>配置镜像拉取加速</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3>3.3 Docker 优化配置</h3>
+                <div class="code-block">
+                    <code># /etc/docker/daemon.json
+{
+  "registry-mirrors": [
+    "https://docker.mirrors.ustc.edu.cn",
+    "https://registry.docker-cn.com"
+  ],
+  "insecure-registries": [
+    "harbor.internal.com"
+  ],
+  "storage-driver": "overlay2",
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m",
+    "max-file": "3"
+  },
+  "live-restore": true,
+  "userland-proxy": false,
+  "default-ulimits": {
+    "nofile": {
+      "Name": "nofile",
+      "Hard": 65536,
+      "Soft": 65536
+    }
+  },
+  "features": {
+    "buildkit": true
+  }
+}</code>
+                </div>
+
+                <h3>3.4 Dockerfile 最佳实践</h3>
+                <div class="code-block">
+                    <code># 多阶段构建示例 - Spring Boot 应用
+# Stage 1: 构建阶段
+FROM maven:3.9-eclipse-temurin-21 AS builder
+
+WORKDIR /app
+
+# 利用 Docker 层缓存加速依赖下载
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+
+COPY src ./src
+RUN mvn package -DskipTests -B
+
+# Stage 2: 运行阶段
+FROM eclipse-temurin:21-jre-alpine
+
+# 创建非 root 用户
+RUN addgroup -g 1001 appgroup && \
+    adduser -u 1001 -G appgroup -D appuser
+
+WORKDIR /app
+
+# 从构建阶段复制 jar 包
+COPY --from=builder --chown=appuser:appgroup /app/target/*.jar app.jar
+
+# 设置 JVM 参数
+ENV JAVA_OPTS="-Xms512m -Xmx1024m -XX:+UseG1GC"
+
+USER appuser
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+  CMD wget -qO- http://localhost:8080/actuator/health || exit 1
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]</code>
+                </div>
+            </section>
+
+            <!-- 第 4 章 -->
+            <section id="section4">
+                <h2>4. Kubernetes 集群架构设计</h2>
+
+                <h3>4.1 集群拓扑设计</h3>
+                
+                <div class="architecture-diagram">
+                    <pre>
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        Kubernetes 生产集群架构                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│                         ┌───────────────────┐                          │
+│                         │   Load Balancer   │                          │
+│                         │   (Nginx/HAProxy) │                          │
+│                         └─────────┬─────────┘                          │
+│                                   │                                    │
+│              ┌────────────────────┼────────────────────┐               │
+│              │                    │                    │               │
+│              ▼                    ▼                    ▼               │
+│     ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐       │
+│     │  Control Plane  │ │  Control Plane  │ │  Control Plane  │       │
+│     │    (Master)     │ │    (Master)     │ │    (Master)     │       │
+│     │                 │ │                 │ │                 │       │
+│     │ • API Server    │ │ • API Server    │ │ • API Server    │       │
+│     │ • etcd          │ │ • etcd (集群)   │ │ • etcd          │       │
+│     │ • Scheduler     │ │ • Scheduler     │ │ • Scheduler     │       │
+│     │ • Controller    │ │ • Controller    │ │ • Controller    │       │
+│     └────────┬────────┘ └────────┬────────┘ └────────┬────────┘       │
+│              │                    │                    │               │
+│              └────────────────────┼────────────────────┘               │
+│                                   │                                    │
+│         ┌─────────────────────────┼─────────────────────────┐          │
+│         │                         │                         │          │
+│         ▼                         ▼                         ▼          │
+│  ┌─────────────┐           ┌─────────────┐           ┌─────────────┐  │
+│  │ Worker Node │           │ Worker Node │           │ Worker Node │  │
+│  │   Pool 1    │           │   Pool 2    │           │   Pool 3    │  │
+│  │             │           │             │           │             │  │
+│  │ • Kubelet   │           │ • Kubelet   │           │ • Kubelet   │  │
+│  │ • Kube-proxy│           │ • Kube-proxy│           │ • Kube-proxy│  │
+│  │ • Containerd│           │ • Containerd│           │ • Containerd│  │
+│  │ • Calico    │           │ • Calico    │           │ • Calico    │  │
+│  │             │           │             │           │             │  │
+│  │ [App Pods]  │           │ [App Pods]  │           │ [App Pods]  │  │
+│  └─────────────┘           └─────────────┘           └─────────────┘  │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐  │
+│  │                      存储层 (Storage Layer)                      │  │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │  │
+│  │  │   Ceph RBD  │  │   NFS       │  │   Local PV  │              │  │
+│  │  │  (有状态)   │  │  (共享存储) │  │  (日志缓存) │              │  │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘              │  │
+│  └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+                    </pre>
+                </div>
+
+                <h3>4.2 节点角色规划</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>节点角色</th>
+                            <th>数量</th>
+                            <th>配置</th>
+                            <th>用途</th>
+                            <th>标签</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Control Plane</strong></td>
+                            <td>3</td>
+                            <td>8 核 16GB 100GB SSD</td>
+                            <td>集群控制平面，运行 API Server、etcd、Scheduler</td>
+                            <td>node-role.kubernetes.io/control-plane</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Compute - General</strong></td>
+                            <td>5-10</td>
+                            <td>16 核 32GB 200GB SSD</td>
+                            <td>通用应用工作负载</td>
+                            <td>workload=general</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Compute - CI/CD</strong></td>
+                            <td>3-5</td>
+                            <td>32 核 64GB 500GB SSD</td>
+                            <td>Jenkins Agent、构建任务</td>
+                            <td>workload=cicd</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Compute - AI</strong></td>
+                            <td>2-4</td>
+                            <td>64 核 128GB GPU×4 1TB NVMe</td>
+                            <td>Claude Code Agent、AI 推理</td>
+                            <td>workload=ai,gpu=true</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Edge - Testing</strong></td>
+                            <td>2</td>
+                            <td>8 核 16GB 100GB SSD</td>
+                            <td>UI 自动化测试、E2E 测试</td>
+                            <td>workload=testing</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>4.3 网络方案设计</h3>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>🌐 CNI 插件选择</h4>
+                        <ul>
+                            <li><strong>Calico v3.28</strong>（推荐）：BGP 路由、网络策略成熟</li>
+                            <li>Cilium v1.15：eBPF 高性能、可观测性强</li>
+                            <li>Flannel v0.24：简单、适合小规模集群</li>
+                            <li>Kube-OVN v1.12：SDN 功能丰富、多租户支持</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>🔒 网络策略</h4>
+                        <ul>
+                            <li>默认拒绝所有跨 Namespace 流量</li>
+                            <li>仅允许 Ingress Controller 入站</li>
+                            <li>Database 仅允许应用 Namespace 访问</li>
+                            <li>监控 Namespace 可访问所有指标端点</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3>4.4 存储方案设计</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>存储类型</th>
+                            <th>StorageClass</th>
+                            <th>用途</th>
+                            <th>Reclaim Policy</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Ceph RBD</strong></td>
+                            <td>ceph-rbd</td>
+                            <td>数据库、有状态应用</td>
+                            <td>Retain</td>
+                        </tr>
+                        <tr>
+                            <td><strong>NFS</strong></td>
+                            <td>nfs-shared</td>
+                            <td>共享文件、配置文件</td>
+                            <td>Recycle</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Local PV</strong></td>
+                            <td>local-fast</td>
+                            <td>日志、缓存、临时数据</td>
+                            <td>Delete</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Object Storage</strong></td>
+                            <td>s3-compatible</td>
+                            <td>备份、大文件存储</td>
+                            <td>Retain</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 第 5 章 -->
+            <section id="section5">
+                <h2>5. KubeSphere 容器平台部署</h2>
+
+                <h3>5.1 KubeSphere 核心优势</h3>
+                <div class="highlight-box success">
+                    <strong>为什么选择 KubeSphere？</strong>
+                    <ul style="margin-top: 15px; padding-left: 20px;">
+                        <li><strong>开箱即用</strong>：内置 DevOps、微服务、多租户、可观测性等企业级功能</li>
+                        <li><strong>可视化运维</strong>：图形化界面管理 K8S 资源，降低学习曲线</li>
+                        <li><strong>DevOps 流水线</strong>内置 Jenkins，支持可视化 Pipeline 编排</li>
+                        <li><strong>微服务治理</strong>：集成 Istio，提供服务网格、流量管理、熔断降级</li>
+                        <li><strong>多云管理</strong>：统一管理公有云、私有云、边缘 K8S 集群</li>
+                        <li><strong>应用商店</strong>：Helm Chart 市场，一键部署常用中间件</li>
+                    </ul>
+                </div>
+
+                <h3>5.2 部署模式对比</h3>
+                
+                <div class="deployment-option">
+                    <h4>📦 All-in-One 模式（开发/演示）</h4>
+                    <p>单节点部署，快速体验 KubeSphere 全部功能。</p>
+                    <div class="pros-cons">
+                        <div class="pros">
+                            <h5>优点</h5>
+                            <ul>
+                                <li>零配置，一条命令安装</li>
+                                <li>资源需求低（2 核 4GB）</li>
+                                <li>适合个人学习、PoC 验证</li>
+                            </ul>
+                        </div>
+                        <div class="cons">
+                            <h5>缺点</h5>
+                            <ul>
+                                <li>单点故障风险</li>
+                                <li>无法水平扩展</li>
+                                <li>不适合生产环境</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="code-block" style="margin-top: 20px;">
+                        <code># All-in-One 安装命令
+export KKZONE=cn
+curl -sfL https://get-kk.kubesphere.io | VERSION=v3.0.13 sh -
+chmod +x kk
+./kk create cluster --with-kubernetes v1.31.0 --with-kubesphere v4.2.0</code>
+                    </div>
+                </div>
+
+                <div class="deployment-option">
+                    <h4>🏢 HA 高可用模式（生产推荐）</h4>
+                    <p>多 Master 多 Node 架构，支持企业级生产负载。</p>
+                    <div class="pros-cons">
+                        <div class="pros">
+                            <h5>优点</h5>
+                            <ul>
+                                <li>控制平面高可用（3 Master）</li>
+                                <li>工作节点可水平扩展</li>
+                                <li>支持负载均衡和健康检查</li>
+                                <li>生产环境最佳实践</li>
+                            </ul>
+                        </div>
+                        <div class="cons">
+                            <h5>缺点</h5>
+                            <ul>
+                                <li>需要至少 5 台服务器</li>
+                                <li>配置相对复杂</li>
+                                <li>需要外部负载均衡器</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <h3>5.3 KubeKey 安装配置</h3>
+                <div class="code-block">
+                    <code># config-sample.yaml - KubeKey 配置文件
+
+apiVersion: kubekey.kubesphere.io/v1alpha2
+kind: Cluster
+metadata:
+  name: production-cluster
+spec:
+  hosts:
+  # Control Plane 节点
+  - {name: master1, address: 192.168.1.101, internalAddress: 192.168.1.101, port: 22, user: root, password: "YourPassword"}
+  - {name: master2, address: 192.168.1.102, internalAddress: 192.168.1.102, port: 22, user: root, password: "YourPassword"}
+  - {name: master3, address: 192.168.1.103, internalAddress: 192.168.1.103, port: 22, user: root, password: "YourPassword"}
+  
+  # Worker 节点
+  - {name: worker1, address: 192.168.1.111, internalAddress: 192.168.1.111, port: 22, user: root, password: "YourPassword"}
+  - {name: worker2, address: 192.168.1.112, internalAddress: 192.168.1.112, port: 22, user: root, password: "YourPassword"}
+  - {name: worker3, address: 192.168.1.113, internalAddress: 192.168.1.113, port: 22, user: root, password: "YourPassword"}
+  
+  roleGroups:
+    etcd:
+    - master1
+    - master2
+    - master3
+    control-plane:
+    - master1
+    - master2
+    - master3
+    worker:
+    - worker1
+    - worker2
+    - worker3
+  
+  kubernetes:
+    version: v1.31.0
+    clusterName: cluster.local
+    autoRenewCerts: true
+    containerManager: containerd
+  
+  kubesphere:
+    enabled: true
+    version: v4.2.0
+    configMap: ks-installer
+    common:
+      core:
+        console:
+          enableMultiLogin: true
+          port: 30880
+          type: NodePort
+      alerting:
+        enabled: true
+      auditing:
+        enabled: true
+      devops:
+        enabled: true
+        jenkins_memory_lim: 4Gi
+        jenkins_memory_req: 2Gi
+        jenkins_volume_size: 50Gi
+      events:
+        enabled: true
+      logging:
+        enabled: true
+        containerruntime: containerd
+        logsidecar:
+          enabled: true
+          replicas: 2
+      metrics_server:
+        enabled: true
+      monitoring:
+        storage_class: system-storage
+        enabled: true
+      notification:
+        enabled: true
+      openpitrix:
+        enabled: true
+      servicemesh:
+        enabled: true
+      terminal:
+        enabled: true
+      multicluster:
+        enabled: true
+  
+  network:
+    plugin: calico
+    kubePodsCIDR: 10.233.64.0/18
+    kubeServicesCIDR: 10.233.0.0/18
+  
+  storage:
+    defaultStorageClass: ceph-rbd
+    localVolume:
+      enabled: true
+      useDefaultClass: false
+    cephRBD:
+      enabled: true
+      hostPath: /data/ceph-rbd
+      storageClassName: ceph-rbd
+      reclaimPolicy: Retain
+      parameters:
+        monitors: 192.168.1.201:6789,192.168.1.202:6789,192.168.1.203:6789
+        adminId: admin
+        adminSecretName: ceph-secret
+        adminSecretNamespace: kube-system
+        pool: k8s-pool</code>
+                </div>
+
+                <h3>5.4 KubeSphere DevOps 集成</h3>
+                <div class="highlight-box">
+                    <strong>DevOps 工程配置：</strong>
+                    <ul style="margin-top: 15px; padding-left: 20px;">
+                        <li><strong>项目空间</strong>：为每个研发团队创建独立的 DevOps Project</li>
+                        <li><strong>凭证管理</strong>：集中管理 Git、Harbor、KubeConfig、SSH 等凭证</li>
+                        <li><strong>流水线模板</strong>：预置 Java、Node.js、Python、Go 等语言模板</li>
+                        <li><strong>质量门禁</strong>：集成 SonarQube，设置质量阈值阻止不合格代码上线</li>
+                        <li><strong>制品库</strong>：对接 Harbor，自动推送构建镜像</li>
+                        <li><strong>部署策略</strong>：支持蓝绿部署、金丝雀发布、滚动更新</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- 第 6 章 -->
+            <section id="section6">
+                <h2>6. 整体部署架构设计</h2>
+
+                <h3>6.1 完整技术栈架构图</h3>
+                
+                <div class="architecture-diagram">
+                    <pre>
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    基于 OpenClaw + Claude Code 的端到端研发自动化系统             │
+│                              基础设施层技术架构                                  │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │                           用户接入层 (Access Layer)                      │   │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                  │   │
+│  │  │   Nginx      │  │   Traefik    │  │  MetalLB     │                  │   │
+│  │  │  (Ingress)   │  │  (API Gateway)│  │ (LoadBalancer)│                 │   │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘                  │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                          │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │                         KubeSphere 容器平台层                            │   │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐       │   │
+│  │  │  多租户管理  │ │  DevOps     │ │  微服务治理  │ │  可观测性   │       │   │
+│  │  │  Tenant     │ │  Pipeline   │ │  Istio      │ │  Monitoring │       │   │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘       │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                          │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │                        Kubernetes 编排层                                 │   │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐       │   │
+│  │  │  Deployment │ │  StatefulSet│ │  DaemonSet  │ │  CronJob    │       │   │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘       │   │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐       │   │
+│  │  │  ConfigMap  │ │   Secret    │ │  HPA/VPA    │ │  NetworkPol │       │   │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘       │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                          │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │                          容器运行时层                                    │   │
+│  │  ┌─────────────────────────────────────────────────────────────────┐   │   │
+│  │  │  containerd 1.7.x (Worker Nodes) + Docker 27.x (CI/CD Nodes)   │   │   │
+│  │  └─────────────────────────────────────────────────────────────────┘   │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                          │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │                           基础设施层                                     │   │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐       │   │
+│  │  │   计算资源   │ │   网络资源   │ │   存储资源   │ │   安全资源   │       │   │
+│  │  │  VM/BareMetal│ │  VPC/Subnet │ │  Ceph/NFS   │ │  Firewall   │       │   │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘       │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │                     CI/CD 工具链集成                                     │   │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐       │   │
+│  │  │   Jenkins   │ │   Harbor    │ │  SonarQube  │ │   Nexus     │       │   │
+│  │  │  (CI 引擎)   │ │ (镜像仓库)  │ │ (代码质量)  │ │ (制品仓库)  │       │   │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘       │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │                   AI Agent 工作负载专区                                  │   │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                       │   │
+│  │  │  OpenClaw   │ │ Claude Code │ │  GPU Pool   │                       │   │
+│  │  │  Orchestrator│ │  Agents     │ │  (A100/H100)│                       │   │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘                       │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                    </pre>
+                </div>
+
+                <h3>6.2 命名空间规划</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Namespace</th>
+                            <th>用途</th>
+                            <th>资源配额</th>
+                            <th>网络策略</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>kubesphere-system</strong></td>
+                            <td>KubeSphere 核心组件</td>
+                            <td>8 核 16GB</td>
+                            <td>内部通信</td>
+                        </tr>
+                        <tr>
+                            <td><strong>devops-system</strong></td>
+                            <td>DevOps/Jenkins 系统</td>
+                            <td>16 核 32GB</td>
+                            <td>允许访问外网</td>
+                        </tr>
+                        <tr>
+                            <td><strong>ci-cd</strong></td>
+                            <td>CI/CD 流水线工作负载</td>
+                            <td>32 核 64GB</td>
+                            <td>受限出站</td>
+                        </tr>
+                        <tr>
+                            <td><strong>ai-agents</strong></td>
+                            <td>OpenClaw + Claude Code Agents</td>
+                            <td>64 核 128GB + GPU</td>
+                            <td>严格隔离</td>
+                        </tr>
+                        <tr>
+                            <td><strong>backend-services</strong></td>
+                            <td>后端微服务</td>
+                            <td>按业务划分</td>
+                            <td>仅 Ingress 入站</td>
+                        </tr>
+                        <tr>
+                            <td><strong>frontend-apps</strong></td>
+                            <td>前端应用</td>
+                            <td>按业务划分</td>
+                            <td>公开访问</td>
+                        </tr>
+                        <tr>
+                            <td><strong>monitoring</strong></td>
+                            <td>Prometheus/Grafana</td>
+                            <td>8 核 16GB</td>
+                            <td>可访问所有 NS</td>
+                        </tr>
+                        <tr>
+                            <td><strong>logging</strong></td>
+                            <td>Elasticsearch/Fluentbit</td>
+                            <td>16 核 32GB</td>
+                            <td>可收集所有 NS 日志</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>6.3 资源配额管理</h3>
+                <div class="code-block">
+                    <code># ResourceQuota 示例 - AI Agents Namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: ai-agents-quota
+  namespace: ai-agents
+spec:
+  hard:
+    requests.cpu: "64"
+    requests.memory: 128Gi
+    limits.cpu: "128"
+    limits.memory: 256Gi
+    requests.nvidia.com/gpu: "4"
+    limits.nvidia.com/gpu: "8"
+    persistentvolumeclaims: "20"
+    requests.storage: 2Ti
+    pods: "100"
+    services.loadbalancers: "5"
+    services.nodeports: "10"
+
+---
+# LimitRange 示例
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: ai-agents-limits
+  namespace: ai-agents
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: 2
+      memory: 4Gi
+    defaultRequest:
+      cpu: 500m
+      memory: 1Gi
+    max:
+      cpu: "16"
+      memory: 32Gi
+    min:
+      cpu: 100m
+      memory: 256Mi</code>
+                </div>
+            </section>
+
+            <!-- 第 7 章 -->
+            <section id="section7">
+                <h2>7. 高可用与灾备方案</h2>
+
+                <h3>7.1 高可用架构设计</h3>
+                
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>🔄 控制平面 HA</h4>
+                        <ul>
+                            <li>3 节点 etcd 集群（奇数节点）</li>
+                            <li>API Server 多实例 + LB 负载均衡</li>
+                            <li>Scheduler/Controller 多副本热备</li>
+                            <li>自动故障转移（<30 秒）</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>📊 数据持久化 HA</h4>
+                        <ul>
+                            <li>etcd 数据 3 副本跨节点分布</li>
+                            <li>Ceph 存储 3 副本机制</li>
+                            <li>数据库主从复制 + 自动切换</li>
+                            <li>每日快照备份至对象存储</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>🌍 多区域容灾</h4>
+                        <ul>
+                            <li>同城双活：两个可用区同时承载流量</li>
+                            <li>异地灾备：跨区域数据异步复制</li>
+                            <li>RPO < 5 分钟，RTO < 30 分钟</li>
+                            <li>DNS 智能解析实现故障切换</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>🔁 应用层高可用</h4>
+                        <ul>
+                            <li>Deployment 最小 2 副本</li>
+                            <li>Pod 反亲和性分散部署</li>
+                            <li>健康检查 + 自动重启</li>
+                            <li>HPA 自动伸缩应对流量峰值</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3>7.2 备份恢复策略</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>备份对象</th>
+                            <th>频率</th>
+                            <th>保留周期</th>
+                            <th>存储位置</th>
+                            <th>恢复 RTO</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>etcd 数据</strong></td>
+                            <td>每小时快照</td>
+                            <td>7 天</td>
+                            <td>S3/OSS 对象存储</td>
+                            <td><15 分钟</td>
+                        </tr>
+                        <tr>
+                            <td><strong>K8S 资源配置</strong></td>
+                            <td>每日全量</td>
+                            <td>30 天</td>
+                            <td>Git 仓库 + S3</td>
+                            <td><30 分钟</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Jenkins 配置</strong></td>
+                            <td>每日全量</td>
+                            <td>90 天</td>
+                            <td>NFS + S3</td>
+                            <td><1 小时</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Harbor 镜像</strong></td>
+                            <td>每周全量</td>
+                            <td>180 天</td>
+                            <td>对象存储复制</td>
+                            <td><2 小时</td>
+                        </tr>
+                        <tr>
+                            <td><strong>数据库数据</strong></td>
+                            <td>每日全量 + Binlog 实时</td>
+                            <td>365 天</td>
+                            <td>异地灾备中心</td>
+                            <td><30 分钟</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>7.3 灾难恢复演练</h3>
+                <div class="highlight-box warning">
+                    <strong>定期演练计划：</strong>
+                    <ul style="margin-top: 15px; padding-left: 20px;">
+                        <li><strong>月度演练</strong>：单节点故障恢复、Pod 驱逐与重建</li>
+                        <li><strong>季度演练</strong>：Master 节点故障切换、etcd 集群恢复</li>
+                        <li><strong>半年度演练</strong>：整机房故障、异地灾备切换</li>
+                        <li><strong>年度演练</strong>：全面灾难恢复、数据完整性验证</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- 第 8 章 -->
+            <section id="section8">
+                <h2>8. 安全加固策略</h2>
+
+                <h3>8.1 集群安全基线</h3>
+                
+                <h4>认证与授权</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>安全措施</th>
+                            <th>实施方案</th>
+                            <th>优先级</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>RBAC 权限控制</strong></td>
+                            <td>最小权限原则，按角色分配 ClusterRole/Role</td>
+                            <td>P0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>ServiceAccount</strong></td>
+                            <td>禁止使用 default SA，为每个应用创建独立 SA</td>
+                            <td>P0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>OIDC 集成</strong></td>
+                            <td>对接企业 LDAP/AD，统一身份认证</td>
+                            <td>P1</td>
+                        </tr>
+                        <tr>
+                            <td><strong>MFA 双因素</strong></td>
+                            <td>管理员登录强制 MFA 验证</td>
+                            <td>P1</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>网络安全</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>安全措施</th>
+                            <th>实施方案</th>
+                            <th>优先级</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>NetworkPolicy</strong></td>
+                            <td>默认拒绝所有流量，白名单放行</td>
+                            <td>P0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>TLS 加密</strong></td>
+                            <td>Ingress 强制 HTTPS，内部服务 mTLS</td>
+                            <td>P0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>网络隔离</strong></td>
+                            <td>不同环境（Dev/Test/Prod）物理隔离</td>
+                            <td>P1</td>
+                        </tr>
+                        <tr>
+                            <td><strong>WAF 防护</strong></td>
+                            <td>Ingress 集成 WAF，防御 OWASP Top 10</td>
+                            <td>P1</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>容器安全</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>安全措施</th>
+                            <th>实施方案</th>
+                            <th>优先级</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>非 Root 运行</strong></td>
+                            <td>securityContext.runAsNonRoot: true</td>
+                            <td>P0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>只读文件系统</strong></td>
+                            <td>readOnlyRootFilesystem: true</td>
+                            <td>P1</td>
+                        </tr>
+                        <tr>
+                            <td><strong>能力限制</strong></td>
+                            <td>drop ALL capabilities，按需添加</td>
+                            <td>P0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>镜像扫描</strong></td>
+                            <td>Harbor 集成 Trivy，阻断高危漏洞镜像</td>
+                            <td>P0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Seccomp/AppArmor</strong></td>
+                            <td>启用系统调用过滤，限制内核访问</td>
+                            <td>P2</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>8.2 安全合规检查清单</h3>
+                <div class="code-block">
+                    <code># 使用 kube-bench 进行 CIS Benchmark 检查
+docker run --rm -v `pwd`:/host aquasec/kube-bench:latest \
+  --benchmark k8s-cis-1.24 check node
+
+# 使用 Datree 进行 K8S 配置策略检查
+datree test ./k8s-manifests/*.yaml \
+  --policy-config security-policy.yaml \
+  --output json > datree-report.json
+
+# 使用 Trivy 扫描集群漏洞
+trivy k8s --cluster=production \
+  --report=summary \
+  --severity CRITICAL,HIGH \
+  --ignore-unfixed
+
+# 使用 OPA Gatekeeper 实施策略
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: require-app-labels
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+  parameters:
+    labels: ["app", "owner", "environment"]</code>
+                </div>
+            </section>
+
+            <!-- 第 9 章 -->
+            <section id="section9">
+                <h2>9. 在研发自动化系统中的集成</h2>
+
+                <h3>9.1 八大研发阶段的工具链映射</h3>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>研发阶段</th>
+                            <th>负责 Agent</th>
+                            <th>使用的工具链</th>
+                            <th>产出物</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>1. 需求分析</strong></td>
+                            <td>Product Agent</td>
+                            <td>Claude Code + PRD Template</td>
+                            <td>PRD 文档</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2. 架构设计</strong></td>
+                            <td>Architect Agent</td>
+                            <td>Claude Code + Mermaid</td>
+                            <td>技术方案 + 架构图</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3. API 定义</strong></td>
+                            <td>API Designer Agent</td>
+                            <td>Claude Code + OpenAPI Generator</td>
+                            <td>OpenAPI Spec + Mock Server</td>
+                        </tr>
+                        <tr>
+                            <td><strong>4. AI Coding</strong></td>
+                            <td>Dev Agents</td>
+                            <td>Claude Code + IDE Integration</td>
+                            <td>源代码</td>
+                        </tr>
+                        <tr>
+                            <td><strong>5. 单元测试</strong></td>
+                            <td>Test Agent</td>
+                            <td>Jest/JUnit + Coverage Tools</td>
+                            <td>测试报告 + 覆盖率</td>
+                        </tr>
+                        <tr>
+                            <td><strong>6. 集成测试</strong></td>
+                            <td>QA Agent</td>
+                            <td>Postman + TestContainers</td>
+                            <td>集成测试报告</td>
+                        </tr>
+                        <tr>
+                            <td><strong>7. CI/CD 部署</strong></td>
+                            <td>DevOps Agent</td>
+                            <td><strong>Jenkins + Docker + K8S + KubeSphere</strong></td>
+                            <td>运行中的应用</td>
+                        </tr>
+                        <tr>
+                            <td><strong>8. UI 验收</strong></td>
+                            <td>UI Test Agent</td>
+                            <td>Playwright + Percy</td>
+                            <td>E2E 测试报告</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>9.2 Jenkins Pipeline 与 Agent 协同</h3>
+                <div class="highlight-box info">
+                    <strong>人机协同关键点：</strong>
+                    <ul style="margin-top: 15px; padding-left: 20px;">
+                        <li><strong>PRD 评审</strong>：Product Agent 生成 PRD → 产品经理审核确认 → 进入下一阶段</li>
+                        <li><strong>架构评审</strong>：Architect Agent 输出方案 → 架构师委员会审批 → 修改迭代</li>
+                        <li><strong>代码审查</strong>：Dev Agents 完成编码 → Reviewer Agent 初审 → Tech Lead 终审</li>
+                        <li><strong>上线审批</strong>：DevOps Agent 准备就绪 → 变更管理委员会 CAB 审批 → 灰度发布</li>
+                    </ul>
+                </div>
+
+                <h3>9.3 KubeSphere 多环境管理</h3>
+                <div class="code-block">
+                    <code># KubeSphere 多环境 DevOps 项目结构
+
+devops-project/
+├── pipelines/
+│   ├── dev-pipeline          # 开发环境流水线（自动触发）
+│   ├── staging-pipeline      # 预发环境流水线（人工确认）
+│   └── prod-pipeline         # 生产环境流水线（CAB 审批）
+├── credentials/
+│   ├── git-credentials       # Git 仓库凭证
+│   ├── harbor-credentials    # 镜像仓库凭证
+│   ├── kubeconfig-dev        # 开发集群配置
+│   ├── kubeconfig-staging    # 预发集群配置
+│   └── kubeconfig-prod       # 生产集群配置
+├── artifacts/
+│   ├── backend-images        # 后端镜像
+│   ├── frontend-images       # 前端镜像
+│   └── helm-charts           # Helm Chart 包
+└── environments/
+    ├── dev/
+    │   ├── namespace: myapp-dev
+    │   ├── replicas: 1
+    │   └── resources: limited
+    ├── staging/
+    │   ├── namespace: myapp-staging
+    │   ├── replicas: 2
+    │   └── resources: standard
+    └── prod/
+        ├── namespace: myapp-prod
+        ├── replicas: 3+
+        └── resources: high-availability
+
+# 环境 Promotion 流程
+dev → (自动化测试通过) → staging → (人工验收) → prod</code>
+                </div>
+
+                <h3>9.4 监控告警集成</h3>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>📈 可观测性栈</h4>
+                        <ul>
+                            <li><strong>Metrics</strong>：Prometheus + Grafana</li>
+                            <li><strong>Logging</strong>：Elasticsearch + Fluentbit + Kibana</li>
+                            <li><strong>Tracing</strong>：Jaeger/OpenTelemetry</li>
+                            <li><strong>Alerting</strong>：Alertmanager + 钉钉/企微</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>🔔 关键告警规则</h4>
+                        <ul>
+                            <li>Pod 重启次数 > 3 次/5 分钟</li>
+                            <li>CPU/Memory 使用率 > 85%</li>
+                            <li>Pipeline 构建失败率 > 10%</li>
+                            <li>部署回滚触发</li>
+                            <li>安全漏洞扫描发现 Critical</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p><strong>Jenkins + Docker + K8s + KubeSphere 工具链版本选型与部署架构设计</strong></p>
+            <p>编制日期：2026 年 3 月 12 日 | 版本：v1.0</p>
+            <p style="margin-top: 20px; font-size: 0.9em; opacity: 0.7;">
+                本报告基于公开资料和官方文档编制，供企业级生产环境参考。<br>
+                实际部署前请根据具体业务需求进行调整，并进行充分的测试验证。<br>
+                Jenkins、Docker、Kubernetes、KubeSphere 分别是各自公司的商标。
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 章节动画
+        const sections = document.querySelectorAll('section');
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, { threshold: 0.1 });
+
+        sections.forEach(section => {
+            section.style.opacity = '0';
+            section.style.transform = 'translateY(20px)';
+            section.style.transition = 'all 0.6s ease';
+            observer.observe(section);
+        });
+    </script>
+</body>
+</html>

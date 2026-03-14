@@ -1,0 +1,1636 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent 设计模式与工程化最佳实践</title>
+    <style>
+        :root {
+            --pattern-blue: #0284c7;
+            --engine-purple: #a855f7;
+            --deploy-gold: #ca8a04;
+            --test-green: #16a34a;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-pattern: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--pattern-blue), var(--engine-purple), var(--deploy-gold), var(--test-green)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-pattern);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: patternRotate 80s linear infinite;
+        }
+        
+        @keyframes patternRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .pattern-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 18px 40px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 1.15em;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-design {
+            background: linear-gradient(135deg, var(--pattern-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-engineering {
+            background: linear-gradient(135deg, var(--engine-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-deploy {
+            background: linear-gradient(135deg, var(--deploy-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-test {
+            background: linear-gradient(135deg, var(--test-green), #4ade80);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.8em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 30px;
+            text-shadow: 0 0 60px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 3px;
+            line-height: 1.35;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 2em;
+            color: var(--text-secondary);
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .pattern-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 25px;
+            margin: 60px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .pattern-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 35px 45px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 200px;
+        }
+        
+        .pattern-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .pattern-box.design {
+            border-color: var(--pattern-blue);
+            box-shadow: 0 15px 40px rgba(2, 132, 199, 0.35);
+        }
+        
+        .pattern-box.engineering {
+            border-color: var(--engine-purple);
+            box-shadow: 0 15px 40px rgba(168, 85, 247, 0.35);
+        }
+        
+        .pattern-box.deploy {
+            border-color: var(--deploy-gold);
+            box-shadow: 0 15px 40px rgba(202, 138, 4, 0.35);
+        }
+        
+        .pattern-box.test {
+            border-color: var(--test-green);
+            box-shadow: 0 15px 40px rgba(22, 163, 74, 0.35);
+        }
+        
+        .pattern-label {
+            font-size: 1.8em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 12px;
+        }
+        
+        .pattern-box.design .pattern-label { color: var(--pattern-blue); }
+        .pattern-box.engineering .pattern-label { color: var(--engine-purple); }
+        .pattern-box.deploy .pattern-label { color: var(--deploy-gold); }
+        .pattern-box.test .pattern-label { color: var(--test-green); }
+        
+        .pattern-desc {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.7;
+        }
+        
+        .pattern-arrow {
+            font-size: 2em;
+            color: var(--deploy-gold);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 35px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 60px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px 35px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px var(--border-glow);
+            border-color: var(--pattern-blue);
+        }
+        
+        .meta-label {
+            color: var(--pattern-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 10px;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 1.05em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 60px 55px;
+            margin-bottom: 80px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 50px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 3em;
+            color: var(--pattern-blue);
+            margin-bottom: 50px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 30px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 50px 0 30px 0;
+            padding: 25px 35px;
+            border-radius: 18px;
+            font-size: 1.7em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--pattern-blue); 
+            color: var(--pattern-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--engine-purple); 
+            color: var(--engine-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--deploy-gold); 
+            color: var(--deploy-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--test-green); 
+            color: var(--test-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: #ec4899; 
+            color: #ec4899;
+            background: linear-gradient(90deg, rgba(236, 72, 153, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 20px;
+        }
+        
+        .toc-list li {
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 1.05em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 18px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--pattern-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--pattern-blue);
+            text-shadow: 0 0 12px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 70px 60px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 25px 80px var(--border-glow), 0 0 60px rgba(2, 132, 199, 0.2);
+            border-color: var(--pattern-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.8em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 45px;
+            border-bottom: 4px solid var(--pattern-blue);
+            padding-bottom: 25px;
+            font-weight: 800;
+            text-shadow: 0 0 25px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 50px 0;
+        }
+        
+        .section-title {
+            font-size: 2em;
+            color: var(--pattern-blue);
+            margin-bottom: 30px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--engine-purple);
+            font-size: 0.7em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.2;
+            font-size: 1.1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 30px;
+        }
+        
+        .pattern-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin: 50px 0;
+        }
+        
+        .pattern-box-card {
+            padding: 38px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .pattern-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .pattern-box-card.design {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--pattern-blue);
+            box-shadow: 0 8px 35px rgba(2, 132, 199, 0.3);
+        }
+        
+        .pattern-box-card.engineering {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--engine-purple);
+            box-shadow: 0 8px 35px rgba(168, 85, 247, 0.3);
+        }
+        
+        .pattern-box-card.deploy {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--deploy-gold);
+            box-shadow: 0 8px 35px rgba(202, 138, 4, 0.3);
+        }
+        
+        .pattern-box-card.test {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--test-green);
+            box-shadow: 0 8px 35px rgba(22, 163, 74, 0.3);
+        }
+        
+        .pattern-box-title {
+            font-size: 1.75em;
+            font-weight: 800;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .pattern-box-card.design .pattern-box-title { color: var(--pattern-blue); }
+        .pattern-box-card.engineering .pattern-box-title { color: var(--engine-purple); }
+        .pattern-box-card.deploy .pattern-box-title { color: var(--deploy-gold); }
+        .pattern-box-card.test .pattern-box-title { color: var(--test-green); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 45px 50px;
+            border-left: 8px solid var(--pattern-blue);
+            border-radius: 20px;
+            margin: 45px 0;
+            box-shadow: 0 8px 35px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--pattern-blue);
+            font-weight: 800;
+        }
+        
+        .timeline-box {
+            background: linear-gradient(135deg, #0d0d14, #1a1a2e);
+            border: 3px solid var(--border-glow);
+            border-radius: 20px;
+            padding: 45px;
+            margin: 50px 0;
+            box-shadow: inset 0 0 40px rgba(2, 132, 199, 0.1);
+        }
+        
+        .timeline-title {
+            color: var(--pattern-blue);
+            margin-bottom: 35px;
+            font-weight: 800;
+            font-size: 1.7em;
+            text-align: center;
+            font-family: 'Georgia', serif;
+        }
+        
+        .timeline-item {
+            display: flex;
+            gap: 25px;
+            margin: 30px 0;
+            padding: 25px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            border-left: 4px solid;
+        }
+        
+        .timeline-item.pattern { border-color: var(--pattern-blue); }
+        .timeline-item.engineering { border-color: var(--engine-purple); }
+        .timeline-item.modern { border-color: var(--deploy-gold); }
+        
+        .timeline-year {
+            font-weight: 800;
+            font-size: 1.25em;
+            min-width: 120px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .timeline-item.pattern .timeline-year { color: var(--pattern-blue); }
+        .timeline-item.engineering .timeline-year { color: var(--engine-purple); }
+        .timeline-item.modern .timeline-year { color: var(--deploy-gold); }
+        
+        .timeline-content {
+            color: var(--text-primary);
+            line-height: 1.9;
+        }
+        
+        .formal-diagram {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 3px solid var(--border-glow);
+            border-radius: 25px;
+            padding: 45px;
+            margin: 50px 0;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(2, 132, 199, 0.2);
+        }
+        
+        .formal-title {
+            color: var(--pattern-blue);
+            margin-bottom: 35px;
+            font-weight: 800;
+            font-size: 1.6em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .formal-diagram pre {
+            text-align: left;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.9em;
+            line-height: 1.8;
+            overflow-x: auto;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 45px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 18px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 18px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--pattern-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            font-size: 0.9em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--pattern-blue);
+            padding-left: 35px;
+            margin: 40px 0;
+            color: var(--text-secondary);
+            font-size: 1.15em;
+            font-family: 'Georgia', serif;
+            line-height: 2.1;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 20px;
+            color: var(--engine-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 30px 0;
+            padding-left: 45px;
+        }
+        
+        li {
+            margin-bottom: 18px;
+            line-height: 2.1;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 80px 50px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 120px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 40px 25px;
+            }
+            
+            .book-title {
+                font-size: 2.3em;
+            }
+            
+            .pattern-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .pattern-diagram {
+                flex-direction: column;
+            }
+            
+            .pattern-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="pattern-spectrum">
+                <div class="spectrum-item spectrum-design">🔵 设计</div>
+                <div class="spectrum-item spectrum-engineering">🟣 工程</div>
+                <div class="spectrum-item spectrum-deploy">🟡 部署</div>
+                <div class="spectrum-item spectrum-test">🟢 测试</div>
+            </div>
+            <h1 class="book-title">Agent 设计模式与工程化最佳实践</h1>
+            <h2 class="book-subtitle">从 ReAct 到生产级系统的完整指南</h2>
+            
+            <div class="pattern-diagram">
+                <div class="pattern-box design">
+                    <span class="pattern-label">🔵 设计</span>
+                    <span class="pattern-desc">ReAct 模式<br>规划器模式<br>工具使用</span>
+                </div>
+                <div class="pattern-arrow">→</div>
+                <div class="pattern-box engineering">
+                    <span class="pattern-label">🟣 工程</span>
+                    <span class="pattern-desc">上下文工程<br>状态管理<br>错误处理</span>
+                </div>
+                <div class="pattern-arrow">→</div>
+                <div class="pattern-box deploy">
+                    <span class="pattern-label">🟡 部署</span>
+                    <span class="pattern-desc">容器化<br>扩缩容<br>监控告警</span>
+                </div>
+                <div class="pattern-arrow">→</div>
+                <div class="pattern-box test">
+                    <span class="pattern-label">🟢 测试</span>
+                    <span class="pattern-desc">单元测试<br>E2E 测试<br>评估基准</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">工程化版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十五章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">设计模式·软件工程·MLOps·DevOps</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 Agent 设计模式基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：Agent 工程化——从研究到生产</a></li>
+                <li><a href="#chapter1">第 1 章 设计模式概述</a></li>
+                <li><a href="#chapter2">第 2 章 Agent 核心组件模型</a></li>
+                <li><a href="#chapter3">第 3 章 12-Factor Agent 原则</a></li>
+                
+                <div class="toc-part part2">第二编 核心设计模式</div>
+                <li><a href="#chapter4">第 4 章 ReAct 模式：推理 + 行动</a></li>
+                <li><a href="#chapter5">第 5 章 规划器模式：任务分解与调度</a></li>
+                <li><a href="#chapter6">第 6 章 工具使用模式</a></li>
+                <li><a href="#chapter7">第 7 章 记忆模式：短期与长期记忆</a></li>
+                <li><a href="#chapter8">第 8 章 多 Agent 协作模式</a></li>
+                
+                <div class="toc-part part3">第三编 工程化实践</div>
+                <li><a href="#chapter9">第 9 章 上下文工程最佳实践</a></li>
+                <li><a href="#chapter10">第 10 章 状态管理与持久化</a></li>
+                <li><a href="#chapter11">第 11 章 错误处理与恢复机制</a></li>
+                <li><a href="#chapter12">第 12 章 性能优化与成本控制</a></li>
+                
+                <div class="toc-part part4">第四编 测试与部署</div>
+                <li><a href="#chapter13">第 13 章 Agent 测试策略</a></li>
+                <li><a href="#chapter14">第 14 章 部署与运维</a></li>
+                <li><a href="#chapter15">第 15 章 监控、日志与可观测性</a></li>
+                
+                <div class="toc-part part5">第五编 案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与最佳实践演进</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 50px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A Agent 框架对比</a></li>
+                <li><a href="#appendix-b">附录 B 检查清单与模板</a></li>
+                <li><a href="#references">参考文献与资源（2023-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：Agent 工程化——从研究到生产</h2>
+            <div class="content">
+                <p>2023 年以来，大语言模型（LLM）驱动的 Agent 系统从学术研究迅速走向生产应用。然而，从 Demo 到生产系统的跨越并非易事。许多团队在构建 Agent 时遇到了可靠性、可扩展性、可维护性等工程挑战。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>成功的 Agent 系统需要系统化的设计模式和工程化实践。设计模式提供经过验证的解决方案模板，工程化实践确保系统在生产环境中的可靠性、可扩展性和可维护性。只有将两者结合，才能构建真正可用的生产级 Agent 系统。</p>
+                </div>
+                
+                <h3 class="section-title">Agent 工程化的挑战</h3>
+                
+                <div class="timeline-box">
+                    <h4 class="timeline-title">从研究到生产的挑战</h4>
+                    <div class="timeline-item pattern">
+                        <div class="timeline-year">可靠性</div>
+                        <div class="timeline-content"><strong>问题：</strong>LLM 输出不稳定，可能产生幻觉或错误<br><strong>解决：</strong>验证机制、回退策略、人工审核</div>
+                    </div>
+                    <div class="timeline-item engineering">
+                        <div class="timeline-year">可扩展性</div>
+                        <div class="timeline-content"><strong>问题：</strong>并发请求增加，响应时间变长<br><strong>解决：</strong>异步处理、缓存策略、负载均衡</div>
+                    </div>
+                    <div class="timeline-item modern">
+                        <div class="timeline-year">可观测性</div>
+                        <div class="timeline-content"><strong>问题：</strong>黑箱决策，难以调试和监控<br><strong>解决：</strong>详细日志、追踪系统、指标监控</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12-Factor Agent 原则</h3>
+                
+                <p>借鉴 12-Factor App 方法论，我们提出 12-Factor Agent 原则，指导生产级 Agent 系统设计：</p>
+                
+                <div class="pattern-card">
+                    <div class="pattern-box-card design">
+                        <h3 class="pattern-box-title">🔵 代码版本控制</h3>
+                        <p>Agent 逻辑、提示词、配置都应版本控制，支持回滚和审计。</p>
+                    </div>
+                    
+                    <div class="pattern-box-card engineering">
+                        <h3 class="pattern-box-title">🟣 显式声明依赖</h3>
+                        <p>明确声明 LLM 模型、工具、API 等依赖，避免隐式耦合。</p>
+                    </div>
+                    
+                    <div class="pattern-box-card deploy">
+                        <h3 class="pattern-box-title">🟡 配置与代码分离</h3>
+                        <p>提示词模板、模型参数、API 密钥等配置应独立管理。</p>
+                    </div>
+                    
+                    <div class="pattern-box-card test">
+                        <h3 class="pattern-box-title">🟢 后端服务化</h3>
+                        <p>LLM 调用、工具执行应作为后端服务，支持独立扩缩容。</p>
+                    </div>
+                </div>
+                
+                <div class="quote">
+                    "设计模式不是银弹，而是经过验证的解决方案模板。工程化实践不是束缚，而是确保系统可靠运行的保障。只有将两者结合，才能构建真正可用的生产级 Agent 系统。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 Agent 设计模式基础</strong>：介绍设计模式概念、Agent 核心组件模型、12-Factor Agent 原则等基础知识。</p>
+                
+                <p><strong>第二编 核心设计模式</strong>：深入探讨 ReAct、规划器、工具使用、记忆、多 Agent 协作等核心设计模式的实现与应用。</p>
+                
+                <p><strong>第三编 工程化实践</strong>：涵盖上下文工程、状态管理、错误处理、性能优化等生产环境中的关键实践。</p>
+                
+                <p><strong>第四编 测试与部署</strong>：讲解 Agent 测试策略、部署运维、监控日志等确保系统稳定运行的工程实践。</p>
+                
+                <p><strong>第五编 案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从 ReAct 模式的推理行动循环，到规划器模式的任务分解，从上下文工程的精细设计，到监控告警的全面覆盖，本书将带你走完从 Demo 到生产系统的完整旅程。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 60px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在生产一线构建 Agent 系统的工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 4 章 -->
+        <div class="chapter" id="chapter4">
+            <h2 class="chapter-title">第 4 章 ReAct 模式：推理 + 行动</h2>
+            <div class="content">
+                <h3 class="section-title">4.1 ReAct 模式概述</h3>
+                
+                <p>ReAct（Reason + Act）模式是 LLM Agent 最核心的设计模式之一，由 Yao et al. (2023) 提出。该模式将推理（Reasoning）和行动（Acting）交替进行，使 Agent 能够像人类一样思考后行动，行动后观察，观察后再思考。</p>
+                
+                <div class="highlight">
+                    <p><strong>ReAct 核心公式：</strong>Thought → Action → Observation → (Repeat | Final Answer)</p>
+                </div>
+                
+                <div class="section">
+                    <h4>ReAct 执行流程</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">ReAct 模式执行流程图</div>
+                        <pre>
+┌─────────────────────────────────────────────────────────────┐
+│                    ReAct 执行循环                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  输入：任务描述                                              │
+│         ↓                                                   │
+│  ┌─────────────┐                                           │
+│  │  Thought    │  分析当前状态，推理下一步行动              │
+│  │  (推理)     │  示例："我需要先搜索相关信息"              │
+│  └──────┬──────┘                                           │
+│         │                                                   │
+│         ↓                                                   │
+│  ┌─────────────┐                                           │
+│  │   Action    │  执行具体行动（调用工具/API）              │
+│  │  (行动)     │  示例：Search("量子计算最新进展")          │
+│  └──────┬──────┘                                           │
+│         │                                                   │
+│         ↓                                                   │
+│  ┌─────────────┐                                           │
+│  │ Observation │  获取行动结果                              │
+│  │  (观察)     │  示例："2026 年 3 月最新论文显示..."        │
+│  └──────┬──────┘                                           │
+│         │                                                   │
+│         ↓                                                   │
+│  ┌─────────────┐                                           │
+│  │   判断      │  任务是否完成？                            │
+│  └──────┬──────┘                                           │
+│         │                                                   │
+│    ┌────┴────┐                                             │
+│    │         │                                             │
+│   是        否                                             │
+│    │         │                                             │
+│    ↓         └──────────┐                                  │
+│  ┌─────────────┐       │                                  │
+│  │ Final Answer│       │                                  │
+│  │ (最终答案)  │       │                                  │
+│  └─────────────┘       │                                  │
+│                        │                                  │
+│                        └──────────→ 返回 Thought           │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+关键特性：
+  • 推理透明：每一步思考都记录在案
+  • 行动可解释：行动基于明确的推理
+  • 支持多步：可以执行任意次数的循环
+  • 易于调试：完整的执行轨迹
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.2 ReAct 模式实现</h3>
+                
+                <div class="section">
+                    <h4>代码实现示例</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">ReAct 模式 Python 实现</div>
+                        <pre>
+class ReActAgent:
+    def __init__(self, llm, tools):
+        self.llm = llm
+        self.tools = {tool.name: tool for tool in tools}
+    
+    def run(self, task, max_iterations=10):
+        """执行 ReAct 循环"""
+        history = []
+        
+        for i in range(max_iterations):
+            # Step 1: Thought (推理)
+            thought = self._generate_thought(task, history)
+            history.append(f"Thought {i+1}: {thought}")
+            
+            # Step 2: Action (行动)
+            action, action_input = self._parse_action(thought)
+            
+            if action == "Final Answer":
+                return action_input
+            
+            history.append(f"Action {i+1}: {action}({action_input})")
+            
+            # Step 3: Observation (观察)
+            observation = self._execute_action(action, action_input)
+            history.append(f"Observation {i+1}: {observation}")
+        
+        raise Exception("达到最大迭代次数")
+    
+    def _generate_thought(self, task, history):
+        """生成推理步骤"""
+        prompt = f"""
+任务：{task}
+历史：
+{chr(10).join(history)}
+
+请思考下一步应该做什么。如果需要调用工具，请使用以下格式：
+Action: tool_name
+Action Input: query
+
+如果已有足够信息回答问题，请使用：
+Final Answer: 你的答案
+
+Thought: """
+        
+        response = self.llm.generate(prompt)
+        return response
+    
+    def _parse_action(self, thought):
+        """解析行动"""
+        if "Final Answer:" in thought:
+            return "Final Answer", thought.split("Final Answer:")[1].strip()
+        
+        action_line = [l for l in thought.split('\n') if l.startswith("Action:")][0]
+        action = action_line.replace("Action:", "").strip()
+        
+        input_line = [l for l in thought.split('\n') if l.startswith("Action Input:")][0]
+        action_input = input_line.replace("Action Input:", "").strip()
+        
+        return action, action_input
+    
+    def _execute_action(self, action, action_input):
+        """执行行动"""
+        if action not in self.tools:
+            return f"错误：未知工具 {action}"
+        
+        try:
+            result = self.tools[action].run(action_input)
+            return str(result)
+        except Exception as e:
+            return f"错误：{str(e)}"
+
+# 使用示例
+tools = [SearchTool(), CalculatorTool(), CodeExecutorTool()]
+agent = ReActAgent(llm=gpt4, tools=tools)
+
+result = agent.run("2026 年诺贝尔物理学奖得主是谁？他们的研究领域是什么？")
+print(result)
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.3 ReAct 模式变体</h3>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>变体名称</th>
+                            <th>核心改进</th>
+                            <th>适用场景</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>ReAct + ToT</strong><br>(Tree of Thoughts)</td>
+                            <td>探索多条推理路径，选择最优路径</td>
+                            <td>复杂推理任务，需要多方案比较</td>
+                        </tr>
+                        <tr>
+                            <td><strong>ReAct + Self-Refine</strong></td>
+                            <td>执行后自我反思，优化后续行动</td>
+                            <td>需要持续改进的迭代任务</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Parallel ReAct</strong></td>
+                            <td>并行执行多个独立行动</td>
+                            <td>可并行化的子任务</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Hierarchical ReAct</strong></td>
+                            <td>分层 ReAct，高层规划 + 低层执行</td>
+                            <td>长周期、多层次任务</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">4.4 最佳实践</h3>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>Thought 设计</strong>：Thought 应清晰表达推理过程，避免模糊表述</li>
+                    <li><strong>Action 规范化</strong>：使用结构化格式（JSON）定义 Action，便于解析</li>
+                    <li><strong>Observation 精简</strong>：Observation 应简洁，避免信息过载</li>
+                    <li><strong>迭代限制</strong>：设置 max_iterations 防止无限循环</li>
+                    <li><strong>错误处理</strong>：Action 执行失败时，应有回退策略</li>
+                    <li><strong>日志记录</strong>：完整记录 Thought-Action-Observation 轨迹，便于调试</li>
+                </ul>
+                
+                <h3 class="section-title">4.5 本章小结</h3>
+                <p>本章深入探讨了 ReAct 模式。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>ReAct 核心：Thought → Action → Observation 循环</li>
+                    <li>实现要点：推理生成、行动解析、工具执行、判断终止</li>
+                    <li>变体扩展：ReAct+ToT、ReAct+Self-Refine、Parallel ReAct、Hierarchical ReAct</li>
+                    <li>最佳实践：Thought 设计、Action 规范化、Observation 精简、迭代限制、错误处理、日志记录</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 9 章 -->
+        <div class="chapter" id="chapter9">
+            <h2 class="chapter-title">第 9 章 上下文工程最佳实践</h2>
+            <div class="content">
+                <h3 class="section-title">9.1 上下文工程概述</h3>
+                
+                <p>上下文工程（Context Engineering）是 2025 年兴起的关键实践，指结构化设计 LLM 所需的一切：提示词、记忆、工具、数据，使 Agent 能够可靠地做出智能决策。</p>
+                
+                <div class="highlight">
+                    <p><strong>上下文工程核心：</strong>超越提示工程，设计 Agent 运行的完整环境，而不仅仅是输入问题。包括上下文窗口管理、控制流设计、状态追踪等。</p>
+                </div>
+                
+                <h3 class="section-title">9.2 上下文窗口管理</h3>
+                
+                <div class="section">
+                    <h4>上下文窗口优化策略</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>优先级排序</strong>：系统提示 > 任务描述 > 关键记忆 > 历史对话</li>
+                        <li><strong>动态截断</strong>：根据 token 限制，智能截断低优先级内容</li>
+                        <li><strong>摘要压缩</strong>：对长历史对话进行摘要，保留关键信息</li>
+                        <li><strong>外部记忆</strong>：将非关键信息移至外部记忆系统，按需检索</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>上下文窗口管理实现</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">上下文窗口管理策略</div>
+                        <pre>
+class ContextManager:
+    def __init__(self, max_tokens=128000):
+        self.max_tokens = max_tokens
+        self.context = []
+    
+    def add(self, content, priority="normal"):
+        """添加内容到上下文"""
+        self.context.append({
+            "content": content,
+            "priority": priority,
+            "tokens": self._count_tokens(content)
+        })
+        self._trim_if_needed()
+    
+    def _trim_if_needed(self):
+        """根据优先级截断上下文"""
+        total_tokens = sum(item["tokens"] for item in self.context)
+        
+        if total_tokens > self.max_tokens:
+            # 按优先级排序：system > high > normal > low
+            priority_order = {"system": 0, "high": 1, "normal": 2, "low": 3}
+            self.context.sort(key=lambda x: priority_order[x["priority"]])
+            
+            # 从低优先级开始移除
+            while total_tokens > self.max_tokens and self.context:
+                if self.context[-1]["priority"] == "system":
+                    break  # 不移除系统提示
+                removed = self.context.pop()
+                total_tokens -= removed["tokens"]
+    
+    def get_context(self):
+        """获取当前上下文"""
+        return "\n".join(item["content"] for item in self.context)
+    
+    def _count_tokens(self, text):
+        """估算 token 数（简化版）"""
+        return len(text) // 4  # 粗略估算：1 token ≈ 4 字符
+
+# 使用示例
+manager = ContextManager(max_tokens=8000)
+
+# 添加系统提示（最高优先级）
+manager.add("你是一个专业的研究助手。", priority="system")
+
+# 添加任务描述（高优先级）
+manager.add("任务：分析 2026 年 AI 趋势", priority="high")
+
+# 添加历史对话（普通优先级）
+manager.add("用户：...", priority="normal")
+manager.add("助手：...", priority="normal")
+
+# 添加临时信息（低优先级）
+manager.add("临时计算结果：...", priority="low")
+
+# 自动截断低优先级内容
+current_context = manager.get_context()
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">9.3 控制流设计</h3>
+                
+                <div class="section">
+                    <h4>显式控制流 vs 隐式控制流</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>特性</th>
+                                <th>显式控制流</th>
+                                <th>隐式控制流</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>定义</strong></td>
+                                <td>代码明确定义执行流程</td>
+                                <td>LLM 自主决定执行流程</td>
+                            </tr>
+                            <tr>
+                                <td><strong>可控性</strong></td>
+                                <td>高，流程可预测</td>
+                                <td>低，依赖 LLM 决策</td>
+                            </tr>
+                            <tr>
+                                <td><strong>灵活性</strong></td>
+                                <td>低，需预定义所有路径</td>
+                                <td>高，可适应新情况</td>
+                            </tr>
+                            <tr>
+                                <td><strong>调试难度</strong></td>
+                                <td>低，流程清晰</td>
+                                <td>高，黑箱决策</td>
+                            </tr>
+                            <tr>
+                                <td><strong>适用场景</strong></td>
+                                <td>关键业务逻辑、合规要求</td>
+                                <td>探索性任务、创意生成</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h3 class="section-title">9.4 工具调用规范化</h3>
+                
+                <div class="section">
+                    <h4>工具调用最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>Schema 定义</strong>：使用 JSON Schema 明确定义工具输入输出</li>
+                        <li><strong>类型验证</strong>：调用前验证参数类型和范围</li>
+                        <li><strong>错误处理</strong>：捕获异常，提供有意义的错误信息</li>
+                        <li><strong>超时控制</strong>：设置合理超时，避免长时间阻塞</li>
+                        <li><strong>重试机制</strong>：对临时失败实施指数退避重试</li>
+                        <li><strong>日志记录</strong>：记录工具调用参数、结果、耗时</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">9.5 本章小结</h3>
+                <p>本章探讨了上下文工程最佳实践。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>上下文工程：超越提示工程，设计完整运行环境</li>
+                    <li>上下文窗口管理：优先级排序、动态截断、摘要压缩、外部记忆</li>
+                    <li>控制流设计：显式控制流（高可控）vs 隐式控制流（高灵活）</li>
+                    <li>工具调用规范化：Schema 定义、类型验证、错误处理、超时控制、重试机制、日志记录</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 13 章 -->
+        <div class="chapter" id="chapter13">
+            <h2 class="chapter-title">第 13 章 Agent 测试策略</h2>
+            <div class="content">
+                <h3 class="section-title">13.1 Agent 测试挑战</h3>
+                
+                <p>Agent 系统测试比传统软件更复杂，主要挑战包括：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>非确定性</strong>：LLM 输出具有随机性，相同输入可能产生不同输出</li>
+                    <li><strong>多组件</strong>：LLM、工具、记忆、规划器等多组件交互</li>
+                    <li><strong>长周期</strong>：多步执行，错误可能累积放大</li>
+                    <li><strong>评估困难</strong>：正确答案可能不唯一，需要主观判断</li>
+                </ul>
+                
+                <h3 class="section-title">13.2 测试金字塔</h3>
+                
+                <div class="section">
+                    <h4>Agent 测试金字塔</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">Agent 测试金字塔</div>
+                        <pre>
+                    ╱─────────────╲
+                   ╱   E2E 测试    ╲     10%
+                  ╱  (端到端测试)   ╲    覆盖完整流程
+                 ╱─────────────────╲
+                ╱    集成测试       ╲   20%
+               ╱  (组件交互测试)     ╲  测试组件协作
+              ╱─────────────────────╲
+             ╱      单元测试         ╲  70%
+            ╱    (组件独立测试)       ╲ 测试单个组件
+           ╱─────────────────────────╲
+          
+          测试数量：左多右少
+          执行速度：左快右慢
+          调试难度：左易右难
+          置信度：   左低右高
+
+          推荐比例：
+            • 单元测试：70% - 快速、隔离、确定性
+            • 集成测试：20% - 组件交互、接口验证
+            • E2E 测试：10% - 完整流程、真实场景
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">13.3 单元测试</h3>
+                
+                <div class="section">
+                    <h4>单元测试策略</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>工具测试</strong>：测试每个工具的输入输出、错误处理</li>
+                        <li><strong>提示词测试</strong>：测试提示词模板生成、变量替换</li>
+                        <li><strong>解析器测试</strong>：测试 Action 解析、JSON 解析</li>
+                        <li><strong>记忆测试</strong>：测试记忆存储、检索、更新</li>
+                        <li><strong>规划器测试</strong>：测试任务分解、优先级排序</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>单元测试示例</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">工具单元测试示例</div>
+                        <pre>
+import pytest
+from tools import SearchTool, CalculatorTool
+
+class TestSearchTool:
+    @pytest.fixture
+    def search_tool(self):
+        return SearchTool(api_key="test_key")
+    
+    def test_search_success(self, search_tool):
+        """测试搜索成功"""
+        result = search_tool.run("2026 AI 趋势")
+        assert isinstance(result, str)
+        assert len(result) > 0
+        assert "2026" in result or "AI" in result
+    
+    def test_search_empty_query(self, search_tool):
+        """测试空查询"""
+        with pytest.raises(ValueError, match="查询不能为空"):
+            search_tool.run("")
+    
+    def test_search_timeout(self, search_tool, mocker):
+        """测试超时处理"""
+        mocker.patch("requests.get", side_effect=TimeoutError)
+        result = search_tool.run("测试", timeout=1)
+        assert "超时" in result
+    
+    def test_search_rate_limit(self, search_tool, mocker):
+        """测试速率限制"""
+        mocker.patch("requests.get", side_effect=Exception("429 Too Many Requests"))
+        result = search_tool.run("测试")
+        assert "速率限制" in result
+
+class TestCalculatorTool:
+    @pytest.fixture
+    def calc_tool(self):
+        return CalculatorTool()
+    
+    def test_addition(self, calc_tool):
+        assert calc_tool.run("2 + 2") == "4"
+    
+    def test_division_by_zero(self, calc_tool):
+        result = calc_tool.run("1 / 0")
+        assert "错误" in result
+        assert "除零" in result
+    
+    def test_invalid_expression(self, calc_tool):
+        result = calc_tool.run("abc + def")
+        assert "错误" in result
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">13.4 集成测试</h3>
+                
+                <div class="section">
+                    <h4>集成测试重点</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>组件交互</strong>：测试 LLM 与工具的交互、记忆读写</li>
+                        <li><strong>数据流</strong>：测试数据在组件间的传递和转换</li>
+                        <li><strong>错误传播</strong>：测试错误在组件间的传播和处理</li>
+                        <li><strong>边界条件</strong>：测试边界情况（空输入、大输入、特殊字符）</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">13.5 E2E 测试</h3>
+                
+                <div class="section">
+                    <h4>E2E 测试策略</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>真实场景</strong>：模拟真实用户任务，测试完整流程</li>
+                        <li><strong>黄金数据集</strong>：构建高质量测试用例集，包含输入和期望输出</li>
+                        <li><strong>评估指标</strong>：定义客观评估指标（准确率、完成率、耗时）</li>
+                        <li><strong>人工评估</strong>：对主观任务进行人工评分</li>
+                        <li><strong>回归测试</strong>：每次更新后运行 E2E 测试，防止回归</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">13.6 评估基准</h3>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>基准名称</th>
+                            <th>测试内容</th>
+                            <th>适用场景</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>AgentBench</strong></td>
+                            <td>多领域 Agent 能力评估</td>
+                            <td>通用 Agent 评估</td>
+                        </tr>
+                        <tr>
+                            <td><strong>WebArena</strong></td>
+                            <td>Web 环境任务完成能力</td>
+                            <td>Web 自动化 Agent</td>
+                        </tr>
+                        <tr>
+                            <td><strong>GAIA</strong></td>
+                            <td>复杂推理与工具使用</td>
+                            <td>推理型 Agent</td>
+                        </tr>
+                        <tr>
+                            <td><strong>SWE-bench</strong></td>
+                            <td>软件工程任务</td>
+                            <td>代码 Agent</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">13.7 本章小结</h3>
+                <p>本章探讨了 Agent 测试策略。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>测试挑战：非确定性、多组件、长周期、评估困难</li>
+                    <li>测试金字塔：单元测试 70%、集成测试 20%、E2E 测试 10%</li>
+                    <li>单元测试：工具、提示词、解析器、记忆、规划器</li>
+                    <li>集成测试：组件交互、数据流、错误传播、边界条件</li>
+                    <li>E2E 测试：真实场景、黄金数据集、评估指标、人工评估、回归测试</li>
+                    <li>评估基准：AgentBench、WebArena、GAIA、SWE-bench</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 17 章 -->
+        <div class="chapter" id="chapter17">
+            <h2 class="chapter-title">第 17 章 未来趋势与最佳实践演进</h2>
+            <div class="content">
+                <h3 class="section-title">17.1 技术趋势</h3>
+                
+                <div class="section">
+                    <h4>2026-2028 年技术趋势</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>多模态 Agent</strong>：整合视觉、听觉、语言的多模态感知与行动</li>
+                        <li><strong>具身 Agent</strong>：与物理世界交互，机器人应用</li>
+                        <li><strong>社会 Agent</strong>：多 Agent 协作、社会推理、心理理论</li>
+                        <li><strong>情感 Agent</strong>：情感识别、共情能力、情绪调节</li>
+                        <li><strong>自主 Agent</strong>：更高程度的自主性，减少人工干预</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">17.2 工程实践演进</h3>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>领域</th>
+                            <th>当前实践（2025）</th>
+                            <th>未来实践（2027）</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>开发流程</strong></td>
+                            <td>手工编写提示词和工具</td>
+                            <td>自动化提示优化、工具发现</td>
+                        </tr>
+                        <tr>
+                            <td><strong>测试</strong></td>
+                            <td>手工编写测试用例</td>
+                            <td>AI 生成测试、自动评估</td>
+                        </tr>
+                        <tr>
+                            <td><strong>部署</strong></td>
+                            <td>容器化部署</td>
+                            <td>Serverless、边缘部署</td>
+                        </tr>
+                        <tr>
+                            <td><strong>监控</strong></td>
+                            <td>基础指标监控</td>
+                            <td>AI 异常检测、预测性维护</td>
+                        </tr>
+                        <tr>
+                            <td><strong>安全</strong></td>
+                            <td>基础输入验证</td>
+                            <td>形式化验证、对抗训练</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">17.3 最佳实践清单</h3>
+                
+                <div class="section">
+                    <h4>生产级 Agent 检查清单</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>设计阶段</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 选择合适的设计模式（ReAct、规划器等）</li>
+                                <li>✓ 定义清晰的工具接口和 Schema</li>
+                                <li>✓ 设计记忆策略（短期/长期）</li>
+                                <li>✓ 规划错误处理和恢复机制</li>
+                            </ul>
+                        </li>
+                        <li><strong>开发阶段</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 实施上下文工程最佳实践</li>
+                                <li>✓ 编写单元测试（覆盖率>70%）</li>
+                                <li>✓ 实施日志记录和追踪</li>
+                                <li>✓ 进行性能基准测试</li>
+                            </ul>
+                        </li>
+                        <li><strong>部署阶段</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 容器化打包</li>
+                                <li>✓ 配置 CI/CD 流水线</li>
+                                <li>✓ 设置监控告警</li>
+                                <li>✓ 制定回滚计划</li>
+                            </ul>
+                        </li>
+                        <li><strong>运维阶段</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 持续监控关键指标</li>
+                                <li>✓ 定期分析日志和追踪</li>
+                                <li>✓ 收集用户反馈</li>
+                                <li>✓ 持续优化性能和成本</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 60px; border-left-color: var(--pattern-blue);">
+                    "从 ReAct 模式的推理行动循环，到规划器模式的任务分解，从上下文工程的精细设计，到监控告警的全面覆盖，Agent 工程化是一场从研究到生产的深刻变革。未来的 Agent 系统将更加智能、更加可靠、更加普及。这不仅是技术的进步，更是软件工程范式的演进。"
+                    <div class="quote-author">—— 全书结语</div>
+                </div>
+                
+                <h3 class="section-title">17.4 本章小结</h3>
+                <p>本章展望了未来趋势。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>技术趋势：多模态、具身、社会、情感、自主 Agent</li>
+                    <li>工程实践演进：自动化开发、AI 测试、Serverless 部署、AI 监控、形式化安全</li>
+                    <li>最佳实践清单：设计、开发、部署、运维四阶段检查清单</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2023-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">设计模式与架构</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;">
+                    <li>Yao, S., et al. (2023). "ReAct: Synergizing Reasoning and Acting." ICLR.</li>
+                    <li>Wei, J., et al. (2022). "Chain-of-Thought Prompting." NeurIPS.</li>
+                    <li>Xi, Z., et al. (2025). "The Rise and Potential of Large Language Model Based Agents." Science China Information Sciences.</li>
+                </ol>
+                
+                <h3 class="section-title">工程化实践</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="4">
+                    <li>Kubiya.ai (2025). "Context Engineering for Reliable AI Agents: 2025 Guide."</li>
+                    <li>Microsoft Azure (2025). "Agent Factory: Top 5 Agent Observability Best Practices."</li>
+                    <li>ZenML (2024). "LLM Agents in Production: Architectures, Challenges, and Best Practices."</li>
+                </ol>
+                
+                <h3 class="section-title">测试与评估</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="7">
+                    <li>Confident AI (2025). "LLM Agent Evaluation: Complete Guide."</li>
+                    <li>AgentBench Team (2023). "AgentBench: Evaluating LLM Agents on Multi-turn Tasks."</li>
+                    <li>WebArena Team (2023). "WebArena: A Realistic Web Environment for Agent Evaluation."</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.5em; margin-bottom: 25px; color: var(--pattern-blue); font-weight: 800; font-family: 'Georgia', serif;">Agent 设计模式与工程化最佳实践</p>
+                <p style="font-size: 1.2em; margin-bottom: 15px; font-style: italic;">从 ReAct 到生产级系统的完整指南</p>
+                <p>© 2026 超级代码智能体 | 工程化版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 35px; font-size: 1em; line-height: 2.0;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="pattern-spectrum" style="margin-top: 50px;">
+                    <div class="spectrum-item spectrum-design">🔵 设计</div>
+                    <div class="spectrum-item spectrum-engineering">🟣 工程</div>
+                    <div class="spectrum-item spectrum-deploy">🟡 部署</div>
+                    <div class="spectrum-item spectrum-test">🟢 测试</div>
+                </div>
+                <p style="margin-top: 50px; font-size: 0.95em; color: var(--text-secondary);">
+                    谨以此书献给所有在生产一线构建 Agent 系统的工程师们<br>
+                    从 2023 年 ReAct 提出到 2026 年生产级系统普及<br>
+                    3 年探索，设计模式与工程化——从 Demo 到生产
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢 Agent Design Patterns & Engineering');
+        console.log('📚 From ReAct to Production Systems (2023-2026)');
+        console.log('✨ 3 Years of Agent Engineering Evolution');
+        console.log('🛠️ Design Patterns + Best Practices = Reliable Agents');
+    </script>
+</body>
+</html>

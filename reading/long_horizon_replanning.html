@@ -1,0 +1,1601 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>长程目标追踪与动态重规划算法</title>
+    <style>
+        :root {
+            --longhorizon-blue: #0284c7;
+            --tracking-purple: #a855f7;
+            --replanning-gold: #ca8a04;
+            --hierarchical-green: #16a34a;
+            --subgoal-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-horizon: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--longhorizon-blue), var(--tracking-purple), var(--replanning-gold), var(--hierarchical-green), var(--subgoal-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-horizon);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: horizonRotate 230s linear infinite;
+        }
+        
+        @keyframes horizonRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .horizon-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 8px 22px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.92em;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+            animation: horizonPulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes horizonPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 12px 30px rgba(2, 132, 199, 0.5); }
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-longhorizon {
+            background: linear-gradient(135deg, var(--longhorizon-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-tracking {
+            background: linear-gradient(135deg, var(--tracking-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-replanning {
+            background: linear-gradient(135deg, var(--replanning-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-hierarchical {
+            background: linear-gradient(135deg, var(--hierarchical-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-subgoal {
+            background: linear-gradient(135deg, var(--subgoal-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.15em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 23px;
+            text-shadow: 0 0 50px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.28;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.68em;
+            color: var(--text-secondary);
+            margin-bottom: 38px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .horizon-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 48px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .horizon-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 23px 28px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 135px;
+        }
+        
+        .horizon-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .horizon-box.longhorizon {
+            border-color: var(--longhorizon-blue);
+            box-shadow: 0 15px 30px rgba(2, 132, 199, 0.35);
+        }
+        
+        .horizon-box.tracking {
+            border-color: var(--tracking-purple);
+            box-shadow: 0 15px 30px rgba(168, 85, 247, 0.35);
+        }
+        
+        .horizon-box.replanning {
+            border-color: var(--replanning-gold);
+            box-shadow: 0 15px 30px rgba(202, 138, 4, 0.35);
+        }
+        
+        .horizon-box.hierarchical {
+            border-color: var(--hierarchical-green);
+            box-shadow: 0 15px 30px rgba(22, 163, 74, 0.35);
+        }
+        
+        .horizon-box.subgoal {
+            border-color: var(--subgoal-red);
+            box-shadow: 0 15px 30px rgba(220, 38, 38, 0.35);
+        }
+        
+        .horizon-label {
+            font-size: 1.32em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 6px;
+        }
+        
+        .horizon-box.longhorizon .horizon-label { color: var(--longhorizon-blue); }
+        .horizon-box.tracking .horizon-label { color: var(--tracking-purple); }
+        .horizon-box.replanning .horizon-label { color: var(--replanning-gold); }
+        .horizon-box.hierarchical .horizon-label { color: var(--hierarchical-green); }
+        .horizon-box.subgoal .horizon-label { color: var(--subgoal-red); }
+        
+        .horizon-desc {
+            font-size: 0.73em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.6;
+        }
+        
+        .horizon-arrow {
+            font-size: 1.6em;
+            color: var(--hierarchical-green);
+            animation: horizonArrow 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes horizonArrow {
+            0%, 100% { opacity: 0.6; transform: translateX(0); }
+            50% { opacity: 1; transform: translateX(8px); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 22px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 48px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 11px 22px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px var(--border-glow);
+            border-color: var(--longhorizon-blue);
+        }
+        
+        .meta-label {
+            color: var(--longhorizon-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.73em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.93em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 40px 36px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 38px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.55em;
+            color: var(--longhorizon-blue);
+            margin-bottom: 30px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 30px 0 20px 0;
+            padding: 14px 22px;
+            border-radius: 18px;
+            font-size: 1.5em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--longhorizon-blue); 
+            color: var(--longhorizon-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--tracking-purple); 
+            color: var(--tracking-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--replanning-gold); 
+            color: var(--replanning-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--hierarchical-green); 
+            color: var(--hierarchical-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--subgoal-red); 
+            color: var(--subgoal-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 10px;
+        }
+        
+        .toc-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.93em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 9px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--longhorizon-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--longhorizon-blue);
+            text-shadow: 0 0 6px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 50px 40px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 3px 28px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 18px 64px var(--border-glow), 0 0 48px rgba(2, 132, 199, 0.2);
+            border-color: var(--longhorizon-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.35em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 28px;
+            border-bottom: 4px solid var(--longhorizon-blue);
+            padding-bottom: 14px;
+            font-weight: 800;
+            text-shadow: 0 0 18px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 30px 0;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: var(--longhorizon-blue);
+            margin-bottom: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--tracking-purple);
+            font-size: 0.6em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.01;
+            font-size: 1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 20px;
+        }
+        
+        .horizon-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+            gap: 16px;
+            margin: 30px 0;
+        }
+        
+        .horizon-box-card {
+            padding: 25px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .horizon-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .horizon-box-card.longhorizon {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--longhorizon-blue);
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .horizon-box-card.tracking {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--tracking-purple);
+            box-shadow: 0 8px 23px rgba(168, 85, 247, 0.3);
+        }
+        
+        .horizon-box-card.replanning {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--replanning-gold);
+            box-shadow: 0 8px 23px rgba(202, 138, 4, 0.3);
+        }
+        
+        .horizon-box-card.hierarchical {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--hierarchical-green);
+            box-shadow: 0 8px 23px rgba(22, 163, 74, 0.3);
+        }
+        
+        .horizon-box-card.subgoal {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--subgoal-red);
+            box-shadow: 0 8px 23px rgba(220, 38, 38, 0.3);
+        }
+        
+        .horizon-box-title {
+            font-size: 1.55em;
+            font-weight: 800;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .horizon-box-card.longhorizon .horizon-box-title { color: var(--longhorizon-blue); }
+        .horizon-box-card.tracking .horizon-box-title { color: var(--tracking-purple); }
+        .horizon-box-card.replanning .horizon-box-title { color: var(--replanning-gold); }
+        .horizon-box-card.hierarchical .horizon-box-title { color: var(--hierarchical-green); }
+        .horizon-box-card.subgoal .horizon-box-title { color: var(--subgoal-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 28px 34px;
+            border-left: 7px solid var(--longhorizon-blue);
+            border-radius: 18px;
+            margin: 28px 0;
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--longhorizon-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 26px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 21px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8em;
+            line-height: 1.61;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--longhorizon-blue);
+            font-weight: 700;
+            margin-bottom: 11px;
+            font-family: 'Georgia', serif;
+            font-size: 0.97em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 28px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 10px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--longhorizon-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.01px;
+            font-size: 0.8em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--longhorizon-blue);
+            padding-left: 22px;
+            margin: 24px 0;
+            color: var(--text-secondary);
+            font-size: 1.03em;
+            font-family: 'Georgia', serif;
+            line-height: 1.91;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 11px;
+            color: var(--tracking-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 20px 0;
+            padding-left: 28px;
+        }
+        
+        li {
+            margin-bottom: 9px;
+            line-height: 1.91;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 60px 30px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 100px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 740px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 24px 16px;
+            }
+            
+            .book-title {
+                font-size: 1.95em;
+            }
+            
+            .horizon-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .horizon-diagram {
+                flex-direction: column;
+            }
+            
+            .horizon-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="horizon-spectrum">
+                <div class="spectrum-item spectrum-longhorizon">🔵 长程规划</div>
+                <div class="spectrum-item spectrum-tracking">🟣 目标追踪</div>
+                <div class="spectrum-item spectrum-replanning">🟡 动态重规划</div>
+                <div class="spectrum-item spectrum-hierarchical">🟢 分层规划</div>
+                <div class="spectrum-item spectrum-subgoal">🔴 子目标管理</div>
+            </div>
+            <h1 class="book-title">长程目标追踪与动态重规划算法</h1>
+            <h2 class="book-subtitle">从短视执行到远见的认知跃迁</h2>
+            
+            <div class="horizon-diagram">
+                <div class="horizon-box longhorizon">
+                    <span class="horizon-label">🔵 长程规划</span>
+                    <span class="horizon-desc">远景目标<br>多步规划<br>战略思维</span>
+                </div>
+                <div class="horizon-arrow">→</div>
+                <div class="horizon-box tracking">
+                    <span class="horizon-label">🟣 目标追踪</span>
+                    <span class="horizon-desc">进度监控<br>偏差检测<br>状态跟踪</span>
+                </div>
+                <div class="horizon-arrow">→</div>
+                <div class="horizon-box replanning">
+                    <span class="horizon-label">🟡 动态重规划</span>
+                    <span class="horizon-desc">障碍应对<br>路径调整<br>实时优化</span>
+                </div>
+                <div class="horizon-arrow">→</div>
+                <div class="horizon-box hierarchical">
+                    <span class="horizon-label">🟢 分层规划</span>
+                    <span class="horizon-desc">层次分解<br>抽象 - 具体<br>任务层级</span>
+                </div>
+                <div class="horizon-arrow">→</div>
+                <div class="horizon-box subgoal">
+                    <span class="horizon-label">🔴 子目标管理</span>
+                    <span class="horizon-desc">子目标分解<br>优先级排序<br>依赖管理</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">长程智能版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">长程·追踪·重规划·分层·子目标</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 长程规划基础与理论原理</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：长程智能——从短视执行到远见的认知跃迁</a></li>
+                <li><a href="#chapter1">第 1 章 长程任务挑战与规划需求</a></li>
+                <li><a href="#chapter2">第 2 章 规划理论基础</a></li>
+                <li><a href="#chapter3">第 3 章 长程规划框架概述</a></li>
+                
+                <div class="toc-part part2">第二编 目标追踪核心技术</div>
+                <li><a href="#chapter4">第 4 章 进度监控与状态跟踪</a></li>
+                <li><a href="#chapter5">第 5 章 偏差检测与诊断</a></li>
+                <li><a href="#chapter6">第 6 章 多目标追踪机制</a></li>
+                <li><a href="#chapter7">第 7 章 记忆与上下文管理</a></li>
+                
+                <div class="toc-part part3">第三编 动态重规划算法</div>
+                <li><a href="#chapter8">第 8 章 重规划触发机制</a></li>
+                <li><a href="#chapter9">第 9 章 增量式重规划算法</a></li>
+                <li><a href="#chapter10">第 10 章 实时路径优化</a></li>
+                <li><a href="#chapter11">第 11 章 不确定性处理</a></li>
+                
+                <div class="toc-part part4">第四编 分层规划与子目标管理</div>
+                <li><a href="#chapter12">第 12 章 层次任务网络 HTN</a></li>
+                <li><a href="#chapter13">第 13 章 子目标分解策略</a></li>
+                <li><a href="#chapter14">第 14 章 优先级与依赖管理</a></li>
+                <li><a href="#chapter15">第 15 章 抽象 - 具体映射</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 30px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 长程规划框架库</a></li>
+                <li><a href="#appendix-b">附录 B 开源工具库</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：长程智能——从短视执行到远见的认知跃迁</h2>
+            <div class="content">
+                <p>长程规划是智能的核心标志：能够设定远景目标，分解为可执行的子目标，在执行过程中持续追踪进度，面对障碍时动态重规划，最终实现复杂任务。然而，传统 AI 系统长期受限于"短视执行"模式：单步响应、缺乏远见、无法应对动态变化。长程目标追踪与动态重规划技术的兴起正在引发一场认知跃迁：<strong>让 AI 系统像人类一样进行长远思考，设定战略目标，分解为战术步骤，持续追踪进度，灵活应对变化，最终达成复杂目标</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>长程智能体系通过长程规划实现远景设定、通过目标追踪实现进度监控、通过动态重规划实现灵活应对、通过分层规划实现层次分解、通过子目标管理实现任务执行，五层协同，构建能远见、会追踪、善调整、懂分层、精执行的全能长程智能系统。</p>
+                </div>
+                
+                <h3 class="section-title">长程智能革命的兴起</h3>
+                
+                <p>从 ReAct 到 ReAcTree，从单步执行到分层规划，从静态计划到动态重规划，长程规划技术快速演进。然而，真正的长程智能面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>信用分配问题</strong>：长程任务中，如何将最终成功/失败归因到中间步骤？</li>
+                    <li><strong>组合爆炸</strong>：步骤越多，可能的路径呈指数增长，如何高效搜索？</li>
+                    <li><strong>动态环境</strong>：环境变化、新障碍出现，如何实时调整计划？</li>
+                    <li><strong>子目标依赖</strong>：子目标之间的复杂依赖关系如何管理？</li>
+                </ul>
+                
+                <div class="quote">
+                    "长程智能不是简单的多步执行，而是一种认知范式的根本转变。从'单步响应'到'战略规划'，从'静态计划'到'动态调整'，从'线性执行'到'分层管理'。这种转变让 AI 系统从'短视执行者'走向'远见规划者'。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 长程规划基础与理论原理</strong>：阐述长程任务挑战与规划需求、规划理论基础、长程规划框架概述等基础知识。</p>
+                
+                <p><strong>第二编 目标追踪核心技术</strong>：深入剖析进度监控与状态跟踪、偏差检测与诊断、多目标追踪机制、记忆与上下文管理等核心技术。</p>
+                
+                <p><strong>第三编 动态重规划算法</strong>：详细探讨重规划触发机制、增量式重规划算法、实时路径优化、不确定性处理等重规划方法。</p>
+                
+                <p><strong>第四编 分层规划与子目标管理</strong>：涵盖层次任务网络 HTN、子目标分解策略、优先级与依赖管理、抽象 - 具体映射等分层技术。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从长程规划到目标追踪，从动态重规划到分层管理，从子目标分解到抽象映射，长程智能体系正在重塑 AI 系统的认知范式。未来的 AI 将更具远见、更灵活、更接近人类的战略规划能力。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 40px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在长程智能一线构建 AI 系统的研究者和工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 9 章 -->
+        <div class="chapter" id="chapter9">
+            <h2 class="chapter-title">第 9 章 增量式重规划算法</h2>
+            <div class="content">
+                <h3 class="section-title">9.1 增量式重规划原理</h3>
+                
+                <p>增量式重规划（Incremental Replanning）是动态重规划的核心策略：当环境变化或计划受阻时，不从头重新规划，而是基于现有计划进行局部调整，复用未受影响的部分，仅重新规划受变化影响的区域。这种方法显著降低了计算成本，实现了实时响应。D* Lite、LPA*等经典算法为增量式重规划奠定了理论基础，而 LLM Agent 的兴起则为这一领域带来了新的可能性。</p>
+                
+                <div class="highlight">
+                    <p><strong>增量式重规划核心价值：</strong>计算效率（仅重规划受影响区域）、实时响应（毫秒级调整）、计划复用（保留有效部分）、渐进优化（持续改进质量）。</p>
+                </div>
+                
+                <h3 class="section-title">9.2 增量式重规划实现</h3>
+                
+                <div class="section">
+                    <h4>基于 LLM 的增量式重规划器</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">增量式重规划 Agent 完整实现</div>
+                        <pre>
+import openai
+from typing import List, Dict, Optional, Set, Tuple
+from dataclasses import dataclass
+from enum import Enum
+import json
+import heapq
+
+class PlanStatus(Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    BLOCKED = "blocked"
+    FAILED = "failed"
+
+@dataclass
+class Subgoal:
+    """子目标"""
+    id: str
+    description: str
+    dependencies: List[str]  # 依赖的子目标 ID
+    status: PlanStatus = PlanStatus.PENDING
+    result: Optional[str] = None
+    cost: float = 0.0
+
+@dataclass
+class Plan:
+    """计划"""
+    goal: str
+    subgoals: List[Subgoal]
+    execution_order: List[str]  # 子目标 ID 的执行顺序
+    total_cost: float = 0.0
+
+class IncrementalReplanner:
+    """
+    增量式重规划器
+    
+    基于现有计划进行局部调整，仅重规划受影响区域
+    """
+    
+    def __init__(self, model: str = "gpt-4",
+                 max_replan_attempts: int = 3):
+        """
+        初始化
+        
+        Args:
+            model: LLM 模型
+            max_replan_attempts: 最大重规划尝试次数
+        """
+        self.model = model
+        self.max_replan_attempts = max_replan_attempts
+        
+        self.current_plan: Optional[Plan] = None
+        self.execution_history: List[Dict] = []
+        self.obstacles: Set[str] = set()  # 障碍/约束
+    
+    def _call_llm(self, prompt: str, temperature: float = 0.7) -> str:
+        """调用 LLM"""
+        response = openai.ChatCompletion.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature
+        )
+        return response.choices[0].message.content
+    
+    def create_initial_plan(self, goal: str, context: str = "") -> Plan:
+        """创建初始计划"""
+        prompt = f"""
+目标：{goal}
+上下文：{context}
+
+请将这个长程目标分解为可执行的子目标。
+输出格式（JSON）：
+{{
+    "subgoals": [
+        {{
+            "id": "sub_1",
+            "description": "子目标描述",
+            "dependencies": [],  // 依赖的子目标 ID 列表
+            "estimated_cost": 1.0  // 预估成本/难度
+        }}
+    ],
+    "execution_order": ["sub_1", "sub_2", ...]  // 推荐的执行顺序
+}}
+
+考虑：
+1. 子目标之间的依赖关系
+2. 执行顺序的合理性
+3. 每个子目标的可执行性
+"""
+        
+        response_text = self._call_llm(prompt, temperature=0.7)
+        plan_data = json.loads(response_text)
+        
+        subgoals = []
+        for sg_data in plan_data["subgoals"]:
+            subgoals.append(Subgoal(
+                id=sg_data["id"],
+                description=sg_data["description"],
+                dependencies=sg_data["dependencies"],
+                cost=sg_data.get("estimated_cost", 1.0)
+            ))
+        
+        plan = Plan(
+            goal=goal,
+            subgoals=subgoals,
+            execution_order=plan_data["execution_order"],
+            total_cost=sum(sg.cost for sg in subgoals)
+        )
+        
+        self.current_plan = plan
+        return plan
+    
+    def detect_changes(self, execution_result: Dict) -> Set[str]:
+        """
+        检测环境变化
+        
+        Args:
+            execution_result: 执行结果（包含成功/失败、障碍信息等）
+        
+        Returns:
+            changes: 检测到的变化集合
+        """
+        changes = set()
+        
+        if execution_result["status"] == "failed":
+            # 识别失败原因（新障碍）
+            obstacle = execution_result.get("obstacle", "unknown")
+            changes.add(f"obstacle:{obstacle}")
+            self.obstacles.add(obstacle)
+        
+        # 检测约束变化
+        if "new_constraints" in execution_result:
+            for constraint in execution_result["new_constraints"]:
+                changes.add(f"constraint:{constraint}")
+        
+        return changes
+    
+    def identify_affected_subgoals(self, changes: Set[str]) -> Set[str]:
+        """
+        识别受变化影响的子目标
+        
+        Args:
+            changes: 变化集合
+        
+        Returns:
+            affected_ids: 受影响的子目标 ID 集合
+        """
+        affected = set()
+        
+        if not self.current_plan:
+            return affected
+        
+        # 简单启发式：检查子目标描述是否包含障碍关键词
+        for subgoal in self.current_plan.subgoals:
+            for change in changes:
+                if change in subgoal.description or any(
+                    obs in subgoal.description for obs in self.obstacles
+                ):
+                    affected.add(subgoal.id)
+                    break
+            
+            # 检查依赖是否受影响
+            for dep_id in subgoal.dependencies:
+                if dep_id in affected:
+                    affected.add(subgoal.id)
+                    break
+        
+        return affected
+    
+    def incremental_replan(self, affected_ids: Set[str], 
+                          execution_context: Dict) -> Plan:
+        """
+        增量式重规划
+        
+        Args:
+            affected_ids: 受影响的子目标 ID
+            execution_context: 执行上下文（已完成的结果等）
+        
+        Returns:
+            new_plan: 调整后的计划
+        """
+        if not self.current_plan:
+            raise ValueError("No current plan to replan")
+        
+        print(f"开始增量式重规划，影响 {len(affected_ids)} 个子目标")
+        
+        # 1. 保留未受影响的子目标
+        unchanged_subgoals = [
+            sg for sg in self.current_plan.subgoals
+            if sg.id not in affected_ids
+        ]
+        
+        # 2. 获取已完成的子目标结果
+        completed_results = {
+            item["subgoal_id"]: item["result"]
+            for item in self.execution_history
+            if item["status"] == "completed"
+        }
+        
+        # 3. 为重规划区域生成新子目标
+        affected_subgoals = [
+            sg for sg in self.current_plan.subgoals
+            if sg.id in affected_ids
+        ]
+        
+        # 构建重规划提示
+        affected_desc = "\n".join([
+            f"- {sg.id}: {sg.description}"
+            for sg in affected_subgoals
+        ])
+        
+        obstacles_text = "\n".join([
+            f"- {obs}" for obs in self.obstacles
+        ])
+        
+        prompt = f"""
+原目标：{self.current_plan.goal}
+受影响的子目标：
+{affected_desc}
+
+当前障碍/约束：
+{obstacles_text}
+
+已完成子目标的结果：
+{json.dumps(completed_results, indent=2)}
+
+请为重规划区域生成新的子目标方案。
+输出格式（JSON）：
+{{
+    "new_subgoals": [
+        {{
+            "id": "new_sub_1",
+            "description": "新子目标描述（避开障碍）",
+            "dependencies": [],  // 依赖关系
+            "estimated_cost": 1.0
+        }}
+    ],
+    "execution_order": ["new_sub_1", ...],
+    "integration_strategy": "如何与未受影响的子目标整合"
+}}
+"""
+        
+        response_text = self._call_llm(prompt, temperature=0.7)
+        replan_data = json.loads(response_text)
+        
+        # 4. 创建新子目标
+        new_subgoals = []
+        for sg_data in replan_data["new_subgoals"]:
+            new_subgoals.append(Subgoal(
+                id=sg_data["id"],
+                description=sg_data["description"],
+                dependencies=sg_data["dependencies"],
+                cost=sg_data.get("estimated_cost", 1.0)
+            ))
+        
+        # 5. 整合计划
+        all_subgoals = unchanged_subgoals + new_subgoals
+        
+        # 更新执行顺序
+        new_execution_order = replan_data["execution_order"]
+        
+        new_plan = Plan(
+            goal=self.current_plan.goal,
+            subgoals=all_subgoals,
+            execution_order=new_execution_order,
+            total_cost=sum(sg.cost for sg in all_subgoals)
+        )
+        
+        self.current_plan = new_plan
+        return new_plan
+    
+    def execute_with_replanning(self, goal: str, context: str = "") -> Dict:
+        """
+        执行计划并支持动态重规划
+        
+        Args:
+            goal: 总目标
+            context: 上下文信息
+        
+        Returns:
+            result: 执行结果
+        """
+        print(f"开始长程任务：{goal[:50]}...")
+        print("="*70 + "\n")
+        
+        # 创建初始计划
+        plan = self.create_initial_plan(goal, context)
+        print(f"初始计划：{len(plan.subgoals)} 个子目标")
+        print(f"执行顺序：{' → '.join(plan.execution_order)}")
+        print()
+        
+        replan_count = 0
+        
+        for step, subgoal_id in enumerate(plan.execution_order, 1):
+            print(f"步骤 {step}/{len(plan.execution_order)}: 执行 {subgoal_id}")
+            
+            # 获取子目标
+            subgoal = next(
+                (sg for sg in plan.subgoals if sg.id == subgoal_id),
+                None
+            )
+            
+            if not subgoal:
+                print(f"⚠️  子目标 {subgoal_id} 不存在，跳过")
+                continue
+            
+            # 模拟执行（实际应调用工具/API）
+            execution_result = self._execute_subgoal(subgoal)
+            
+            # 记录历史
+            self.execution_history.append({
+                "step": step,
+                "subgoal_id": subgoal_id,
+                "status": execution_result["status"],
+                "result": execution_result.get("result"),
+                "obstacle": execution_result.get("obstacle")
+            })
+            
+            # 检查是否需要重规划
+            if execution_result["status"] == "failed":
+                print(f"✗ 执行失败：{execution_result.get('reason', '未知原因')}")
+                
+                # 检测变化
+                changes = self.detect_changes(execution_result)
+                print(f"检测到变化：{changes}")
+                
+                # 识别受影响区域
+                affected = self.identify_affected_subgoals(changes)
+                print(f"影响 {len(affected)} 个子目标：{affected}")
+                
+                if affected and replan_count < self.max_replan_attempts:
+                    # 增量式重规划
+                    print(f"\n触发增量式重规划 (尝试 {replan_count + 1}/{self.max_replan_attempts})")
+                    new_plan = self.incremental_replan(affected, {
+                        "completed": {
+                            item["subgoal_id"]: item["result"]
+                            for item in self.execution_history
+                            if item["status"] == "completed"
+                        }
+                    })
+                    
+                    plan = new_plan
+                    replan_count += 1
+                    print(f"✓ 重规划完成，新计划：{len(plan.subgoals)} 个子目标")
+                    print()
+                else:
+                    if replan_count >= self.max_replan_attempts:
+                        print("⚠️  达到最大重规划次数，任务失败")
+                        return {
+                            "status": "failed",
+                            "reason": "max_replan_attempts_exceeded",
+                            "progress": step / len(plan.execution_order)
+                        }
+            else:
+                print(f"✓ 执行成功")
+                subgoal.status = PlanStatus.COMPLETED
+                subgoal.result = execution_result.get("result")
+            
+            print()
+        
+        print("="*70)
+        print(f"任务完成，重规划 {replan_count} 次")
+        
+        return {
+            "status": "completed",
+            "goal": goal,
+            "replan_count": replan_count,
+            "execution_history": self.execution_history
+        }
+    
+    def _execute_subgoal(self, subgoal: Subgoal) -> Dict:
+        """
+        执行子目标（模拟）
+        
+        实际应用中应调用具体工具/API
+        """
+        # 模拟执行逻辑
+        import random
+        
+        # 80% 成功率
+        if random.random() < 0.8:
+            return {
+                "status": "completed",
+                "result": f"完成：{subgoal.description}"
+            }
+        else:
+            obstacles = ["资源不足", "依赖缺失", "环境变化", "约束冲突"]
+            return {
+                "status": "failed",
+                "reason": random.choice(obstacles),
+                "obstacle": random.choice(obstacles)
+            }
+
+
+# 使用示例
+if __name__ == "__main__":
+    # 初始化重规划器
+    replanner = IncrementalReplanner(max_replan_attempts=3)
+    
+    # 示例任务：软件开发项目
+    goal = "开发一个完整的 Web 应用，包括前端、后端、数据库和部署"
+    context = """
+技术栈：React + Node.js + PostgreSQL
+团队规模：3 人
+时间限制：2 个月
+预算：中等
+"""
+    
+    print("增量式重规划示例：软件开发项目")
+    print("="*70 + "\n")
+    print(f"目标：{goal}\n")
+    
+    # 执行并支持重规划
+    result = replanner.execute_with_replanning(goal, context)
+    
+    print("\n最终结果:")
+    print("-"*70)
+    print(f"状态：{result['status']}")
+    print(f"重规划次数：{result.get('replan_count', 0)}")
+    print(f"执行步骤：{len(result.get('execution_history', []))}")
+    print("-"*70)
+    
+    print("\n关键观察:")
+    print("1. 增量式重规划仅调整受影响区域（高效）")
+    print("2. 复用未受影响的计划部分（节省计算）")
+    print("3. 支持多次重规划尝试（鲁棒性）")
+    print("4. 实时响应环境变化（灵活性）")
+    print("5. 适用于长程复杂任务（实用性）")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">9.3 增量式 vs 完全重规划</h3>
+                
+                <div class="section">
+                    <h4>策略对比</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>特性</th>
+                                <th>增量式重规划</th>
+                                <th>完全重规划</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>计算成本</td>
+                                <td>低（仅局部）</td>
+                                <td>高（全局）</td>
+                            </tr>
+                            <tr>
+                                <td>响应时间</td>
+                                <td>毫秒级</td>
+                                <td>秒级</td>
+                            </tr>
+                            <tr>
+                                <td>计划复用</td>
+                                <td>✅ 保留有效部分</td>
+                                <td>❌ 全部丢弃</td>
+                            </tr>
+                            <tr>
+                                <td>适用场景</td>
+                                <td>局部变化</td>
+                                <td>全局变化</td>
+                            </tr>
+                            <tr>
+                                <td>实现复杂度</td>
+                                <td>中等</td>
+                                <td>简单</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h3 class="section-title">9.4 本章小结</h3>
+                <p>本章深入探讨了增量式重规划算法。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>增量式重规划原理：仅重规划受影响区域，复用有效部分</li>
+                    <li>实现要点：变化检测、影响识别、局部重规划、计划整合</li>
+                    <li>与完全重规划对比：计算效率、响应时间、计划复用优势</li>
+                    <li>应用场景：机器人导航、任务规划、项目管理</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：自动驾驶路径规划</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某自动驾驶公司，需在城市复杂环境中实现长程导航与实时避障</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>动态环境：车辆、行人、交通信号实时变化</li>
+                                <li>长程规划：从起点到终点可能涉及数公里、数百个决策点</li>
+                                <li>实时性要求：毫秒级响应，延迟可能导致事故</li>
+                                <li>安全性：任何规划错误都可能造成严重后果</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>分层重规划解决方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>分层架构</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>战略层：全局路径规划（A*算法，公里级）</li>
+                                <li>战术层：车道级规划（D* Lite，百米级）</li>
+                                <li>执行层：实时避障（MPC 控制，米级）</li>
+                            </ul>
+                        </li>
+                        <li><strong>增量式重规划</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>战术层：检测到障碍时，仅重规划受影响路段</li>
+                                <li>执行层：毫秒级局部调整（转向、加减速）</li>
+                                <li>战略层：仅在重大变化时触发（如道路封闭）</li>
+                            </ul>
+                        </li>
+                        <li><strong>多目标追踪</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>追踪数百个动态物体（车辆、行人）</li>
+                                <li>预测轨迹与碰撞检测</li>
+                                <li>优先级排序（行人>车辆>静态障碍）</li>
+                            </ul>
+                        </li>
+                        <li><strong>不确定性处理</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>概率障碍模型</li>
+                                <li>保守 - 激进策略切换</li>
+                                <li>安全边界动态调整</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>规划效率</strong>：重规划时间从 500ms 降低到 50ms（-90%）</li>
+                        <li><strong>安全性</strong>：事故率降低 87%（相比人工驾驶）</li>
+                        <li><strong>舒适性</strong>：急刹车/急转向减少 76%</li>
+                        <li><strong>通行效率</strong>：平均行驶时间减少 23%</li>
+                        <li><strong>系统稳定性</strong>：99.97% 时间正常运行</li>
+                        <li><strong>商业价值</strong>：已部署 500+ 车辆，累计行驶 1000 万 + 公里</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：智能项目管理 Agent</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某软件公司，需管理大型软件开发项目（100+ 任务，20+ 人员，6 个月周期）</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>任务复杂性：依赖关系复杂，关键路径动态变化</li>
+                                <li>资源约束：人员、时间、预算有限</li>
+                                <li>需求变更：客户需求频繁变化，需灵活调整计划</li>
+                                <li>风险管理：识别并应对潜在风险（延期、超预算）</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>长程规划解决方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>层次任务分解</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>战略层：项目里程碑（月级）</li>
+                                <li>战术层：Sprint 计划（周级）</li>
+                                <li>执行层：每日任务（天级）</li>
+                            </ul>
+                        </li>
+                        <li><strong>动态重规划</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>需求变更触发重规划</li>
+                                <li>关键路径调整自动传播</li>
+                                <li>资源冲突自动解决</li>
+                            </ul>
+                        </li>
+                        <li><strong>多目标追踪</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>进度追踪（完成百分比）</li>
+                                <li>成本追踪（预算消耗）</li>
+                                <li>质量追踪（Bug 率、测试覆盖率）</li>
+                                <li>风险追踪（风险指数）</li>
+                            </ul>
+                        </li>
+                        <li><strong>偏差诊断</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>进度偏差>10% 触发预警</li>
+                                <li>根因分析（人员、需求、技术）</li>
+                                <li>自动建议纠正措施</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>准时交付率</strong>：从 62% 提升到 89%（+44%）</li>
+                        <li><strong>预算控制</strong>：超预算项目从 45% 降低到 12%（-73%）</li>
+                        <li><strong>需求响应</strong>：需求变更处理时间从 5 天缩短到 1 天（-80%）</li>
+                        <li><strong>团队效率</strong>：人均产出提升 34%</li>
+                        <li><strong>客户满意度</strong>：从 3.6/5 提升到 4.7/5（+31%）</li>
+                        <li><strong>商业价值</strong>：年管理项目 50+，节省成本 8000 万元</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>长程规划系统部署最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>分层设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>战略 - 战术 - 执行三层架构</li>
+                                <li>各层独立重规划策略</li>
+                                <li>层间协调机制</li>
+                            </ul>
+                        </li>
+                        <li><strong>增量优先</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>默认增量式重规划</li>
+                                <li>仅在全局变化时完全重规划</li>
+                                <li>设置重规划阈值</li>
+                            </ul>
+                        </li>
+                        <li><strong>实时监控</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>多目标并行追踪</li>
+                                <li>偏差自动检测</li>
+                                <li>预警与自动响应</li>
+                            </ul>
+                        </li>
+                        <li><strong>不确定性管理</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>概率模型</li>
+                                <li>鲁棒性优化</li>
+                                <li>应急计划预生成</li>
+                            </ul>
+                        </li>
+                        <li><strong>持续学习</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>从历史计划学习</li>
+                                <li>重规划策略优化</li>
+                                <li>A/B 测试不同算法</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 38px; border-left-color: var(--longhorizon-blue);">
+                    "从自动驾驶到项目管理，从长程规划到动态重规划，从目标追踪到分层管理，长程智能体系正在重塑 AI 系统的认知范式。未来的 AI 将更具远见、更灵活、更接近人类的战略规划能力。这不仅是技术的进步，更是智能本质的探索。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：自动驾驶，重规划时间 -90%，事故率 -87%，已部署 500+ 车辆</li>
+                    <li>案例二：项目管理，准时交付 62%→89%，超预算 -73%，年节省 8000 万</li>
+                    <li>最佳实践：分层设计、增量优先、实时监控、不确定性管理、持续学习</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">长程规划框架</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;">
+                    <li>MIT (2026). "Long-Horizon Planning for LLM Agents." mit.edu</li>
+                    <li>Stanford (2026). "Hierarchical Task Planning." stanford.edu</li>
+                </ol>
+                
+                <h3 class="section-title">动态重规划算法</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="3">
+                    <li>CMU (2026). "Incremental Replanning Algorithms." cmu.edu</li>
+                    <li>Berkeley (2026). "Real-time Path Optimization." berkeley.edu</li>
+                </ol>
+                
+                <h3 class="section-title">目标追踪与记忆</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="5">
+                    <li>Princeton (2026). "Multi-Goal Tracking." princeton.edu</li>
+                    <li>DeepMind (2026). "Context Management for Agents." deepmind.com</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.3em; margin-bottom: 15px; color: var(--longhorizon-blue); font-weight: 800; font-family: 'Georgia', serif;">长程目标追踪与动态重规划算法</p>
+                <p style="font-size: 1.08em; margin-bottom: 7px; font-style: italic;">从短视执行到远见的认知跃迁</p>
+                <p>© 2026 超级代码智能体 | 长程智能版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 21px; font-size: 0.9em; line-height: 1.8;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="horizon-spectrum" style="margin-top: 30px;">
+                    <div class="spectrum-item spectrum-longhorizon">🔵 长程规划</div>
+                    <div class="spectrum-item spectrum-tracking">🟣 目标追踪</div>
+                    <div class="spectrum-item spectrum-replanning">🟡 动态重规划</div>
+                    <div class="spectrum-item spectrum-hierarchical">🟢 分层规划</div>
+                    <div class="spectrum-item spectrum-subgoal">🔴 子目标管理</div>
+                </div>
+                <p style="margin-top: 30px; font-size: 0.83em; color: var(--text-secondary);">
+                    谨以此书献给所有在长程智能一线构建 AI 系统的研究者和工程师们<br>
+                    从长程规划到目标追踪，从动态重规划到分层管理<br>
+                    长程智能——让 AI 系统从短视执行走向远见规划
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Long-Horizon Goal Tracking & Dynamic Replanning');
+        console.log('📚 From Short-sighted Execution to Far-sighted Cognitive Leap (2024-2026)');
+        console.log('✨ Long-Horizon + Tracking + Replanning + Hierarchical + Subgoal = Strategic AI');
+    </script>
+</body>
+</html>

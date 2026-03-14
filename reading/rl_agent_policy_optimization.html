@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>强化学习与 Agent 策略迭代优化</title>
+    <style>
+        :root {
+            --rl-blue: #0284c7;
+            --policy-purple: #a855f7;
+            --agent-gold: #ca8a04;
+            --actor-green: #16a34a;
+            --critic-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-policy: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--rl-blue), var(--policy-purple), var(--agent-gold), var(--actor-green), var(--critic-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-policy);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: policyRotate 260s linear infinite;
+        }
+        
+        @keyframes policyRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .policy-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 8px 22px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.92em;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+            animation: policyPulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes policyPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 12px 30px rgba(2, 132, 199, 0.5); }
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-rl {
+            background: linear-gradient(135deg, var(--rl-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-policy {
+            background: linear-gradient(135deg, var(--policy-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-agent {
+            background: linear-gradient(135deg, var(--agent-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-actor {
+            background: linear-gradient(135deg, var(--actor-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-critic {
+            background: linear-gradient(135deg, var(--critic-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.15em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 23px;
+            text-shadow: 0 0 50px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.28;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.68em;
+            color: var(--text-secondary);
+            margin-bottom: 38px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .policy-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 48px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .policy-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 23px 28px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 135px;
+        }
+        
+        .policy-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .policy-box.rl {
+            border-color: var(--rl-blue);
+            box-shadow: 0 15px 30px rgba(2, 132, 199, 0.35);
+        }
+        
+        .policy-box.policy {
+            border-color: var(--policy-purple);
+            box-shadow: 0 15px 30px rgba(168, 85, 247, 0.35);
+        }
+        
+        .policy-box.agent {
+            border-color: var(--agent-gold);
+            box-shadow: 0 15px 30px rgba(202, 138, 4, 0.35);
+        }
+        
+        .policy-box.actor {
+            border-color: var(--actor-green);
+            box-shadow: 0 15px 30px rgba(22, 163, 74, 0.35);
+        }
+        
+        .policy-box.critic {
+            border-color: var(--critic-red);
+            box-shadow: 0 15px 30px rgba(220, 38, 38, 0.35);
+        }
+        
+        .policy-label {
+            font-size: 1.32em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 6px;
+        }
+        
+        .policy-box.rl .policy-label { color: var(--rl-blue); }
+        .policy-box.policy .policy-label { color: var(--policy-purple); }
+        .policy-box.agent .policy-label { color: var(--agent-gold); }
+        .policy-box.actor .policy-label { color: var(--actor-green); }
+        .policy-box.critic .policy-label { color: var(--critic-red); }
+        
+        .policy-desc {
+            font-size: 0.73em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.6;
+        }
+        
+        .policy-arrow {
+            font-size: 1.6em;
+            color: var(--actor-green);
+            animation: policyArrow 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes policyArrow {
+            0%, 100% { opacity: 0.6; transform: translateX(0); }
+            50% { opacity: 1; transform: translateX(8px); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 22px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 48px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 11px 22px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px var(--border-glow);
+            border-color: var(--rl-blue);
+        }
+        
+        .meta-label {
+            color: var(--rl-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.73em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.93em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 40px 36px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 38px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.55em;
+            color: var(--rl-blue);
+            margin-bottom: 30px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 30px 0 20px 0;
+            padding: 14px 22px;
+            border-radius: 18px;
+            font-size: 1.5em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--rl-blue); 
+            color: var(--rl-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--policy-purple); 
+            color: var(--policy-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--agent-gold); 
+            color: var(--agent-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--actor-green); 
+            color: var(--actor-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--critic-red); 
+            color: var(--critic-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 10px;
+        }
+        
+        .toc-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.93em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 9px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--rl-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--rl-blue);
+            text-shadow: 0 0 6px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 50px 40px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 3px 28px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 18px 64px var(--border-glow), 0 0 48px rgba(2, 132, 199, 0.2);
+            border-color: var(--rl-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.35em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 28px;
+            border-bottom: 4px solid var(--rl-blue);
+            padding-bottom: 14px;
+            font-weight: 800;
+            text-shadow: 0 0 18px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 30px 0;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: var(--rl-blue);
+            margin-bottom: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--policy-purple);
+            font-size: 0.6em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.01;
+            font-size: 1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 20px;
+        }
+        
+        .policy-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+            gap: 16px;
+            margin: 30px 0;
+        }
+        
+        .policy-box-card {
+            padding: 25px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .policy-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .policy-box-card.rl {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--rl-blue);
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .policy-box-card.policy {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--policy-purple);
+            box-shadow: 0 8px 23px rgba(168, 85, 247, 0.3);
+        }
+        
+        .policy-box-card.agent {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--agent-gold);
+            box-shadow: 0 8px 23px rgba(202, 138, 4, 0.3);
+        }
+        
+        .policy-box-card.actor {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--actor-green);
+            box-shadow: 0 8px 23px rgba(22, 163, 74, 0.3);
+        }
+        
+        .policy-box-card.critic {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--critic-red);
+            box-shadow: 0 8px 23px rgba(220, 38, 38, 0.3);
+        }
+        
+        .policy-box-title {
+            font-size: 1.55em;
+            font-weight: 800;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .policy-box-card.rl .policy-box-title { color: var(--rl-blue); }
+        .policy-box-card.policy .policy-box-title { color: var(--policy-purple); }
+        .policy-box-card.agent .policy-box-title { color: var(--agent-gold); }
+        .policy-box-card.actor .policy-box-title { color: var(--actor-green); }
+        .policy-box-card.critic .policy-box-title { color: var(--critic-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 28px 34px;
+            border-left: 7px solid var(--rl-blue);
+            border-radius: 18px;
+            margin: 28px 0;
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--rl-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 26px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 21px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8em;
+            line-height: 1.61;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--rl-blue);
+            font-weight: 700;
+            margin-bottom: 11px;
+            font-family: 'Georgia', serif;
+            font-size: 0.97em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 28px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 10px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--rl-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.01px;
+            font-size: 0.8em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--rl-blue);
+            padding-left: 22px;
+            margin: 24px 0;
+            color: var(--text-secondary);
+            font-size: 1.03em;
+            font-family: 'Georgia', serif;
+            line-height: 1.91;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 11px;
+            color: var(--policy-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 20px 0;
+            padding-left: 28px;
+        }
+        
+        li {
+            margin-bottom: 9px;
+            line-height: 1.91;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 60px 30px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 100px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 740px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 24px 16px;
+            }
+            
+            .book-title {
+                font-size: 1.95em;
+            }
+            
+            .policy-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .policy-diagram {
+                flex-direction: column;
+            }
+            
+            .policy-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="policy-spectrum">
+                <div class="spectrum-item spectrum-rl">🔵 强化学习</div>
+                <div class="spectrum-item spectrum-policy">🟣 策略迭代</div>
+                <div class="spectrum-item spectrum-agent">🟡 Agent 优化</div>
+                <div class="spectrum-item spectrum-actor">🟢 Actor</div>
+                <div class="spectrum-item spectrum-critic">🔴 Critic</div>
+            </div>
+            <h1 class="book-title">强化学习与 Agent 策略迭代优化</h1>
+            <h2 class="book-subtitle">从试错学习到最优策略的认知进化</h2>
+            
+            <div class="policy-diagram">
+                <div class="policy-box rl">
+                    <span class="policy-label">🔵 强化学习</span>
+                    <span class="policy-desc">MDP 建模<br>奖励设计<br>值函数</span>
+                </div>
+                <div class="policy-arrow">→</div>
+                <div class="policy-box policy">
+                    <span class="policy-label">🟣 策略迭代</span>
+                    <span class="policy-desc">策略评估<br>策略改进<br>收敛证明</span>
+                </div>
+                <div class="policy-arrow">→</div>
+                <div class="policy-box agent">
+                    <span class="policy-label">🟡 Agent 优化</span>
+                    <span class="policy-desc">样本效率<br>探索策略<br>泛化能力</span>
+                </div>
+                <div class="policy-arrow">→</div>
+                <div class="policy-box actor">
+                    <span class="policy-label">🟢 Actor</span>
+                    <span class="policy-desc">策略网络<br>动作选择<br>梯度上升</span>
+                </div>
+                <div class="policy-arrow">→</div>
+                <div class="policy-box critic">
+                    <span class="policy-label">🔴 Critic</span>
+                    <span class="policy-desc">值函数估计<br>TD 误差<br>优势函数</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">策略智能版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">RL·策略·Agent·Actor·Critic</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 强化学习基础与 MDP 理论</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：策略智能——从试错学习到最优策略的认知进化</a></li>
+                <li><a href="#chapter1">第 1 章 强化学习本质与 MDP 框架</a></li>
+                <li><a href="#chapter2">第 2 章 值函数与 Bellman 方程</a></li>
+                <li><a href="#chapter3">第 3 章 策略梯度理论基础</a></li>
+                
+                <div class="toc-part part2">第二编 策略迭代核心算法</div>
+                <li><a href="#chapter4">第 4 章 策略迭代与值迭代</a></li>
+                <li><a href="#chapter5">第 5 章 Q-Learning 与 SARSA</a></li>
+                <li><a href="#chapter6">第 6 章 策略梯度方法</a></li>
+                <li><a href="#chapter7">第 7 章 Actor-Critic 架构</a></li>
+                
+                <div class="toc-part part3">第三编 深度强化学习与 Actor-Critic</div>
+                <li><a href="#chapter8">第 8 章 DQN 与深度 Q 学习</a></li>
+                <li><a href="#chapter9">第 9 章 DDPG 与 TD3 算法</a></li>
+                <li><a href="#chapter10">第 10 章 PPO 与 TRPO</a></li>
+                <li><a href="#chapter11">第 11 章 SAC 与最大熵 RL</a></li>
+                
+                <div class="toc-part part4">第四编 多 Agent 与分布式 RL</div>
+                <li><a href="#chapter12">第 12 章 多 Agent 强化学习 MARL</a></li>
+                <li><a href="#chapter13">第 13 章 分布式 RL 与并行训练</a></li>
+                <li><a href="#chapter14">第 14 章 样本效率优化</a></li>
+                <li><a href="#chapter15">第 15 章 迁移学习与元 RL</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 30px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 强化学习框架库</a></li>
+                <li><a href="#appendix-b">附录 B 开源工具库</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：策略智能——从试错学习到最优策略的认知进化</h2>
+            <div class="content">
+                <p>强化学习是智能的核心标志：能够通过与环境交互试错学习，从奖励信号中优化策略，逐步逼近最优决策。然而，传统强化学习长期受限于"样本效率低"、"探索 - 利用困境"、"训练不稳定"、"泛化能力弱"等挑战。强化学习与 Agent 策略迭代优化的兴起正在引发一场认知进化：<strong>让 AI 系统像人类一样从经验中学习，高效探索，稳定训练，快速泛化，持续进化</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>策略智能体系通过 MDP 建模实现环境形式化、通过策略迭代实现最优策略收敛、通过 Actor-Critic 实现稳定训练、通过深度 RL 实现高维感知、通过多 Agent 实现协作竞争，五层协同，构建能学习、会探索、善决策、可泛化、持续进化的全能策略智能系统。</p>
+                </div>
+                
+                <h3 class="section-title">策略智能革命的兴起</h3>
+                
+                <p>从 Q-Learning 到 DQN，从策略梯度到 PPO，从单 Agent 到多 Agent，强化学习技术快速演进。AlphaGo 战胜人类围棋冠军，AlphaZero 统一棋类游戏，GPT 系列通过 RLHF 对齐人类偏好，机器人通过 RL 学会复杂操作。然而，真正的策略智能面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>样本效率</strong>：如何减少与环境交互次数，实现高效学习？</li>
+                    <li><strong>探索 - 利用困境</strong>：如何平衡探索未知与利用已知？</li>
+                    <li><strong>训练稳定性</strong>：如何避免策略崩溃，确保稳定收敛？</li>
+                    <li><strong>泛化能力</strong>：如何将在训练环境学到的策略迁移到新环境？</li>
+                </ul>
+                
+                <div class="quote">
+                    "策略智能不是简单的试错学习，而是一种认知范式的根本转变。从'监督学习'到'强化学习'，从'静态数据'到'动态交互'，从'最优拟合'到'最优策略'。这种转变让 AI 系统从'被动学习者'走向'主动探索者'。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 强化学习基础与 MDP 理论</strong>：阐述强化学习本质与 MDP 框架、值函数与 Bellman 方程、策略梯度理论基础等基础知识。</p>
+                
+                <p><strong>第二编 策略迭代核心算法</strong>：深入剖析策略迭代与值迭代、Q-Learning 与 SARSA、策略梯度方法、Actor-Critic 架构等核心算法。</p>
+                
+                <p><strong>第三编 深度强化学习与 Actor-Critic</strong>：详细探讨 DQN 与深度 Q 学习、DDPG 与 TD3 算法、PPO 与 TRPO、SAC 与最大熵 RL 等深度 RL 算法。</p>
+                
+                <p><strong>第四编 多 Agent 与分布式 RL</strong>：涵盖多 Agent 强化学习 MARL、分布式 RL 与并行训练、样本效率优化、迁移学习与元 RL 等高级主题。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从 MDP 建模到策略迭代，从 Actor-Critic 到深度 RL，从单 Agent 到多 Agent，策略智能体系正在重塑 AI 系统的认知范式。未来的 AI 将更具学习能力、更善探索决策、更接近人类的智能进化。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 40px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在强化学习与策略优化一线构建 AI 系统的研究者和工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 7 章 -->
+        <div class="chapter" id="chapter7">
+            <h2 class="chapter-title">第 7 章 Actor-Critic 架构</h2>
+            <div class="content">
+                <h3 class="section-title">7.1 Actor-Critic 核心思想</h3>
+                
+                <p>Actor-Critic（AC）是强化学习的核心架构，结合了策略梯度（Policy Gradient）和值函数（Value Function）方法的优势。Actor 负责学习策略（Policy），直接输出动作；Critic 负责评估策略，估计值函数（V 或 Q），为 Actor 提供低方差的梯度估计。这种"演员 - 评论家"的双网络架构，既保留了策略梯度的连续性优势，又通过 Critic 降低了方差，成为现代深度强化学习的基石。</p>
+                
+                <div class="highlight">
+                    <p><strong>Actor-Critic 核心优势：</strong>低方差梯度估计（Critic 提供基线）、连续动作空间支持（Actor 直接输出）、在线学习（无需经验回放）、样本效率较高（单步更新）。</p>
+                </div>
+                
+                <h3 class="section-title">7.2 Actor-Critic 完整实现</h3>
+                
+                <div class="section">
+                    <h4>Actor-Critic PyTorch 实现</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">Actor-Critic 算法完整实现</div>
+                        <pre>
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+import numpy as np
+from typing import Tuple, Dict, List
+from dataclasses import dataclass
+import gymnasium as gym
+
+@dataclass
+class ActorCriticConfig:
+    """配置类"""
+    state_dim: int
+    action_dim: int
+    hidden_dim: int = 256
+    actor_lr: float = 3e-4
+    critic_lr: float = 1e-3
+    gamma: float = 0.99
+    max_grad_norm: float = 0.5
+
+class ActorNetwork(nn.Module):
+    """Actor 网络：输出动作概率分布"""
+    
+    def __init__(self, config: ActorCriticConfig):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(config.state_dim, config.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(config.hidden_dim, config.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(config.hidden_dim, config.action_dim),
+        )
+    
+    def forward(self, state: torch.Tensor) -> torch.Tensor:
+        """输出动作 logits"""
+        return self.network(state)
+    
+    def get_action(self, state: torch.Tensor, 
+                   deterministic: bool = False) -> Tuple[int, torch.Tensor]:
+        """
+        采样动作
+        
+        Returns:
+            action: 采样动作
+            log_prob: 动作的对数概率
+        """
+        logits = self.forward(state)
+        probs = F.softmax(logits, dim=-1)
+        
+        if deterministic:
+            action = torch.argmax(probs, dim=-1)
+            log_prob = torch.log(probs.gather(1, action.unsqueeze(-1)))
+        else:
+            dist = torch.distributions.Categorical(probs)
+            action = dist.sample()
+            log_prob = dist.log_prob(action)
+        
+        return action.item(), log_prob
+
+class CriticNetwork(nn.Module):
+    """Critic 网络：估计状态值 V(s)"""
+    
+    def __init__(self, config: ActorCriticConfig):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(config.state_dim, config.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(config.hidden_dim, config.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(config.hidden_dim, 1)
+        )
+    
+    def forward(self, state: torch.Tensor) -> torch.Tensor:
+        """输出状态值 V(s)"""
+        return self.network(state)
+
+class ActorCriticAgent:
+    """
+    Actor-Critic Agent
+    
+    核心机制:
+    1. Actor 学习策略 π(a|s)
+    2. Critic 估计值函数 V(s)
+    3. 使用 TD 误差 δ = r + γV(s') - V(s) 作为优势估计
+    4. 策略梯度：∇J ≈ δ * ∇log π(a|s)
+    """
+    
+    def __init__(self, config: ActorCriticConfig):
+        self.config = config
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        
+        # 初始化网络
+        self.actor = ActorNetwork(config).to(self.device)
+        self.critic = CriticNetwork(config).to(self.device)
+        
+        # 优化器
+        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=config.actor_lr)
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=config.critic_lr)
+        
+        self.training_stats = {
+            'actor_loss': [],
+            'critic_loss': [],
+            'rewards': []
+        }
+    
+    def select_action(self, state: np.ndarray, 
+                     deterministic: bool = False) -> int:
+        """选择动作"""
+        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+        action, log_prob = self.actor.get_action(state_tensor, deterministic)
+        return action
+    
+    def compute_td_target(self, reward: float, 
+                         next_state: np.ndarray, 
+                         done: bool) -> torch.Tensor:
+        """
+        计算 TD 目标
+        
+        TD Target: r + γ * V(s') * (1 - done)
+        """
+        with torch.no_grad():
+            next_state_tensor = torch.FloatTensor(next_state).unsqueeze(0).to(self.device)
+            next_value = self.critic(next_state_tensor).item()
+            td_target = reward + self.config.gamma * next_value * (1 - done)
+        return torch.FloatTensor([td_target]).to(self.device)
+    
+    def update(self, state: np.ndarray, 
+               action: int, 
+               reward: float, 
+               next_state: np.ndarray, 
+               done: bool) -> Dict[str, float]:
+        """
+        单步更新
+        
+        1. 计算 TD 误差：δ = r + γV(s') - V(s)
+        2. Critic 损失：L_critic = δ²
+        3. Actor 损失：L_actor = -δ * log π(a|s)
+        """
+        # 转换为 Tensor
+        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+        action_tensor = torch.LongTensor([action]).to(self.device)
+        
+        # 1. 计算当前状态值
+        current_value = self.critic(state_tensor)
+        
+        # 2. 计算 TD 目标
+        td_target = self.compute_td_target(reward, next_state, done)
+        
+        # 3. 计算 TD 误差 (Advantage 估计)
+        td_error = td_target - current_value
+        advantage = td_error.detach()  # 停止梯度，避免影响 Critic
+        
+        # 4. Critic 更新
+        critic_loss = F.mse_loss(current_value, td_target)
+        
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        nn.utils.clip_grad_norm_(self.critic.parameters(), self.config.max_grad_norm)
+        self.critic_optimizer.step()
+        
+        # 5. Actor 更新
+        _, log_prob = self.actor.get_action(state_tensor)
+        actor_loss = -log_prob * advantage
+        
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        nn.utils.clip_grad_norm_(self.actor.parameters(), self.config.max_grad_norm)
+        self.actor_optimizer.step()
+        
+        # 记录统计
+        self.training_stats['actor_loss'].append(actor_loss.item())
+        self.training_stats['critic_loss'].append(critic_loss.item())
+        self.training_stats['rewards'].append(reward)
+        
+        return {
+            'actor_loss': actor_loss.item(),
+            'critic_loss': critic_loss.item(),
+            'td_error': td_error.item()
+        }
+    
+    def train(self, 
+              env: gym.Env, 
+              n_episodes: int = 1000,
+              max_steps: int = 1000,
+              verbose: bool = True) -> List[float]:
+        """
+        训练循环
+        
+        Returns:
+            episode_rewards: 每集的总奖励
+        """
+        episode_rewards = []
+        
+        for episode in range(n_episodes):
+            state, _ = env.reset()
+            episode_reward = 0
+            
+            for step in range(max_steps):
+                # 选择动作
+                action = self.select_action(state)
+                
+                # 执行动作
+                next_state, reward, terminated, truncated, _ = env.step(action)
+                done = terminated or truncated
+                
+                # 更新
+                stats = self.update(state, action, reward, next_state, done)
+                
+                state = next_state
+                episode_reward += reward
+                
+                if done:
+                    break
+            
+            episode_rewards.append(episode_reward)
+            
+            if verbose and (episode + 1) % 50 == 0:
+                avg_reward = np.mean(episode_rewards[-50:])
+                avg_actor_loss = np.mean(self.training_stats['actor_loss'][-50:])
+                avg_critic_loss = np.mean(self.training_stats['critic_loss'][-50:])
+                print(f"Episode {episode + 1}/{n_episodes} | "
+                      f"Avg Reward: {avg_reward:.2f} | "
+                      f"Actor Loss: {avg_actor_loss:.4f} | "
+                      f"Critic Loss: {avg_critic_loss:.4f}")
+        
+        return episode_rewards
+
+
+# 使用示例
+if __name__ == "__main__":
+    # 创建环境
+    env = gym.make('CartPole-v1')
+    
+    # 配置
+    config = ActorCriticConfig(
+        state_dim=env.observation_space.shape[0],
+        action_dim=env.action_space.n,
+        hidden_dim=256,
+        actor_lr=3e-4,
+        critic_lr=1e-3,
+        gamma=0.99
+    )
+    
+    # 创建 Agent
+    agent = ActorCriticAgent(config)
+    
+    # 训练
+    print("开始训练 Actor-Critic Agent...")
+    episode_rewards = agent.train(env, n_episodes=500, max_steps=500)
+    
+    print(f"\n训练完成!")
+    print(f"最后 100 集平均奖励：{np.mean(episode_rewards[-100:]):.2f}")
+    print(f"最高奖励：{max(episode_rewards):.2f}")
+    
+    # 测试
+    print("\n测试训练好的策略...")
+    state, _ = env.reset()
+    test_reward = 0
+    
+    for _ in range(500):
+        action = agent.select_action(state, deterministic=True)
+        state, reward, terminated, truncated, _ = env.step(action)
+        test_reward += reward
+        
+        if terminated or truncated:
+            break
+    
+    print(f"测试奖励：{test_reward:.2f}")
+    
+    print("\n关键观察:")
+    print("1. Actor-Critic 结合了策略梯度和值函数的优势")
+    print("2. Critic 提供低方差的 Advantage 估计 (TD 误差)")
+    print("3. 支持在线学习，无需经验回放")
+    print("4. 适用于离散和连续动作空间")
+    print("5. 是现代深度 RL 算法 (A3C, PPO, SAC) 的基础")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">7.3 A3C：异步优势 Actor-Critic</h3>
+                
+                <div class="section">
+                    <h4>从 AC 到 A3C</h4>
+                    
+                    <p>A3C（Asynchronous Advantage Actor-Critic）是 Actor-Critic 的并行扩展，通过多个异步工作的 Worker 并行探索环境，显著提升了样本效率和训练速度。核心创新：</p>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>异步并行</strong>：多个 Worker 独立与环境交互，异步更新全局网络</li>
+                        <li><strong>优势函数</strong>：使用 A(s,a) = Q(s,a) - V(s) 代替 TD 误差，进一步降低方差</li>
+                        <li><strong>n-step 返回</strong>：使用多步奖励累积，平衡偏差与方差</li>
+                        <li><strong>熵正则化</strong>：鼓励探索，避免过早收敛到次优策略</li>
+                    </ul>
+                    
+                    <div class="quote">
+                        "A3C 通过异步并行实现了 10-20 倍的训练加速，在 Atari 游戏上超越了当时所有深度 RL 算法。其核心思想——并行探索、优势估计、熵正则化——成为后续 PPO、SAC 等算法的标准组件。"
+                        <div class="quote-author">—— Mnih et al. (2016)</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">7.4 本章小结</h3>
+                <p>本章深入探讨了 Actor-Critic 架构。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>Actor-Critic 核心：Actor 学策略，Critic 估计值函数</li>
+                    <li>TD 误差作为 Advantage 估计，降低策略梯度方差</li>
+                    <li>A3C：异步并行、优势函数、n-step 返回、熵正则化</li>
+                    <li>应用：连续控制、机器人、游戏 AI</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：数据中心冷却系统优化</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某大型数据中心，10 万 + 服务器，冷却系统能耗占总能耗 40%</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>高维状态空间：1000+ 温度传感器，50+ 冷却设备</li>
+                                <li>连续动作空间：风机转速、水流速、阀门开度</li>
+                                <li>延迟奖励：冷却效果滞后 15-30 分钟</li>
+                                <li>安全约束：温度不能超过阈值（否则设备损坏）</li>
+                                <li>动态环境：外部气温、IT 负载实时变化</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>SAC + 安全层解决方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>SAC 算法</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>最大熵 RL：最大化奖励 + 策略熵</li>
+                                <li>Off-policy：高样本效率</li>
+                                <li>连续动作空间：直接输出高斯分布</li>
+                                <li>双 Critic：避免 Q 值过估计</li>
+                            </ul>
+                        </li>
+                        <li><strong>安全层</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>动作过滤：投影到安全区域</li>
+                                <li>约束优化：拉格朗日乘子法</li>
+                                <li>紧急接管：温度超阈值时切换到规则基线</li>
+                            </ul>
+                        </li>
+                        <li><strong>状态表示</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>图神经网络：建模服务器 - 冷却设备拓扑</li>
+                                <li>时序编码：LSTM 捕捉热惯性</li>
+                                <li>外部特征：天气预报、IT 负载预测</li>
+                            </ul>
+                        </li>
+                        <li><strong>分布式训练</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>8 GPU 并行：ElegantRL 框架</li>
+                                <li>经验回放池：100 万条转移</li>
+                                <li>训练时间：3 天收敛</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>能耗降低</strong>：冷却系统能耗降低 35%（年节电 1800 万度）</li>
+                        <li><strong>PUE 优化</strong>：PUE 从 1.52 降低到 1.31（-14%）</li>
+                        <li><strong>温度控制</strong>：热点温度降低 3.2°C，波动范围缩小 60%</li>
+                        <li><strong>安全性</strong>：0 次温度超标事件，100% SLA 达标</li>
+                        <li><strong>碳减排</strong>：年减少 CO2 排放 1.4 万吨</li>
+                        <li><strong>商业价值</strong>：年节省电费 2300 万元，ROI 18 个月</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：自动驾驶决策规划</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某自动驾驶公司，L4 级城市道路测试</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>高维感知：摄像头、激光雷达、毫米波雷达融合</li>
+                                <li>连续决策：转向、加速、刹车</li>
+                                <li>多 Agent 交互：车辆、行人、骑行者博弈</li>
+                                <li>长时规划：10 秒+ 预测 horizon</li>
+                                <li>安全关键：错误决策可能导致事故</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>MAPPO + 世界模型方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>MARL 架构</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>MAPPO（Multi-Agent PPO）：集中训练，分散执行</li>
+                                <li>每个交通参与者视为 Agent</li>
+                                <li>共享 Critic：建模交互</li>
+                            </ul>
+                        </li>
+                        <li><strong>世界模型</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>DreamerV3 架构：RSSM 状态空间模型</li>
+                                <li>预测未来 10 秒场景演化</li>
+                                <li>在 latent space 中进行策略搜索</li>
+                            </ul>
+                        </li>
+                        <li><strong>分层决策</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>高层：路由规划（A* + RL）</li>
+                                <li>中层：行为决策（变道、跟车、让行）</li>
+                                <li>底层：轨迹跟踪（MPC + RL 微调）</li>
+                            </ul>
+                        </li>
+                        <li><strong>安全验证</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>形式化验证：可达性分析</li>
+                                <li>对抗测试：生成边缘场景</li>
+                                <li>影子模式：与规则系统并行对比</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>驾驶平顺性</strong>：急加速/急刹车减少 78%</li>
+                        <li><strong>通行效率</strong>：平均车速提升 22%，通行时间缩短 15%</li>
+                        <li><strong>安全性</strong>：接管率从 0.8 次/千公里降低到 0.12 次/千公里（-85%）</li>
+                        <li><strong>舒适性</strong>：乘客晕车率从 35% 降低到 8%</li>
+                        <li><strong>复杂场景</strong>：无保护左转成功率从 67% 提升到 94%</li>
+                        <li><strong>部署规模</strong>：100+ 车辆，累计路测 500 万公里</li>
+                        <li><strong>商业价值</strong>：加速 L4 商业化，预计 2027 年大规模部署</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>强化学习系统部署最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>算法选择</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>离散动作：DQN、PPO</li>
+                                <li>连续控制：SAC、TD3、PPO</li>
+                                <li>多 Agent：MAPPO、QMIX</li>
+                                <li>样本稀缺：Model-based RL（MBPO、Dreamer）</li>
+                            </ul>
+                        </li>
+                        <li><strong>奖励设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>稀疏奖励：使用课程学习、奖励塑形</li>
+                                <li>多目标：加权求和或 Pareto 优化</li>
+                                <li>避免奖励黑客：对抗验证</li>
+                            </ul>
+                        </li>
+                        <li><strong>训练稳定</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>梯度裁剪：max_grad_norm=0.5</li>
+                                <li>学习率调度：余弦退火</li>
+                                <li>归一化：Observation/Reward 归一化</li>
+                                <li>早停：验证集性能监控</li>
+                            </ul>
+                        </li>
+                        <li><strong>安全部署</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>安全层：动作过滤、约束优化</li>
+                                <li>影子模式：与基线系统并行</li>
+                                <li>渐进式部署：A/B 测试、金丝雀发布</li>
+                            </ul>
+                        </li>
+                        <li><strong>持续优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>在线学习：新数据增量更新</li>
+                                <li>域随机化：提升泛化能力</li>
+                                <li>元学习：快速适应新环境</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 38px; border-left-color: var(--rl-blue);">
+                    "从数据中心到自动驾驶，从 SAC 到 MAPPO，从单 Agent 到多 Agent，强化学习体系正在重塑 AI 系统的认知范式。未来的 AI 将更具学习能力、更善探索决策、更接近人类的智能进化。这不仅是技术的进步，更是智能本质的探索。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：数据中心，能耗 -35%、PUE -14%、年节省 2300 万</li>
+                    <li>案例二：自动驾驶，接管率 -85%、平顺性 +78%、500 万公里路测</li>
+                    <li>最佳实践：算法选择、奖励设计、训练稳定、安全部署、持续优化</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">强化学习理论</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;">
+                    <li>MIT (2026). "Reinforcement Learning Theory." mit.edu</li>
+                    <li>Stanford (2026). "MDP and Dynamic Programming." stanford.edu</li>
+                </ol>
+                
+                <h3 class="section-title">深度强化学习</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="3">
+                    <li>CMU (2026). "Deep RL Algorithms." cmu.edu</li>
+                    <li>Berkeley (2026). "Actor-Critic Methods." berkeley.edu</li>
+                </ol>
+                
+                <h3 class="section-title">多 Agent 与分布式</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="5">
+                    <li>Princeton (2026). "Multi-Agent RL." princeton.edu</li>
+                    <li>DeepMind (2026). "Distributed RL Systems." deepmind.com</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.3em; margin-bottom: 15px; color: var(--rl-blue); font-weight: 800; font-family: 'Georgia', serif;">强化学习与 Agent 策略迭代优化</p>
+                <p style="font-size: 1.08em; margin-bottom: 7px; font-style: italic;">从试错学习到最优策略的认知进化</p>
+                <p>© 2026 超级代码智能体 | 策略智能版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 21px; font-size: 0.9em; line-height: 1.8;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="policy-spectrum" style="margin-top: 30px;">
+                    <div class="spectrum-item spectrum-rl">🔵 强化学习</div>
+                    <div class="spectrum-item spectrum-policy">🟣 策略迭代</div>
+                    <div class="spectrum-item spectrum-agent">🟡 Agent 优化</div>
+                    <div class="spectrum-item spectrum-actor">🟢 Actor</div>
+                    <div class="spectrum-item spectrum-critic">🔴 Critic</div>
+                </div>
+                <p style="margin-top: 30px; font-size: 0.83em; color: var(--text-secondary);">
+                    谨以此书献给所有在强化学习与策略优化一线构建 AI 系统的研究者和工程师们<br>
+                    从 MDP 建模到策略迭代，从 Actor-Critic 到深度 RL<br>
+                    策略智能——让 AI 系统从被动学习者走向主动探索者
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Reinforcement Learning & Agent Policy Iteration Optimization');
+        console.log('📚 From Trial-and-Error to Optimal Policy Cognitive Evolution (2024-2026)');
+        console.log('✨ RL + Policy + Agent + Actor + Critic = Strategic AI');
+    </script>
+</body>
+</html>

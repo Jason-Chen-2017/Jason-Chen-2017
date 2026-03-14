@@ -1,0 +1,1949 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多 Agent 协同工作流引擎与消息队列方案选型报告</title>
+    <style>
+        :root {
+            --primary: #7c3aed;
+            --secondary: #f59e0b;
+            --accent: #10b981;
+            --dark: #1e1b4b;
+            --light: #fef3c7;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --temporal: #00d4ff;
+            --airflow: #017cee;
+            --prefect: #0629b1;
+            --kafka: #231f20;
+            --nats: #00d4ff;
+            --rabbitmq: #ff6600;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary), var(--accent));
+            color: white;
+            padding: 70px 50px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 60%;
+            height: 200%;
+            background: rgba(255,255,255,0.1);
+            transform: rotate(-15deg);
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 1;
+        }
+
+        header .subtitle {
+            font-size: 1.2em;
+            opacity: 0.95;
+            max-width: 900px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .meta-info {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            margin-top: 35px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+        }
+
+        .meta-tag {
+            background: rgba(255,255,255,0.2);
+            padding: 10px 25px;
+            border-radius: 25px;
+            font-size: 0.95em;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        nav.toc {
+            background: var(--dark);
+            padding: 35px 50px;
+        }
+
+        nav.toc h2 {
+            color: var(--secondary);
+            margin-bottom: 25px;
+            font-size: 1.6em;
+        }
+
+        nav.toc ul {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 18px;
+        }
+
+        nav.toc li a {
+            color: white;
+            text-decoration: none;
+            padding: 15px 25px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            display: block;
+            transition: all 0.3s;
+            border-left: 4px solid transparent;
+        }
+
+        nav.toc li a:hover {
+            background: rgba(255,255,255,0.2);
+            border-left-color: var(--primary);
+            transform: translateX(8px);
+        }
+
+        main {
+            padding: 50px;
+        }
+
+        section {
+            margin-bottom: 60px;
+            scroll-margin-top: 20px;
+        }
+
+        section h2 {
+            color: var(--primary);
+            font-size: 2.2em;
+            margin-bottom: 30px;
+            padding-bottom: 18px;
+            border-bottom: 4px solid var(--secondary);
+        }
+
+        section h3 {
+            color: var(--dark);
+            font-size: 1.6em;
+            margin: 35px 0 22px 0;
+        }
+
+        section h4 {
+            color: var(--dark);
+            font-size: 1.3em;
+            margin: 28px 0 18px 0;
+            font-weight: 600;
+        }
+
+        p {
+            line-height: 1.9;
+            color: #333;
+            margin-bottom: 18px;
+            text-align: justify;
+            font-size: 1.05em;
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(124,58,237,0.1), rgba(245,158,11,0.1));
+            border-left: 5px solid var(--primary);
+            padding: 30px;
+            border-radius: 10px;
+            margin: 30px 0;
+        }
+
+        .highlight-box.success {
+            border-left-color: var(--success);
+            background: linear-gradient(135deg, rgba(16,185,129,0.1), rgba(16,185,129,0.05));
+        }
+
+        .highlight-box.warning {
+            border-left-color: var(--warning);
+            background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(245,158,11,0.05));
+        }
+
+        .highlight-box.info {
+            border-left-color: var(--temporal);
+            background: linear-gradient(135deg, rgba(0,212,255,0.1), rgba(0,212,255,0.05));
+        }
+
+        .code-block {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 25px 0;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.92em;
+            line-height: 1.7;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 30px 0;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 3px 15px rgba(0,0,0,0.1);
+        }
+
+        thead {
+            background: var(--primary);
+            color: white;
+        }
+
+        th, td {
+            padding: 18px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        tbody tr:hover {
+            background: rgba(124,58,237,0.05);
+        }
+
+        .solution-card {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 25px 35px;
+            border-radius: 15px;
+            margin: 15px 10px;
+            text-align: center;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            min-width: 220px;
+        }
+
+        .solution-card .solution-name {
+            font-size: 2em;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .solution-card .solution-type {
+            font-size: 1.1em;
+            opacity: 0.95;
+        }
+
+        .solution-card.temporal {
+            background: linear-gradient(135deg, var(--temporal), #0099cc);
+        }
+
+        .solution-card.airflow {
+            background: linear-gradient(135deg, var(--airflow), #4da6ff);
+        }
+
+        .solution-card.prefect {
+            background: linear-gradient(135deg, var(--prefect), #3b82f6);
+        }
+
+        .solution-card.kafka {
+            background: linear-gradient(135deg, var(--kafka), #4a4a4a);
+        }
+
+        .solution-card.nats {
+            background: linear-gradient(135deg, var(--nats), #0099cc);
+        }
+
+        .solution-card.rabbitmq {
+            background: linear-gradient(135deg, var(--rabbitmq), #ff8533);
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin: 35px 0;
+        }
+
+        .feature-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 15px;
+            padding: 30px;
+            transition: all 0.3s;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .feature-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+            transform: translateY(-8px);
+        }
+
+        .feature-card h4 {
+            color: var(--primary);
+            margin-bottom: 18px;
+            font-size: 1.3em;
+        }
+
+        .feature-card ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .feature-card li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+            color: #555;
+        }
+
+        .feature-card li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--success);
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .architecture-diagram {
+            background: #f8fafc;
+            padding: 35px;
+            border-radius: 12px;
+            margin: 35px 0;
+            border: 2px solid #e2e8f0;
+        }
+
+        .architecture-diagram pre {
+            font-family: 'Consolas', monospace;
+            font-size: 0.85em;
+            line-height: 1.6;
+            color: #2d3748;
+            overflow-x: auto;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 25px;
+            margin: 35px 0;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 35px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+        }
+
+        .stat-value {
+            font-size: 3em;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            font-size: 1.1em;
+            opacity: 0.95;
+        }
+
+        .comparison-table {
+            margin: 40px 0;
+        }
+
+        .comparison-table .winner {
+            background: rgba(16,185,129,0.1);
+            border-left: 4px solid var(--success);
+        }
+
+        .recommendation-box {
+            background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(245,158,11,0.15));
+            border: 2px solid var(--primary);
+            border-radius: 15px;
+            padding: 35px;
+            margin: 40px 0;
+        }
+
+        .recommendation-box h4 {
+            color: var(--primary);
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+
+        .pros-cons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            margin-top: 20px;
+        }
+
+        .pros, .cons {
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .pros {
+            background: rgba(16,185,129,0.05);
+            border-left: 4px solid var(--success);
+        }
+
+        .cons {
+            background: rgba(239,68,68,0.05);
+            border-left: 4px solid var(--danger);
+        }
+
+        .pros h5, .cons h5 {
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        .pros h5 {
+            color: var(--success);
+        }
+
+        .cons h5 {
+            color: var(--danger);
+        }
+
+        .pros ul, .cons ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .pros li::before {
+            content: '✅ ';
+        }
+
+        .cons li::before {
+            content: '⚠️ ';
+        }
+
+        footer {
+            background: var(--dark);
+            color: white;
+            padding: 50px;
+            text-align: center;
+        }
+
+        footer p {
+            color: rgba(255,255,255,0.8);
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2em;
+            }
+
+            main {
+                padding: 25px;
+            }
+
+            section h2 {
+                font-size: 1.8em;
+            }
+
+            .pros-cons {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 多 Agent 协同工作流引擎<br/>与消息队列方案选型报告</h1>
+            <p class="subtitle">基于 OpenClaw + Claude Code 的端到端研发自动化系统 —— AI Agent 编排架构与事件驱动通信基础设施完整方案</p>
+            <div class="meta-info">
+                <span class="meta-tag">调研日期：2026 年 3 月 12 日</span>
+                <span class="meta-tag">文档类型：架构选型报告</span>
+                <span class="meta-tag">适用对象：架构师/Tech Lead</span>
+                <span class="meta-tag">应用场景：AI Agent 编排 + 微服务通信</span>
+            </div>
+        </header>
+
+        <nav class="toc">
+            <h2>📋 目录导航</h2>
+            <ul>
+                <li><a href="#section1">1. 需求分析与选型标准</a></li>
+                <li><a href="#section2">2. 工作流引擎方案对比</a></li>
+                <li><a href="#section3">3. Temporal 深度解析</a></li>
+                <li><a href="#section4">4. Airflow vs Prefect 对比</a></li>
+                <li><a href="#section5">5. AI Agent 编排框架选型</a></li>
+                <li><a href="#section6">6. 消息队列方案对比</a></li>
+                <li><a href="#section7">7. Kafka vs NATS vs RabbitMQ</a></li>
+                <li><a href="#section8">8. 推荐架构设计</a></li>
+                <li><a href="#section9">9. 在研发自动化系统中的集成</a></li>
+            </ul>
+        </nav>
+
+        <main>
+            <!-- 第 1 章 -->
+            <section id="section1">
+                <h2>1. 需求分析与选型标准</h2>
+
+                <h3>1.1 八大研发阶段的编排需求</h3>
+                
+                <div class="highlight-box info">
+                    <strong>端到端研发自动化系统的核心挑战：</strong>
+                    <ul style="margin-top: 15px; padding-left: 20px;">
+                        <li><strong>长周期流程</strong>：从需求到上线可能持续数天甚至数周，需要持久化状态管理</li>
+                        <li><strong>人机协同</strong>：关键节点（PRD 评审、架构评审、上线审批）需要人工介入</li>
+                        <li><strong>异步执行</strong>：AI Agent 任务（代码生成、测试执行）是长时间运行的异步操作</li>
+                        <li><strong>错误恢复</strong>：网络故障、API 限流、LLM 超时等异常需要自动重试和补偿</li>
+                        <li><strong>可观测性</strong>：需要追踪每个 Agent 的执行状态、耗时、Token 消耗</li>
+                        <li><strong>并发控制</strong>：多个项目并行研发，需要资源隔离和优先级调度</li>
+                    </ul>
+                </div>
+
+                <h3>1.2 工作流引擎选型标准</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>评估维度</th>
+                            <th>权重</th>
+                            <th>具体要求</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>持久化能力</strong></td>
+                            <td>25%</td>
+                            <td>支持长时间运行（小时/天/周），故障后自动恢复状态</td>
+                        </tr>
+                        <tr>
+                            <td><strong>人机协同</strong></td>
+                            <td>20%</td>
+                            <td>支持人工审批节点、暂停/恢复、信号交互</td>
+                        </tr>
+                        <tr>
+                            <td><strong>错误处理</strong></td>
+                            <td>20%</td>
+                            <td>内置重试策略、超时控制、补偿事务、死信队列</td>
+                        </tr>
+                        <tr>
+                            <td><strong>可观测性</strong></td>
+                            <td>15%</td>
+                            <td>可视化 Dashboard、执行历史、指标监控、日志追踪</td>
+                        </tr>
+                        <tr>
+                            <td><strong>开发体验</strong></td>
+                            <td>10%</td>
+                            <td>代码即工作流、本地调试、版本管理、测试框架</td>
+                        </tr>
+                        <tr>
+                            <td><strong>扩展性</strong></td>
+                            <td>10%</td>
+                            <td>水平伸缩、多语言 SDK、插件生态、云原生部署</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>1.3 消息队列选型标准</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>评估维度</th>
+                            <th>权重</th>
+                            <th>具体要求</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>吞吐量</strong></td>
+                            <td>20%</td>
+                            <td>支持百万级 TPS，满足高并发 Agent 通信</td>
+                        </tr>
+                        <tr>
+                            <td><strong>延迟</strong></td>
+                            <td>20%</td>
+                            <td>毫秒级延迟，保证实时响应</td>
+                        </tr>
+                        <tr>
+                            <td><strong>可靠性</strong></td>
+                            <td>20%</td>
+                            <td>消息不丢失、Exactly-Once 语义、事务支持</td>
+                        </tr>
+                        <tr>
+                            <td><strong>模式支持</strong></td>
+                            <td>15%</td>
+                            <td>P2P、Pub/Sub、Event Streaming、Request/Reply</td>
+                        </tr>
+                        <tr>
+                            <td><strong>运维复杂度</strong></td>
+                            <td>15%</td>
+                            <td>部署简单、监控完善、故障自愈</td>
+                        </tr>
+                        <tr>
+                            <td><strong>生态集成</strong></td>
+                            <td>10%</td>
+                            <td>K8S 友好、主流语言客户端、云服务商支持</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 第 2 章 -->
+            <section id="section2">
+                <h2>2. 工作流引擎方案对比</h2>
+
+                <h3>2.1 主流方案总览</h3>
+                
+                <div style="text-align: center; margin: 40px 0;">
+                    <div class="solution-card temporal">
+                        <div class="solution-name">Temporal</div>
+                        <div class="solution-type">分布式持久化工作流</div>
+                        <div style="font-size: 0.9em; margin-top: 10px; opacity: 0.9;">⭐ 推荐方案<br/>AI Agent 编排首选</div>
+                    </div>
+
+                    <div class="solution-card airflow">
+                        <div class="solution-name">Airflow</div>
+                        <div class="solution-type">数据管道编排</div>
+                        <div style="font-size: 0.9em; margin-top: 10px; opacity: 0.9;">适合 ETL/批处理<br/>不适合长周期</div>
+                    </div>
+
+                    <div class="solution-card prefect">
+                        <div class="solution-name">Prefect</div>
+                        <div class="solution-type">Python 原生编排</div>
+                        <div style="font-size: 0.9em; margin-top: 10px; opacity: 0.9;">开发体验优秀<br/>AI 基础设施新兴</div>
+                    </div>
+
+                    <div class="solution-card" style="background: linear-gradient(135deg, #00d4ff, #0099cc);">
+                        <div class="solution-name">LangGraph</div>
+                        <div class="solution-type">AI Agent 专用编排</div>
+                        <div style="font-size: 0.9em; margin-top: 10px; opacity: 0.9;">LLM Agent 专用<br/>状态图模型</div>
+                    </div>
+                </div>
+
+                <h3>2.2 综合能力对比矩阵</h3>
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>特性</th>
+                            <th>Temporal</th>
+                            <th>Airflow</th>
+                            <th>Prefect</th>
+                            <th>LangGraph</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="winner">
+                            <td><strong>持久化执行</strong></td>
+                            <td>✅ 原生支持（年）</td>
+                            <td>❌ DAG 有向无环</td>
+                            <td>⚠️ 有限支持</td>
+                            <td>⚠️ 会话级持久化</td>
+                        </tr>
+                        <tr class="winner">
+                            <td><strong>人机协同</strong></td>
+                            <td>✅ Signal/Query</td>
+                            <td>❌ 不支持</td>
+                            <td>⚠️ 手动触发</td>
+                            <td>⚠️ 需自定义</td>
+                        </tr>
+                        <tr class="winner">
+                            <td><strong>错误恢复</strong></td>
+                            <td>✅ 自动重试 + 补偿</td>
+                            <td>⚠️ 基础重试</td>
+                            <td>✅ 智能重试</td>
+                            <td>⚠️ 基础异常处理</td>
+                        </tr>
+                        <tr class="winner">
+                            <td><strong>可观测性</strong></td>
+                            <td>✅ Web UI + History</td>
+                            <td>✅ Web UI + Logs</td>
+                            <td>✅ Cloud Dashboard</td>
+                            <td>⚠️ 需集成 LangSmith</td>
+                        </tr>
+                        <tr>
+                            <td><strong>学习曲线</strong></td>
+                            <td>中等</td>
+                            <td>陡峭</td>
+                            <td>平缓</td>
+                            <td>中等</td>
+                        </tr>
+                        <tr class="winner">
+                            <td><strong>AI Agent 适配</strong></td>
+                            <td>✅ 完美匹配</td>
+                            <td>❌ 不适合</td>
+                            <td>✅ 良好支持</td>
+                            <td>✅ 专为 LLM 设计</td>
+                        </tr>
+                        <tr>
+                            <td><strong>多语言 SDK</strong></td>
+                            <td>Go/Java/TS/Python/PHP</td>
+                            <td>Python</td>
+                            <td>Python</td>
+                            <td>Python/JS</td>
+                        </tr>
+                        <tr class="winner">
+                            <td><strong>云原生部署</strong></td>
+                            <td>✅ K8S Operator</td>
+                            <td>✅ Helm Chart</td>
+                            <td>✅ Docker/K8S</td>
+                            <td>⚠️ 自托管复杂</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="highlight-box success">
+                    <strong>🏆 综合推荐：Temporal + LangGraph 组合方案</strong>
+                    <ul style="margin-top: 15px; padding-left: 20px;">
+                        <li><strong>Temporal</strong>：负责宏观业务流程编排（需求→PRD→设计→开发→测试→部署→验收）</li>
+                        <li><strong>LangGraph</strong>：负责微观 AI Agent 协作（单个阶段内的多 Agent 对话与工具调用）</li>
+                        <li><strong>优势</strong>：结合 Temporal 的持久化可靠性与 LangGraph 的 LLM 原生能力</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- 第 3 章 -->
+            <section id="section3">
+                <h2>3. Temporal 深度解析</h2>
+
+                <h3>3.1 Temporal 核心概念</h3>
+                
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>📜 Workflow（工作流）</h4>
+                        <p>定义业务逻辑的代码，可以运行数年而不丢失状态。</p>
+                        <ul>
+                            <li>确定性执行（Deterministic）</li>
+                            <li>自动状态持久化</li>
+                            <li>故障后精确恢复</li>
+                            <li>支持子工作流嵌套</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>⚡ Activity（活动）</h4>
+                        <p>工作流中的具体任务单元，执行实际工作。</p>
+                        <ul>
+                            <li>幂等性设计</li>
+                            <li>自动重试（指数退避）</li>
+                            <li>超时控制（启动/执行）</li>
+                            <li>心跳检测（长任务）</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>📡 Signal（信号）</h4>
+                        <p>外部向运行中的工作流发送事件的机制。</p>
+                        <ul>
+                            <li>人机协同审批</li>
+                            <li>动态参数调整</li>
+                            <li>取消/终止通知</li>
+                            <li>外部事件触发</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>🔍 Query（查询）</h4>
+                        <p>查询运行中或已完成工作流的状态。</p>
+                        <ul>
+                            <li>只读不修改</li>
+                            <li>实时状态获取</li>
+                            <li>自定义查询逻辑</li>
+                            <li>用于 Dashboard 展示</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3>3.2 Temporal 工作流示例（研发自动化场景）</h3>
+                <div class="code-block">
+                    <code>// TypeScript 示例：端到端研发自动化工作流
+import { proxyActivities, sleep, signal } from '@temporalio/workflow';
+import type * as activities from './activities';
+
+const {
+  generatePRD,
+  reviewPRD,
+  designArchitecture,
+  reviewArchitecture,
+  generateAPISpec,
+  codingBackend,
+  codingFrontend,
+  unitTest,
+  integrationTest,
+  deployToDev,
+  deployToStaging,
+  deployToProduction,
+  uiAutomationTest,
+  notifySlack
+} = proxyActivities<typeof activities>({
+  startToCloseTimeout: '30 minutes',
+  retry: {
+    initialInterval: '1 minute',
+    backoffCoefficient: 2,
+    maximumAttempts: 5,
+  },
+});
+
+// 人工审批信号
+export const prdApproval = signal<boolean>('prdApproval');
+export const architectureApproval = signal<boolean>('architectureApproval');
+export const productionDeploymentApproval = signal<boolean>('productionDeploymentApproval');
+
+export async function研发自动化工作流(projectId: string, requirements: string) {
+  let approved = false;
+  
+  // ========== 阶段 1: 需求分析 → PRD ==========
+  const prd = await generatePRD(projectId, requirements);
+  
+  // 等待人工审批 PRD
+  approved = await prdApproval.first();
+  if (!approved) {
+    await notifySlack(`❌ PRD 被拒绝：${projectId}`);
+    throw new Error('PRD Approval Rejected');
+  }
+  
+  // ========== 阶段 2: 架构设计 ==========
+  const architecture = await designArchitecture(projectId, prd);
+  
+  // 等待架构委员会审批
+  approved = await architectureApproval.first();
+  if (!approved) {
+    await notifySlack(`❌ 架构设计被拒绝：${projectId}`);
+    throw new Error('Architecture Approval Rejected');
+  }
+  
+  // ========== 阶段 3: API 规范生成 ==========
+  const apiSpec = await generateAPISpec(projectId, architecture);
+  
+  // ========== 阶段 4: 并行编码 ==========
+  // 后端和前端开发可以并行
+  const [backendCode, frontendCode] = await Promise.all([
+    codingBackend(projectId, apiSpec),
+    codingFrontend(projectId, apiSpec),
+  ]);
+  
+  // ========== 阶段 5: 单元测试 ==========
+  const unitTestReport = await unitTest(projectId, backendCode, frontendCode);
+  if (unitTestReport.coverage < 80) {
+    throw new Error(`单元测试覆盖率不足：${unitTestReport.coverage}%`);
+  }
+  
+  // ========== 阶段 6: 集成测试 ==========
+  const integrationTestReport = await integrationTest(projectId);
+  if (!integrationTestReport.passed) {
+    throw new Error('集成测试失败');
+  }
+  
+  // ========== 阶段 7: 部署到开发环境 ==========
+  await deployToDev(projectId);
+  await notifySlack(`✅ 已部署到开发环境：${projectId}`);
+  
+  // ========== 阶段 8: 部署到预发环境 ==========
+  await deployToStaging(projectId);
+  await notifySlack(`✅ 已部署到预发环境：${projectId}`);
+  
+  // ========== 阶段 9: UI 自动化测试 ==========
+  const uiTestReport = await uiAutomationTest(projectId);
+  if (!uiTestReport.passed) {
+    throw new Error('UI 自动化测试失败');
+  }
+  
+  // ========== 阶段 10: 生产部署审批 ==========
+  approved = await productionDeploymentApproval.first();
+  if (!approved) {
+    await notifySlack(`❌ 生产部署被拒绝：${projectId}`);
+    return { status: 'CANCELLED', reason: 'Production deployment rejected' };
+  }
+  
+  // ========== 阶段 11: 灰度发布到生产 ==========
+  await deployToProduction(projectId, { strategy: 'canary', percentage: 10 });
+  await sleep('10 minutes'); // 观察期
+  
+  // 如果没有告警，全量发布
+  await deployToProduction(projectId, { strategy: 'rolling', percentage: 100 });
+  
+  await notifySlack(`🎉 项目 ${projectId} 已成功上线！`);
+  
+  return {
+    status: 'COMPLETED',
+    prd,
+    architecture,
+    apiSpec,
+    testReports: { unitTestReport, integrationTestReport, uiTestReport },
+  };
+}</code>
+                </div>
+
+                <h3>3.3 Temporal 架构优势</h3>
+                <div class="highlight-box">
+                    <strong>为什么 Temporal 最适合 AI Agent 编排？</strong>
+                    <ul style="margin-top: 15px; padding-left: 20px;">
+                        <li><strong>持久化状态机</strong>：Workflow 执行状态自动持久化，即使服务器宕机也能恢复</li>
+                        <li><strong>内建重试机制</strong>：Activity 失败自动重试，支持指数退避、最大尝试次数</li>
+                        <li><strong>超时控制</strong>：支持 Schedule-to-Start、Start-to-Close、Heartbeat 超时</li>
+                        <li><strong>Signal/Query</strong>：完美支持人机协同（审批、暂停、恢复、查询状态）</li>
+                        <li><strong>Timer/睡眠</strong>：支持长时间睡眠（小时/天/周），不占用资源</li>
+                        <li><strong>子工作流</strong>：支持嵌套编排，每个研发阶段可以是独立子工作流</li>
+                        <li><strong>多语言 SDK</strong>：TypeScript/Python/Go/Java/PHP，适配不同技术栈</li>
+                        <li><strong>可观测性</strong>：Web UI 查看执行历史、事件时间线、重试记录</li>
+                    </ul>
+                </div>
+
+                <h3>3.4 Temporal 部署方案</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>部署方式</th>
+                            <th>适用场景</th>
+                            <th>优点</th>
+                            <th>缺点</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Temporal Cloud</strong></td>
+                            <td>生产环境（推荐）</td>
+                            <td>零运维、99.99% SLA、自动备份</td>
+                            <td>按成本计费</td>
+                        </tr>
+                        <tr>
+                            <td><strong>K8S Helm Chart</strong></td>
+                            <td>生产环境（自建）</td>
+                            <td>完全控制、数据私有化</td>
+                            <td>运维复杂度高</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Docker Compose</strong></td>
+                            <td>开发/测试环境</td>
+                            <td>一键启动、本地调试</td>
+                            <td>不适合生产</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 第 4 章 -->
+            <section id="section4">
+                <h2>4. Airflow vs Prefect 对比</h2>
+
+                <h3>4.1 Apache Airflow 分析</h3>
+                
+                <div class="pros-cons">
+                    <div class="pros">
+                        <h5>✅ 优点</h5>
+                        <ul>
+                            <li>成熟的 DAG 调度系统，社区活跃</li>
+                            <li>丰富的 Operator 生态（200+ 内置）</li>
+                            <li>强大的 UI 界面（Gantt 图、任务日志）</li>
+                            <li>支持 Cron 表达式调度</li>
+                            <li>与大数据生态深度集成（Spark、Hive、Presto）</li>
+                        </ul>
+                    </div>
+                    <div class="cons">
+                        <h5>⚠️ 缺点</h5>
+                        <ul>
+                            <li>DAG 必须是有向无环图，不支持循环/长周期</li>
+                            <li>状态持久化弱，任务失败后难以恢复上下文</li>
+                            <li>不支持人机协同（无 Signal 机制）</li>
+                            <li>动态工作流能力弱（DAG 在解析时固定）</li>
+                            <li>运维复杂度高（需要维护 Web Server、Scheduler、Worker、DB）</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="highlight-box warning">
+                    <strong>结论：Airflow 不适合 AI Agent 编排场景</strong>
+                    <p style="margin-top: 15px;">Airflow 设计初衷是数据 ETL 管道调度，强调定时批量任务的 DAG 编排。而 AI Agent 工作流具有<strong>长周期、状态依赖、人机协同、动态分支</strong>等特点，Airflow 的 DAG 模型无法优雅表达这些需求。</p>
+                </div>
+
+                <h3>4.2 Prefect 分析</h3>
+                
+                <div class="pros-cons">
+                    <div class="pros">
+                        <h5>✅ 优点</h5>
+                        <ul>
+                            <li>Python 原生，装饰器语法简洁（@task、@flow）</li>
+                            <li>混合架构（Prefect Cloud + 本地 Worker）</li>
+                            <li>动态工作流支持（运行时决定任务图）</li>
+                            <li>优秀的错误处理（重试、超时、缓存）</li>
+                            <li>Prefect Horizon 专门针对 AI/MCP 场景优化</li>
+                            <li>开发体验优秀，本地调试方便</li>
+                        </ul>
+                    </div>
+                    <div class="cons">
+                        <h5>⚠️ 缺点</h5>
+                        <ul>
+                            <li>持久化能力不如 Temporal（不支持年级别运行）</li>
+                            <li>人机协同需要自定义实现</li>
+                            <li>多语言支持弱（主要 Python）</li>
+                            <li>社区规模小于 Airflow</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="highlight-box info">
+                    <strong>Prefect 定位：Python 团队的轻量级编排选择</strong>
+                    <p style="margin-top: 15px;">如果团队技术栈以 Python 为主，且工作流时长在小时级别以内，Prefect 是比 Airflow 更好的选择。Prefect 2.0+ 的混合架构和 Horizon AI 基础设施使其成为 Temporal 的轻量级替代方案。</p>
+                </div>
+
+                <h3>4.3 三者对比总结</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>维度</th>
+                            <th>Temporal</th>
+                            <th>Prefect</th>
+                            <th>Airflow</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>最佳场景</strong></td>
+                            <td>长周期、状态敏感、人机协同</td>
+                            <td>Python 数据管道、AI 任务</td>
+                            <td>定时 ETL、批处理</td>
+                        </tr>
+                        <tr>
+                            <td><strong>最长运行时间</strong></td>
+                            <td>数年（理论上无限）</td>
+                            <td>数小时 ~ 数天</td>
+                            <td>数分钟 ~ 数小时</td>
+                        </tr>
+                        <tr>
+                            <td><strong>状态恢复</strong></td>
+                            <td>✅ 精确恢复到故障点</td>
+                            <td>⚠️ 任务级重试</td>
+                            <td>❌ 从头重试</td>
+                        </tr>
+                        <tr>
+                            <td><strong>人机协同</strong></td>
+                            <td>✅ Signal/Query 原生支持</td>
+                            <td>⚠️ 需自定义</td>
+                            <td>❌ 不支持</td>
+                        </tr>
+                        <tr>
+                            <td><strong>学习曲线</strong></td>
+                            <td>中等</td>
+                            <td>平缓</td>
+                            <td>陡峭</td>
+                        </tr>
+                        <tr>
+                            <td><strong>推荐指数</strong></td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                            <td>⭐⭐⭐⭐</td>
+                            <td>⭐⭐</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 第 5 章 -->
+            <section id="section5">
+                <h2>5. AI Agent 编排框架选型</h2>
+
+                <h3>5.1 LangGraph：LLM Agent 专用编排</h3>
+                
+                <div class="highlight-box">
+                    <strong>LangGraph 核心特性：</strong>
+                    <ul style="margin-top: 15px; padding-left: 20px;">
+                        <li><strong>状态图模型</strong>：将 Agent 协作建模为状态机（State Graph），支持循环和条件分支</li>
+                        <li><strong>持久化内存</strong>：Checkpointer 保存对话历史，支持长短期记忆</li>
+                        <li><strong>工具调用</strong>：原生支持 Function Calling、Tool Use</li>
+                        <li><strong>多 Agent 协作</strong>：Supervisor、Hierarchical、Network 等拓扑模式</li>
+                        <li><strong>人机协同</strong>：Human-in-the-loop 中断/审批/编辑状态</li>
+                        <li><strong>流式输出</strong>：支持 Token 级别的流式响应</li>
+                    </ul>
+                </div>
+
+                <div class="code-block">
+                    <code>// LangGraph 示例：多 Agent 协作（产品 + 架构 + 开发）
+from langgraph.graph import StateGraph, END
+from typing import TypedDict, Annotated
+from langchain_core.messages import BaseMessage
+import operator
+
+# 定义状态
+class AgentState(TypedDict):
+    messages: Annotated[list[BaseMessage], operator.add]
+    current_stage: str
+    prd_draft: str
+    architecture_draft: str
+    code_review_feedback: str
+
+# 定义节点（Agent）
+def product_agent(state: AgentState):
+    """Product Agent: 根据需求生成 PRD"""
+    requirements = state['messages'][-1].content
+    prd = llm.invoke(f"根据以下需求生成 PRD: {requirements}")
+    return {"prd_draft": prd.content, "current_stage": "PRD_Review"}
+
+def architect_agent(state: AgentState):
+    """Architect Agent: 根据 PRD 设计技术方案"""
+    prd = state['prd_draft']
+    architecture = llm.invoke(f"根据以下 PRD 设计技术方案：{prd}")
+    return {"architecture_draft": architecture.content, "current_stage": "Architecture_Review"}
+
+def developer_agent(state: AgentState):
+    """Developer Agent: 根据架构编写代码"""
+    architecture = state['architecture_draft']
+    code = llm.invoke(f"根据以下架构编写代码：{architecture}")
+    return {"messages": [("assistant", code.content)], "current_stage": "Code_Review"}
+
+def human_reviewer(state: AgentState):
+    """人工评审节点（暂停等待审批）"""
+    # 这里会暂停，等待人类通过 API 发送审批信号
+    pass
+
+# 构建状态图
+workflow = StateGraph(AgentState)
+
+# 添加节点
+workflow.add_node("product_agent", product_agent)
+workflow.add_node("architect_agent", architect_agent)
+workflow.add_node("developer_agent", developer_agent)
+workflow.add_node("human_reviewer", human_reviewer)
+
+# 设置入口
+workflow.set_entry_point("product_agent")
+
+# 添加边（条件路由）
+workflow.add_conditional_edges(
+    "product_agent",
+    lambda x: x["current_stage"],
+    {
+        "PRD_Review": "human_reviewer",
+    }
+)
+
+workflow.add_conditional_edges(
+    "human_reviewer",
+    lambda x: "approved" if check_approval() else "rejected",
+    {
+        "approved": "architect_agent",
+        "rejected": END,
+    }
+)
+
+workflow.add_edge("architect_agent", "developer_agent")
+workflow.add_edge("developer_agent", END)
+
+# 编译并运行
+app = workflow.compile()
+result = app.invoke({"messages": [("user", "开发一个电商网站")], "current_stage": "Start"})</code>
+                </div>
+
+                <h3>5.2 其他 AI Agent 框架对比</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>框架</th>
+                            <th>特点</th>
+                            <th>适用场景</th>
+                            <th>推荐度</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>LangGraph</strong></td>
+                            <td>状态图模型、持久化、人机协同</td>
+                            <td>复杂多 Agent 协作</td>
+                            <td>⭐⭐⭐⭐⭐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>AutoGen</strong></td>
+                            <td>微软出品、对话驱动、Group Chat</td>
+                            <td>研究实验、快速原型</td>
+                            <td>⭐⭐⭐⭐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>CrewAI</strong></td>
+                            <td>角色分工、任务链、易用性强</td>
+                            <td>简单 Agent 团队</td>
+                            <td>⭐⭐⭐⭐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>LlamaIndex Workflows</strong></td>
+                            <td>RAG 优化、数据索引、查询引擎</td>
+                            <td>知识库问答场景</td>
+                            <td>⭐⭐⭐</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>5.3 分层编排架构</h3>
+                <div class="architecture-diagram">
+                    <pre>
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        分层编排架构设计                                  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │ Level 1: 业务流程层 (Temporal)                                     │ │
+│  │                                                                    │ │
+│  │  需求 → PRD → 架构 → API → Coding → Test → Deploy → Acceptance   │ │
+│  │   ↓      ↓      ↓       ↓        ↓       ↓        ↓         ↓     │ │
+│  │  [Stage1][Stage2][Stage3] [Stage4]  [Stage5] [Stage6]  [Stage7]   │ │
+│  │                                                                    │ │
+│  │  • 长周期持久化 (天/周)                                            │ │
+│  │  • 人机协同审批                                                    │ │
+│  │  • 跨阶段状态管理                                                  │ │
+│  │  • 错误恢复与补偿                                                  │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│                                    ↓                                    │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │ Level 2: Agent 协作层 (LangGraph)                                   │ │
+│  │                                                                    │ │
+│  │  每个 Stage 内部 = 一个 LangGraph StateGraph                      │ │
+│  │                                                                    │ │
+│  │  例如 PRD 阶段：                                                   │ │
+│  │  Research Agent → Writer Agent → Reviewer Agent → Human Approval │ │
+│  │                                                                    │ │
+│  │  • 多 Agent 对话协作                                                │ │
+│  │  • 工具调用（搜索、代码执行、API）                                 │ │
+│  │  • 短期记忆（对话历史）                                            │ │
+│  │  • 流式输出                                                        │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│                                    ↓                                    │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │ Level 3: 通信层 (Kafka / NATS)                                     │ │
+│  │                                                                    │ │
+│  │  • Agent 间异步消息传递                                            │ │
+│  │  • 事件驱动架构（Event Sourcing）                                  │ │
+│  │  • 解耦 Temporal Worker 与 LangGraph Agent                       │ │
+│  │  • 削峰填谷、缓冲队列                                              │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+                    </pre>
+                </div>
+            </section>
+
+            <!-- 第 6 章 -->
+            <section id="section6">
+                <h2>6. 消息队列方案对比</h2>
+
+                <h3>6.1 主流消息队列总览</h3>
+                
+                <div style="text-align: center; margin: 40px 0;">
+                    <div class="solution-card kafka">
+                        <div class="solution-name">Kafka</div>
+                        <div class="solution-type">分布式事件流平台</div>
+                        <div style="font-size: 0.9em; margin-top: 10px; opacity: 0.9;">高吞吐 Event Streaming<br/>日志聚合/数据管道</div>
+                    </div>
+
+                    <div class="solution-card nats">
+                        <div class="solution-name">NATS JetStream</div>
+                        <div class="solution-type">云原生消息系统</div>
+                        <div style="font-size: 0.9em; margin-top: 10px; opacity: 0.9;">低延迟 Pub/Sub<br/>微服务通信首选</div>
+                    </div>
+
+                    <div class="solution-card rabbitmq">
+                        <div class="solution-name">RabbitMQ</div>
+                        <div class="solution-type">传统消息代理</div>
+                        <div style="font-size: 0.9em; margin-top: 10px; opacity: 0.9;">AMQP 协议成熟稳定<br/>复杂路由场景</div>
+                    </div>
+
+                    <div class="solution-card" style="background: linear-gradient(135deg, #dc2626, #ef4444);">
+                        <div class="solution-name">Redis Streams</div>
+                        <div class="solution-type">轻量级流处理</div>
+                        <div style="font-size: 0.9em; margin-top: 10px; opacity: 0.9;">简单场景/已有 Redis<br/>不推荐核心使用</div>
+                    </div>
+                </div>
+
+                <h3>6.2 性能对比基准</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>指标</th>
+                            <th>Kafka</th>
+                            <th>NATS JetStream</th>
+                            <th>RabbitMQ</th>
+                            <th>Redis Streams</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>吞吐量</strong></td>
+                            <td>100 万+/秒</td>
+                            <td>50 万+/秒</td>
+                            <td>5 万~10 万/秒</td>
+                            <td>10 万~20 万/秒</td>
+                        </tr>
+                        <tr>
+                            <td><strong>延迟 (P99)</strong></td>
+                            <td>10~50ms</td>
+                            <td>1~5ms ⭐</td>
+                            <td>5~20ms</td>
+                            <td>1~3ms ⭐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>消息持久化</strong></td>
+                            <td>✅ 磁盘持久化</td>
+                            <td>✅ 内存 + 磁盘</td>
+                            <td>✅ 可选持久化</td>
+                            <td>⚠️ 内存（AOF 可选）</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Exactly-Once</strong></td>
+                            <td>✅ 支持（幂等 Producer）</td>
+                            <td>✅ 支持</td>
+                            <td>✅ 支持（Confirm）</td>
+                            <td>❌ At-Least-Once</td>
+                        </tr>
+                        <tr>
+                            <td><strong>消息回溯</strong></td>
+                            <td>✅ 按 Offset 重放</td>
+                            <td>✅ Stream Consumer</td>
+                            <td>❌ 消费即删除</td>
+                            <td>⚠️ 有限支持</td>
+                        </tr>
+                        <tr>
+                            <td><strong>集群扩展</strong></td>
+                            <td>✅ 水平扩展（Partition）</td>
+                            <td>✅ 水平扩展</td>
+                            <td>⚠️ 镜像队列复杂</td>
+                            <td>❌ 单主限制</td>
+                        </tr>
+                        <tr>
+                            <td><strong>运维复杂度</strong></td>
+                            <td>高（依赖 ZooKeeper/KRaft）</td>
+                            <td>低（单二进制）⭐</td>
+                            <td>中（Erlang 运维）</td>
+                            <td>低（已有 Redis）⭐</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>6.3 消息模式支持</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>模式</th>
+                            <th>说明</th>
+                            <th>Kafka</th>
+                            <th>NATS</th>
+                            <th>RabbitMQ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>P2P（点对点）</strong></td>
+                            <td>一条消息只被一个消费者处理</td>
+                            <td>✅ Consumer Group</td>
+                            <td>✅ Queue Group</td>
+                            <td>✅ Direct Exchange</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Pub/Sub（发布订阅）</strong></td>
+                            <td>一条消息被多个消费者处理</td>
+                            <td>✅ 多 Consumer Group</td>
+                            <td>✅ 多 Subscription</td>
+                            <td>✅ Fanout Exchange</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Request/Reply</strong></td>
+                            <td>同步请求 - 响应模式</td>
+                            <td>⚠️ 需自定义</td>
+                            <td>✅ 原生支持 ⭐</td>
+                            <td>✅ RPC 插件</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Event Streaming</strong></td>
+                            <td>事件溯源、日志聚合</td>
+                            <td>✅ 核心能力 ⭐</td>
+                            <td>✅ JetStream</td>
+                            <td>❌ 不适合</td>
+                        </tr>
+                        <tr>
+                            <td><strong>延迟队列</strong></td>
+                            <td>定时/延迟投递</td>
+                            <td>⚠️ 需自定义</td>
+                            <td>✅ 原生支持</td>
+                            <td>✅ 插件支持</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 第 7 章 -->
+            <section id="section7">
+                <h2>7. Kafka vs NATS vs RabbitMQ 深度对比</h2>
+
+                <h3>7.1 Apache Kafka</h3>
+                
+                <div class="pros-cons">
+                    <div class="pros">
+                        <h5>✅ 优点</h5>
+                        <ul>
+                            <li>超高吞吐量（百万级 TPS）</li>
+                            <li>持久化存储（可配置保留策略）</li>
+                            <li>支持消息回溯重放</li>
+                            <li>成熟的生态系统（Connect、Streams、KSQL）</li>
+                            <li>适合 Event Sourcing、CQRS 架构</li>
+                            <li>强一致性保证</li>
+                        </ul>
+                    </div>
+                    <div class="cons">
+                        <h5>⚠️ 缺点</h5>
+                        <ul>
+                            <li>运维复杂度高（ZooKeeper/KRaft、Broker、Topic 管理）</li>
+                            <li>延迟相对较高（10ms+）</li>
+                            <li>小消息场景效率低</li>
+                            <li>Request/Reply 模式不友好</li>
+                            <li>资源占用大（JVM、PageCache）</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="highlight-box info">
+                    <strong>推荐场景：</strong>日志聚合、用户行为追踪、数据管道、Event Sourcing、审计日志等需要高吞吐和消息回溯的场景。
+                </div>
+
+                <h3>7.2 NATS / NATS JetStream</h3>
+                
+                <div class="pros-cons">
+                    <div class="pros">
+                        <h5>✅ 优点</h5>
+                        <ul>
+                            <li>极低延迟（1~5ms，Go 语言高性能实现）</li>
+                            <li>极简运维（单二进制文件，无外部依赖）</li>
+                            <li>云原生友好（K8S Operator、Helm Chart）</li>
+                            <li>支持多种消息模式（Pub/Sub、Queue、Request/Reply、JetStream）</li>
+                            <li>多语言客户端（30+ 官方 SDK）</li>
+                            <li>资源占用小（内存高效）</li>
+                        </ul>
+                    </div>
+                    <div class="cons">
+                        <h5>⚠️ 缺点</h5>
+                        <ul>
+                            <li>JetStream 相对年轻（2021 年 GA）</li>
+                            <li>生态系统不如 Kafka 成熟</li>
+                            <li>超大规模部署案例较少</li>
+                            <li>消息回溯能力弱于 Kafka</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="highlight-box success">
+                    <strong>🏆 推荐方案：NATS JetStream 作为微服务通信骨干</strong>
+                    <p style="margin-top: 15px;">对于 AI Agent 协同场景，NATS 的低延迟、Request/Reply 支持、极简运维使其成为微服务间通信的理想选择。JetStream 提供了持久化和流处理能力，弥补了传统 NATS 的不足。</p>
+                </div>
+
+                <h3>7.3 RabbitMQ</h3>
+                
+                <div class="pros-cons">
+                    <div class="pros">
+                        <h5>✅ 优点</h5>
+                        <ul>
+                            <li>AMQP 协议标准实现，成熟稳定</li>
+                            <li>灵活的路由（Exchange、Binding、Routing Key）</li>
+                            <li>完善的确认机制（Publisher Confirm、Consumer Ack）</li>
+                            <li>丰富的插件生态（延迟队列、Sharding、Federation）</li>
+                            <li>管理界面友好</li>
+                        </ul>
+                    </div>
+                    <div class="cons">
+                        <h5>⚠️ 缺点</h5>
+                        <ul>
+                            <li>吞吐量相对较低（5 万~10 万 TPS）</li>
+                            <li>Erlang 运维门槛高</li>
+                            <li>集群扩展复杂（镜像队列同步开销大）</li>
+                            <li>不支持消息回溯</li>
+                            <li>云原生支持较弱</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3>7.4 最终推荐方案</h3>
+                
+                <div class="recommendation-box">
+                    <h4>🎯 推荐架构：NATS JetStream + Kafka 混合方案</h4>
+                    
+                    <table style="margin-top: 20px;">
+                        <thead>
+                            <tr>
+                                <th>场景</th>
+                                <th>推荐方案</th>
+                                <th>理由</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Agent 间实时通信</strong></td>
+                                <td>NATS Core（Pub/Sub + Request/Reply）</td>
+                                <td>低延迟、支持同步调用、运维简单</td>
+                            </tr>
+                            <tr>
+                                <td><strong>任务队列</strong></td>
+                                <td>NATS JetStream（Stream + Consumer）</td>
+                                <td>持久化、ACK 机制、重试、背压控制</td>
+                            </tr>
+                            <tr>
+                                <td><strong>事件溯源/审计日志</strong></td>
+                                <td>Kafka</td>
+                                <td>高吞吐、消息回溯、长期存储</td>
+                            </tr>
+                            <tr>
+                                <td><strong>监控指标聚合</strong></td>
+                                <td>Kafka</td>
+                                <td>适合时序数据、对接 Flink/Spark</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 第 8 章 -->
+            <section id="section8">
+                <h2>8. 推荐架构设计</h2>
+
+                <h3>8.1 整体架构图</h3>
+                
+                <div class="architecture-diagram">
+                    <pre>
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│              多 Agent 协同工作流与消息队列架构（Temporal + LangGraph + NATS）     │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  ┌───────────────────────────────────────────────────────────────────────────┐ │
+│  │                          API Gateway Layer                                 │ │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                       │ │
+│  │  │   REST API  │  │  GraphQL    │  │  WebSocket  │                       │ │
+│  │  │  (FastAPI)  │  │  (Apollo)   │  │  (Socket.IO)│                       │ │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘                       │ │
+│  └───────────────────────────────────────────────────────────────────────────┘ │
+│                                      │                                          │
+│                                      ▼                                          │
+│  ┌───────────────────────────────────────────────────────────────────────────┐ │
+│  │                     Orchestration Layer (Temporal)                         │ │
+│  │                                                                            │ │
+│  │  ┌────────────────────────────────────────────────────────────────────┐   │ │
+│  │  │  Temporal Cluster (3 Nodes HA)                                     │   │ │
+│  │  │                                                                    │   │ │
+│  │  │  Frontend ──► History Service ──► Matching Service ──► Worker     │   │ │
+│  │  │       ▲              │                    │                         │   │ │
+│  │  │       │              ▼                    ▼                         │   │ │
+│  │  │       │         Cassandra/PostgreSQL    Elasticsearch               │   │ │
+│  │  │       │          (状态持久化)           (执行历史搜索)               │   │ │
+│  │  │       │                                                            │   │ │
+│  │  │  Web UI / CLI / tctl                                               │   │ │
+│  │  └────────────────────────────────────────────────────────────────────┘   │ │
+│  │                                                                            │ │
+│  │  Workflows:                                                                │ │
+│  │  • 研发自动化主流程 (End-to-End Pipeline)                                 │ │
+│  │  • PRD 设计子流程 (PRD Design Sub-Workflow)                               │ │
+│  │  • 架构设计子流程 (Architecture Design Sub-Workflow)                      │ │
+│  │  • 代码生成子流程 (Code Generation Sub-Workflow)                          │ │
+│  │  • 测试执行子流程 (Test Execution Sub-Workflow)                           │ │
+│  │  • 部署发布子流程 (Deployment Sub-Workflow)                               │ │
+│  └───────────────────────────────────────────────────────────────────────────┘ │
+│                                      │                                          │
+│                    ┌─────────────────┼─────────────────┐                       │
+│                    │                 │                 │                       │
+│                    ▼                 ▼                 ▼                       │
+│  ┌─────────────────────┐ ┌─────────────────────┐ ┌─────────────────────┐      │
+│  │  Temporal Workers   │ │  Temporal Workers   │ │  Temporal Workers   │      │
+│  │  (Activity Executors)│ │  (Activity Executors)│ │  (Activity Executors)│      │
+│  │                     │ │                     │ │                     │      │
+│  │  • PRD Generator    │ │  • Code Generator   │ │  • Test Executor    │      │
+│  │  • Architecture     │ │  • Unit Test        │ │  • Deployer         │      │
+│  │    Designer         │ │  • Integration Test │ │  • UI Automation    │      │
+│  │  • API Spec Gen     │ │  • Code Reviewer    │ │  • Notifier         │      │
+│  └──────────┬──────────┘ └──────────┬──────────┘ └──────────┬──────────┘      │
+│             │                       │                       │                  │
+│             └───────────────────────┼───────────────────────┘                  │
+│                                     │                                          │
+│                                     ▼                                          │
+│  ┌───────────────────────────────────────────────────────────────────────────┐ │
+│  │                    Message Bus Layer (NATS JetStream)                      │ │
+│  │                                                                            │ │
+│  │  ┌────────────────────────────────────────────────────────────────────┐   │ │
+│  │  │  NATS Cluster (3 Nodes RAFT)                                       │   │ │
+│  │  │                                                                    │   │ │
+│  │  │  Streams:                                                          │   │ │
+│  │  │  • agent-events (Agent 事件流)                                     │   │ │
+│  │  │  • task-queue (任务队列)                                           │   │ │
+│  │  │  • notifications (通知广播)                                        │   │ │
+│  │  │  • audit-log (审计日志 → Kafka 镜像)                              │   │ │
+│  │  │                                                                    │   │ │
+│  │  │  Consumers:                                                        │   │ │
+│  │  │  • langgraph-agents (LangGraph Agent 组)                          │   │ │
+│  │  │  • notification-service (通知服务)                                │   │ │
+│  │  │  • monitoring-collector (监控采集)                                │   │ │
+│  │  └────────────────────────────────────────────────────────────────────┘   │ │
+│  └───────────────────────────────────────────────────────────────────────────┘ │
+│                                      │                                          │
+│                                      ▼                                          │
+│  ┌───────────────────────────────────────────────────────────────────────────┐ │
+│  │                   AI Agent Layer (LangGraph)                               │ │
+│  │                                                                            │ │
+│  │  ┌────────────────────────────────────────────────────────────────────┐   │ │
+│  │  │  LangGraph StateGraphs (per Stage)                                 │   │ │
+│  │  │                                                                    │   │ │
+│  │  │  PRD Stage Graph:                                                  │   │ │
+│  │  │  Research Agent → Writer Agent → Reviewer Agent → Human Approval  │   │ │
+│  │  │                                                                    │   │ │
+│  │  │  Architecture Stage Graph:                                         │   │ │
+│  │  │  System Architect → DB Architect → Security Reviewer → Approval   │   │ │
+│  │  │                                                                    │   │ │
+│  │  │  Coding Stage Graph:                                               │   │ │
+│  │  │  Backend Dev → Frontend Dev → Code Reviewer → Merge               │   │ │
+│  │  │                                                                    │   │ │
+│  │  │  Each Agent:                                                       │   │ │
+│  │  │  • LLM (Claude Code / GPT-4 / DeepSeek)                           │   │ │
+│  │  │  • Tools (Search, Code Interpreter, API Caller)                   │   │ │
+│  │  │  • Memory (Short-term + Long-term via Checkpointer)               │   │ │
+│  │  └────────────────────────────────────────────────────────────────────┘   │ │
+│  └───────────────────────────────────────────────────────────────────────────┘ │
+│                                      │                                          │
+│                                      ▼                                          │
+│  ┌───────────────────────────────────────────────────────────────────────────┐ │
+│  │                      Supporting Services                                   │ │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐         │ │
+│  │  │   Harbor    │ │  SonarQube  │ │ Prometheus  │ │  Grafana    │         │ │
+│  │  │ (镜像仓库)  │ │ (代码质量)  │ │  (监控)     │ │ (可视化)    │         │ │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘         │ │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐         │ │
+│  │  │    Kafka    │ │ Elastic     │ │   Jaeger    │ │  MinIO/S3   │         │ │
+│  │  │ (事件归档)  │ │  (日志)     │ │  (链路追踪) │ │ (对象存储)  │         │ │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘         │ │
+│  └───────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                    </pre>
+                </div>
+
+                <h3>8.2 部署配置建议</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>组件</th>
+                            <th>节点数</th>
+                            <th>配置</th>
+                            <th>存储</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Temporal Cluster</strong></td>
+                            <td>3</td>
+                            <td>8 核 16GB</td>
+                            <td>Cassandra 3 节点 / PostgreSQL HA</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Temporal Workers</strong></td>
+                            <td>5-10（弹性伸缩）</td>
+                            <td>16 核 32GB</td>
+                            <td>临时存储 50GB</td>
+                        </tr>
+                        <tr>
+                            <td><strong>NATS Cluster</strong></td>
+                            <td>3</td>
+                            <td>8 核 16GB</td>
+                            <td>JetStream 100GB SSD</td>
+                        </tr>
+                        <tr>
+                            <td><strong>LangGraph Agents</strong></td>
+                            <td>10-20（按需伸缩）</td>
+                            <td>8 核 16GB + GPU 可选</td>
+                            <td>Redis 持久化 20GB</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Kafka Cluster</strong></td>
+                            <td>3</td>
+                            <td>16 核 32GB</td>
+                            <td>500GB NVMe × 3</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 第 9 章 -->
+            <section id="section9">
+                <h2>9. 在研发自动化系统中的集成</h2>
+
+                <h3>9.1 八大阶段的工具链映射</h3>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>研发阶段</th>
+                            <th>Temporal Workflow</th>
+                            <th>LangGraph Agents</th>
+                            <th>NATS Topics</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>1. 需求分析</strong></td>
+                            <td>RequirementAnalysisWF</td>
+                            <td>Research Agent, Analyst Agent</td>
+                            <td>agent-events.requirement</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2. PRD 设计</strong></td>
+                            <td>PRDDesignWF</td>
+                            <td>Writer Agent, Reviewer Agent</td>
+                            <td>agent-events.prd</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3. 架构设计</strong></td>
+                            <td>ArchitectureDesignWF</td>
+                            <td>System Architect, DB Architect</td>
+                            <td>agent-events.architecture</td>
+                        </tr>
+                        <tr>
+                            <td><strong>4. API 定义</strong></td>
+                            <td>APISpecWF</td>
+                            <td>API Designer Agent</td>
+                            <td>agent-events.api-spec</td>
+                        </tr>
+                        <tr>
+                            <td><strong>5. AI Coding</strong></td>
+                            <td>CodingWF</td>
+                            <td>Backend Dev, Frontend Dev</td>
+                            <td>task-queue.coding</td>
+                        </tr>
+                        <tr>
+                            <td><strong>6. 测试执行</strong></td>
+                            <td>TestingWF</td>
+                            <td>Unit Test Agent, QA Agent</td>
+                            <td>task-queue.testing</td>
+                        </tr>
+                        <tr>
+                            <td><strong>7. CI/CD 部署</strong></td>
+                            <td>DeploymentWF</td>
+                            <td>DevOps Agent</td>
+                            <td>agent-events.deployment</td>
+                        </tr>
+                        <tr>
+                            <td><strong>8. UI 验收</strong></td>
+                            <td>UATWF</td>
+                            <td>UI Test Agent</td>
+                            <td>agent-events.uat</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>9.2 典型执行流程</h3>
+                <div class="code-block">
+                    <code># 端到端执行示例
+
+# 1. 用户提交需求
+POST /api/v1/projects
+{
+  "name": "电商平台",
+  "requirements": "开发一个 B2C 电商网站，包含商品管理、购物车、订单、支付功能",
+  "team": ["product", "backend", "frontend", "qa"]
+}
+
+# 2. Temporal 启动主工作流
+client.start_workflow(
+    "研发自动化工作流",
+    project_id="proj-001",
+    requirements="...",
+    task_queue="rd-automation",
+    execution_timeout="7 days"  # 整个流程最多 7 天
+)
+
+# 3. Temporal 调用 Activity → 发布事件到 NATS
+# NATS Topic: agent-events.requirement
+{
+  "event_type": "requirement_submitted",
+  "project_id": "proj-001",
+  "payload": {...},
+  "timestamp": "2026-03-12T10:00:00Z"
+}
+
+# 4. LangGraph Agent 订阅 NATS 事件并执行
+# Research Agent 开始需求分析
+app = langgraph_app.compile()
+result = app.invoke({
+    "messages": [("user", requirements)],
+    "stage": "requirement_analysis"
+})
+
+# 5. Agent 完成后发布结果到 NATS
+# NATS Topic: agent-events.prd-draft
+nats.publish("agent-events.prd-draft", prd_json)
+
+# 6. Temporal 检测到 PRD 完成 → 触发人工审批
+# 发送 Signal 给工作流
+wf.signal("prdApproval", approved=True)
+
+# 7. 工作流继续执行下一阶段...
+
+# 8. 所有阶段完成后，工作流结束
+result = wf.result()
+print(f"项目 {project_id} 完成！")</code>
+                </div>
+
+                <h3>9.3 监控与可观测性</h3>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>📊 Temporal Web UI</h4>
+                        <ul>
+                            <li>查看工作流执行历史</li>
+                            <li>事件时间线可视化</li>
+                            <li>重试记录与错误详情</li>
+                            <li>手动发送 Signal/Query</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>📈 Prometheus + Grafana</h4>
+                        <ul>
+                            <li>工作流成功率/失败率</li>
+                            <li>Activity 执行耗时 P99</li>
+                            <li>NATS 消息吞吐量</li>
+                            <li>Agent Token 消耗统计</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>🔍 Jaeger 链路追踪</h4>
+                        <ul>
+                            <li>跨服务调用追踪</li>
+                            <li>Agent 执行链路</li>
+                            <li>消息传递延迟分析</li>
+                            <li>瓶颈定位</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>📝 ELK 日志聚合</h4>
+                        <ul>
+                            <li>集中式日志收集</li>
+                            <li>错误日志告警</li>
+                            <li>审计日志归档</li>
+                            <li>合规性报告</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3>9.4 告警规则示例</h3>
+                <div class="code-block">
+                    <code># Prometheus Alert Rules 示例
+
+groups:
+- name: temporal_alerts
+  rules:
+  - alert: WorkflowFailureRateHigh
+    expr: rate(temporal_workflow_failed_total[5m]) > 0.1
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "工作流失败率过高 ({{ $value }})"
+      
+  - alert: ActivityTaskBacklog
+    expr: temporal_activity_scheduled_count - temporal_activity_completed_count > 100
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Activity 任务积压 ({{ $value }})"
+
+- name: nats_alerts
+  rules:
+  - alert: NATSMessagesPerSecLow
+    expr: rate(nats_server_sent_msgs_total[5m]) < 100
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "NATS 消息速率异常低"
+      
+  - alert: NATSConsumerLagHigh
+    expr: nats_jetstream_consumer_pending_msgs > 10000
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "NATS Consumer 积压严重"
+
+- name: agent_alerts
+  rules:
+  - alert: AgentLLMAPIError
+    expr: rate(agent_llm_api_errors_total[5m]) > 0.05
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Agent LLM API 错误率高"
+      
+  - alert: AgentTokenUsageSpike
+    expr: rate(agent_token_usage_total[1h]) > 1000000
+    for: 15m
+    labels:
+      severity: info
+    annotations:
+      summary: "Agent Token 使用量激增"</code>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p><strong>多 Agent 协同工作流引擎与消息队列方案选型报告</strong></p>
+            <p>编制日期：2026 年 3 月 12 日 | 版本：v1.0</p>
+            <p style="margin-top: 20px; font-size: 0.9em; opacity: 0.7;">
+                推荐技术栈：Temporal（工作流编排）+ LangGraph（AI Agent 协作）+ NATS JetStream（消息通信）+ Kafka（事件归档）<br>
+                本报告基于公开资料和官方文档编制，供企业级生产环境参考。<br>
+                Temporal、Apache Airflow、Prefect、LangGraph、Kafka、NATS、RabbitMQ 分别是各自公司的商标。
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 章节动画
+        const sections = document.querySelectorAll('section');
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, { threshold: 0.1 });
+
+        sections.forEach(section => {
+            section.style.opacity = '0';
+            section.style.transform = 'translateY(20px)';
+            section.style.transition = 'all 0.6s ease';
+            observer.observe(section);
+        });
+    </script>
+</body>
+</html>

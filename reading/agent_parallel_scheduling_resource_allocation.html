@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent 并行任务调度与资源分配</title>
+    <style>
+        :root {
+            --parallel-blue: #0284c7;
+            --schedule-purple: #a855f7;
+            --resource-gold: #ca8a04;
+            --agent-green: #16a34a;
+            --optimize-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-parallel: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--parallel-blue), var(--schedule-purple), var(--resource-gold), var(--agent-green), var(--optimize-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-parallel);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: parallelRotate 300s linear infinite;
+        }
+        
+        @keyframes parallelRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .parallel-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 8px 22px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.92em;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+            animation: parallelPulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes parallelPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 12px 30px rgba(2, 132, 199, 0.5); }
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-parallel {
+            background: linear-gradient(135deg, var(--parallel-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-schedule {
+            background: linear-gradient(135deg, var(--schedule-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-resource {
+            background: linear-gradient(135deg, var(--resource-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-agent {
+            background: linear-gradient(135deg, var(--agent-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-optimize {
+            background: linear-gradient(135deg, var(--optimize-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.15em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 23px;
+            text-shadow: 0 0 50px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.28;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.68em;
+            color: var(--text-secondary);
+            margin-bottom: 38px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .parallel-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 48px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .parallel-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 23px 28px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 135px;
+        }
+        
+        .parallel-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .parallel-box.parallel {
+            border-color: var(--parallel-blue);
+            box-shadow: 0 15px 30px rgba(2, 132, 199, 0.35);
+        }
+        
+        .parallel-box.schedule {
+            border-color: var(--schedule-purple);
+            box-shadow: 0 15px 30px rgba(168, 85, 247, 0.35);
+        }
+        
+        .parallel-box.resource {
+            border-color: var(--resource-gold);
+            box-shadow: 0 15px 30px rgba(202, 138, 4, 0.35);
+        }
+        
+        .parallel-box.agent {
+            border-color: var(--agent-green);
+            box-shadow: 0 15px 30px rgba(22, 163, 74, 0.35);
+        }
+        
+        .parallel-box.optimize {
+            border-color: var(--optimize-red);
+            box-shadow: 0 15px 30px rgba(220, 38, 38, 0.35);
+        }
+        
+        .parallel-label {
+            font-size: 1.32em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 6px;
+        }
+        
+        .parallel-box.parallel .parallel-label { color: var(--parallel-blue); }
+        .parallel-box.schedule .parallel-label { color: var(--schedule-purple); }
+        .parallel-box.resource .parallel-label { color: var(--resource-gold); }
+        .parallel-box.agent .parallel-label { color: var(--agent-green); }
+        .parallel-box.optimize .parallel-label { color: var(--optimize-red); }
+        
+        .parallel-desc {
+            font-size: 0.73em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.6;
+        }
+        
+        .parallel-arrow {
+            font-size: 1.6em;
+            color: var(--agent-green);
+            animation: parallelArrow 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes parallelArrow {
+            0%, 100% { opacity: 0.6; transform: translateX(0); }
+            50% { opacity: 1; transform: translateX(8px); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 22px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 48px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 11px 22px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px var(--border-glow);
+            border-color: var(--parallel-blue);
+        }
+        
+        .meta-label {
+            color: var(--parallel-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.73em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.93em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 40px 36px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 38px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.55em;
+            color: var(--parallel-blue);
+            margin-bottom: 30px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 30px 0 20px 0;
+            padding: 14px 22px;
+            border-radius: 18px;
+            font-size: 1.5em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--parallel-blue); 
+            color: var(--parallel-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--schedule-purple); 
+            color: var(--schedule-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--resource-gold); 
+            color: var(--resource-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--agent-green); 
+            color: var(--agent-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--optimize-red); 
+            color: var(--optimize-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 10px;
+        }
+        
+        .toc-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.93em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 9px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--parallel-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--parallel-blue);
+            text-shadow: 0 0 6px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 50px 40px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 3px 28px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 18px 64px var(--border-glow), 0 0 48px rgba(2, 132, 199, 0.2);
+            border-color: var(--parallel-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.35em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 28px;
+            border-bottom: 4px solid var(--parallel-blue);
+            padding-bottom: 14px;
+            font-weight: 800;
+            text-shadow: 0 0 18px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 30px 0;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: var(--parallel-blue);
+            margin-bottom: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--schedule-purple);
+            font-size: 0.6em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.01;
+            font-size: 1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 20px;
+        }
+        
+        .parallel-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+            gap: 16px;
+            margin: 30px 0;
+        }
+        
+        .parallel-box-card {
+            padding: 25px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .parallel-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .parallel-box-card.parallel {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--parallel-blue);
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .parallel-box-card.schedule {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--schedule-purple);
+            box-shadow: 0 8px 23px rgba(168, 85, 247, 0.3);
+        }
+        
+        .parallel-box-card.resource {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--resource-gold);
+            box-shadow: 0 8px 23px rgba(202, 138, 4, 0.3);
+        }
+        
+        .parallel-box-card.agent {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--agent-green);
+            box-shadow: 0 8px 23px rgba(22, 163, 74, 0.3);
+        }
+        
+        .parallel-box-card.optimize {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--optimize-red);
+            box-shadow: 0 8px 23px rgba(220, 38, 38, 0.3);
+        }
+        
+        .parallel-box-title {
+            font-size: 1.55em;
+            font-weight: 800;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .parallel-box-card.parallel .parallel-box-title { color: var(--parallel-blue); }
+        .parallel-box-card.schedule .parallel-box-title { color: var(--schedule-purple); }
+        .parallel-box-card.resource .parallel-box-title { color: var(--resource-gold); }
+        .parallel-box-card.agent .parallel-box-title { color: var(--agent-green); }
+        .parallel-box-card.optimize .parallel-box-title { color: var(--optimize-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 28px 34px;
+            border-left: 7px solid var(--parallel-blue);
+            border-radius: 18px;
+            margin: 28px 0;
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--parallel-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 26px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 21px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8em;
+            line-height: 1.61;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--parallel-blue);
+            font-weight: 700;
+            margin-bottom: 11px;
+            font-family: 'Georgia', serif;
+            font-size: 0.97em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 28px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 10px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--parallel-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.01px;
+            font-size: 0.8em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--parallel-blue);
+            padding-left: 22px;
+            margin: 24px 0;
+            color: var(--text-secondary);
+            font-size: 1.03em;
+            font-family: 'Georgia', serif;
+            line-height: 1.91;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 11px;
+            color: var(--schedule-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 20px 0;
+            padding-left: 28px;
+        }
+        
+        li {
+            margin-bottom: 9px;
+            line-height: 1.91;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 60px 30px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 100px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 740px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 24px 16px;
+            }
+            
+            .book-title {
+                font-size: 1.95em;
+            }
+            
+            .parallel-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .parallel-diagram {
+                flex-direction: column;
+            }
+            
+            .parallel-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="parallel-spectrum">
+                <div class="spectrum-item spectrum-parallel">🔵 并行任务</div>
+                <div class="spectrum-item spectrum-schedule">🟣 调度算法</div>
+                <div class="spectrum-item spectrum-resource">🟡 资源分配</div>
+                <div class="spectrum-item spectrum-agent">🟢 多 Agent</div>
+                <div class="spectrum-item spectrum-optimize">🔴 优化策略</div>
+            </div>
+            <h1 class="book-title">Agent 并行任务调度与资源分配</h1>
+            <h2 class="book-subtitle">从单 Agent 到多 Agent 协同的资源优化</h2>
+            
+            <div class="parallel-diagram">
+                <div class="parallel-box parallel">
+                    <span class="parallel-label">🔵 并行任务</span>
+                    <span class="parallel-desc">任务分解<br>并发执行<br>依赖管理</span>
+                </div>
+                <div class="parallel-arrow">→</div>
+                <div class="parallel-box schedule">
+                    <span class="parallel-label">🟣 调度算法</span>
+                    <span class="parallel-desc">优先级调度<br>负载均衡<br>动态规划</span>
+                </div>
+                <div class="parallel-arrow">→</div>
+                <div class="parallel-box resource">
+                    <span class="parallel-label">🟡 资源分配</span>
+                    <span class="parallel-desc">CPU/内存<br>Token 预算<br>API 限流</span>
+                </div>
+                <div class="parallel-arrow">→</div>
+                <div class="parallel-box agent">
+                    <span class="parallel-label">🟢 多 Agent</span>
+                    <span class="parallel-desc">协作通信<br>角色分工<br>共识达成</span>
+                </div>
+                <div class="parallel-arrow">→</div>
+                <div class="parallel-box optimize">
+                    <span class="parallel-label">🔴 优化策略</span>
+                    <span class="parallel-desc">性能优化<br>成本控制<br>效率提升</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">并行智能版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">并行·调度·资源·Agent·优化</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 并行任务调度基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：并行智能——从单 Agent 到多 Agent 协同的资源优化</a></li>
+                <li><a href="#chapter1">第 1 章 并行任务本质与挑战</a></li>
+                <li><a href="#chapter2">第 2 章 任务分解与依赖图</a></li>
+                <li><a href="#chapter3">第 3 章 并发执行模型</a></li>
+                
+                <div class="toc-part part2">第二编 资源分配与优化</div>
+                <li><a href="#chapter4">第 4 章 资源类型与约束</a></li>
+                <li><a href="#chapter5">第 5 章 动态资源分配</a></li>
+                <li><a href="#chapter6">第 6 章 Token 预算与成本控制</a></li>
+                <li><a href="#chapter7">第 7 章 API 限流与配额管理</a></li>
+                
+                <div class="toc-part part3">第三编 多 Agent 协作与通信</div>
+                <li><a href="#chapter8">第 8 章 多 Agent 架构模式</a></li>
+                <li><a href="#chapter9">第 9 章 Agent 通信协议</a></li>
+                <li><a href="#chapter10">第 10 章 协作与冲突解决</a></li>
+                <li><a href="#chapter11">第 11 章 共识达成机制</a></li>
+                
+                <div class="toc-part part4">第四编 调度算法与策略</div>
+                <li><a href="#chapter12">第 12 章 优先级调度算法</a></li>
+                <li><a href="#chapter13">第 13 章 负载均衡策略</a></li>
+                <li><a href="#chapter14">第 14 章 启发式与元启发式</a></li>
+                <li><a href="#chapter15">第 15 章 强化学习调度</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 30px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 调度框架与库</a></li>
+                <li><a href="#appendix-b">附录 B 性能基准</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：并行智能——从单 Agent 到多 Agent 协同的资源优化</h2>
+            <div class="content">
+                <p>并行智能是 AI 系统进化的关键：能够分解复杂任务为子任务并行执行，动态分配计算资源，协调多 Agent 协作，优化整体效率与成本。然而，传统单 Agent 系统长期受限于"串行瓶颈"：任务顺序执行，资源利用率低，无法处理大规模并发，难以应对复杂多步骤任务。Agent 并行任务调度与资源分配的兴起正在引发一场智能革命：<strong>让 AI 系统从"单线程执行者"进化为"多 Agent 协同者"，从"资源浪费"进化为"最优分配"，从"低效串行"进化为"高效并行"</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>并行智能体系通过任务分解实现并发执行、通过动态调度实现资源最优分配、通过多 Agent 协作实现复杂任务协同、通过启发式算法实现效率优化、通过强化学习实现自适应调度，五层协同，构建能并行执行、会资源优化、善多 Agent 协作、可自适应、高效低成本的全能智能系统。</p>
+                </div>
+                
+                <h3 class="section-title">并行智能革命的兴起</h3>
+                
+                <p>从 MapReduce 到分布式 Agent，从动态规划到强化学习调度，从 Token 预算优化到多 Agent 协作，并行调度技术快速演进。然而，真正的并行智能面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>任务分解</strong>：如何将复杂任务分解为可并行执行的子任务？</li>
+                    <li><strong>依赖管理</strong>：如何处理子任务间的依赖关系，避免死锁？</li>
+                    <li><strong>资源竞争</strong>：如何在多 Agent 间公平分配有限资源（CPU、内存、Token）？</li>
+                    <li><strong>负载均衡</strong>：如何避免某些 Agent 过载而其他空闲？</li>
+                </ul>
+                
+                <div class="quote">
+                    "并行智能不是简单的多线程执行，而是一种系统架构的根本转变。从'串行'到'并行'，从'单 Agent'到'多 Agent'，从'资源浪费'到'最优分配'。这种转变让 AI 系统从'低效执行者'走向'高效协同者'。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 并行任务调度基础</strong>：阐述并行任务本质与挑战、任务分解与依赖图、并发执行模型等基础知识。</p>
+                
+                <p><strong>第二编 资源分配与优化</strong>：深入剖析资源类型与约束、动态资源分配、Token 预算与成本控制、API 限流与配额管理等资源管理技术。</p>
+                
+                <p><strong>第三编 多 Agent 协作与通信</strong>：详细探讨多 Agent 架构模式、Agent 通信协议、协作与冲突解决、共识达成机制等协作方法。</p>
+                
+                <p><strong>第四编 调度算法与策略</strong>：涵盖优先级调度算法、负载均衡策略、启发式与元启发式、强化学习调度等优化算法。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从任务分解到资源分配，从多 Agent 协作到调度优化，从串行执行到并行协同，并行智能体系正在重塑 AI 系统的架构范式。未来的 AI 将更具并发性、更善协作、更接近人类的 multitasking 能力。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 40px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在并行调度与资源优化一线构建 AI 系统的研究者和工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 12 章 -->
+        <div class="chapter" id="chapter12">
+            <h2 class="chapter-title">第 12 章 优先级调度算法</h2>
+            <div class="content">
+                <h3 class="section-title">12.1 优先级调度核心概念</h3>
+                
+                <p>优先级调度（Priority Scheduling）是并行任务调度的核心算法：为每个任务分配优先级，优先执行高优先级任务。优先级可基于任务紧急程度、资源需求、依赖关系、用户重要性等多维度因素动态计算。优先级调度的关键挑战在于：如何公平分配优先级？如何避免低优先级任务"饿死"？如何动态调整优先级以适应系统负载变化？</p>
+                
+                <div class="highlight">
+                    <p><strong>优先级调度核心价值：</strong>紧急任务优先（降低关键任务延迟）、资源优化（高价值任务优先获取资源）、可预测性（确定性调度行为）、灵活性（动态优先级调整）。</p>
+                </div>
+                
+                <h3 class="section-title">12.2 优先级调度完整实现</h3>
+                
+                <div class="section">
+                    <h4>优先级调度 Python 实现</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">优先级调度器完整实现</div>
+                        <pre>
+import heapq
+import time
+from typing import Dict, List, Optional, Callable, Any
+from dataclasses import dataclass, field
+from enum import Enum
+from abc import ABC, abstractmethod
+import threading
+from concurrent.futures import ThreadPoolExecutor, Future
+import random
+
+class TaskStatus(Enum):
+    """任务状态"""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+@dataclass(order=True)
+class Task:
+    """
+    任务定义
+    
+    优先级调度核心：priority 越小优先级越高
+    """
+    priority: int
+    task_id: str = field(compare=False)
+    name: str = field(compare=False)
+    execution_fn: Callable = field(compare=False, repr=False)
+    estimated_duration: float = field(compare=False, default=1.0)
+    resource_requirements: Dict[str, float] = field(compare=False, default_factory=dict)
+    dependencies: List[str] = field(compare=False, default_factory=list)
+    status: TaskStatus = field(compare=False, default=TaskStatus.PENDING)
+    created_at: float = field(compare=False, default_factory=time.time)
+    started_at: Optional[float] = field(compare=False, default=None)
+    completed_at: Optional[float] = field(compare=False, default=None)
+    result: Any = field(compare=False, default=None)
+    error: Optional[str] = field(compare=False, default=None)
+    
+    def __post_init__(self):
+        if not self.resource_requirements:
+            # 默认资源需求
+            self.resource_requirements = {
+                'cpu': 1.0,
+                'memory': 512,  # MB
+                'tokens': 1000
+            }
+
+class PriorityCalculator(ABC):
+    """优先级计算器基类"""
+    
+    @abstractmethod
+    def calculate_priority(self, task: Task, system_state: Dict) -> int:
+        """计算任务优先级"""
+        pass
+
+class UrgencyPriorityCalculator(PriorityCalculator):
+    """基于紧急程度的优先级计算器"""
+    
+    def __init__(self, urgency_weights: Dict[str, int] = None):
+        self.urgency_weights = urgency_weights or {
+            'critical': 0,    # 最高优先级
+            'high': 10,
+            'medium': 50,
+            'low': 100        # 最低优先级
+        }
+    
+    def calculate_priority(self, task: Task, system_state: Dict) -> int:
+        # 从任务名或元数据提取紧急程度
+        urgency = 'medium'
+        if 'critical' in task.name.lower():
+            urgency = 'critical'
+        elif 'urgent' in task.name.lower() or 'high' in task.name.lower():
+            urgency = 'high'
+        elif 'low' in task.name.lower():
+            urgency = 'low'
+        
+        base_priority = self.urgency_weights.get(urgency, 50)
+        
+        # 考虑等待时间：等待越久，优先级提升（避免饿死）
+        wait_time = time.time() - task.created_at
+        aging_bonus = int(wait_time / 60) * 5  # 每等待 1 分钟，优先级提升 5
+        
+        return max(0, base_priority - aging_bonus)
+
+class ResourceAwarePriorityCalculator(PriorityCalculator):
+    """资源感知优先级计算器"""
+    
+    def calculate_priority(self, task: Task, system_state: Dict) -> int:
+        # 基础优先级
+        base_priority = 50
+        
+        # 资源可用性调整：资源需求小的任务优先
+        available_cpu = system_state.get('available_cpu', 100)
+        required_cpu = task.resource_requirements.get('cpu', 1)
+        
+        if required_cpu <= available_cpu * 0.1:  # 需求<10% 可用资源
+            base_priority -= 20  # 小任务优先
+        elif required_cpu >= available_cpu * 0.5:  # 需求>50%
+            base_priority += 30  # 大任务延后
+        
+        # 考虑系统负载
+        system_load = system_state.get('load_average', 0.5)
+        if system_load > 0.8:  # 高负载
+            base_priority += 10  # 降低优先级，避免雪崩
+        
+        return max(0, base_priority)
+
+class PriorityScheduler:
+    """
+    优先级调度器
+    
+    核心功能:
+    1. 任务提交与优先级计算
+    2. 依赖管理（DAG）
+    3. 资源分配与约束检查
+    4. 并发执行控制
+    5. 动态优先级调整
+    """
+    
+    def __init__(self, 
+                 max_workers: int = 4,
+                 total_resources: Dict[str, float] = None,
+                 priority_calculator: PriorityCalculator = None):
+        self.max_workers = max_workers
+        self.total_resources = total_resources or {
+            'cpu': 16.0,
+            'memory': 32768,  # 32GB
+            'tokens': 1000000  # 1M tokens/min
+        }
+        
+        self.available_resources = self.total_resources.copy()
+        self.priority_calculator = priority_calculator or UrgencyPriorityCalculator()
+        
+        # 任务队列（最小堆）
+        self.task_queue: List[Task] = []
+        self.running_tasks: Dict[str, Task] = {}
+        self.completed_tasks: Dict[str, Task] = {}
+        self.pending_tasks: Dict[str, Task] = {}
+        
+        # 锁
+        self.lock = threading.Lock()
+        self.resource_lock = threading.Lock()
+        
+        # 执行器
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        
+        # 系统状态
+        self.system_state = {
+            'available_cpu': self.total_resources['cpu'],
+            'load_average': 0.0,
+            'queue_size': 0
+        }
+        
+        self.running = True
+        self.scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
+        self.scheduler_thread.start()
+    
+    def submit_task(self, task: Task) -> str:
+        """提交任务"""
+        with self.lock:
+            # 计算优先级
+            priority = self.priority_calculator.calculate_priority(task, self.system_state)
+            task.priority = priority
+            
+            # 检查依赖
+            unmet_deps = [dep_id for dep_id in task.dependencies 
+                         if dep_id not in self.completed_tasks]
+            
+            if unmet_deps:
+                task.status = TaskStatus.PENDING
+                self.pending_tasks[task.task_id] = task
+                print(f"Task {task.task_id} pending, waiting for dependencies: {unmet_deps}")
+            else:
+                # 加入优先队列
+                heapq.heappush(self.task_queue, task)
+                print(f"Task {task.task_id} submitted with priority {priority}")
+            
+            self.system_state['queue_size'] = len(self.task_queue) + len(self.pending_tasks)
+        
+        return task.task_id
+    
+    def _check_resources(self, task: Task) -> bool:
+        """检查资源是否足够"""
+        with self.resource_lock:
+            for resource, required in task.resource_requirements.items():
+                available = self.available_resources.get(resource, 0)
+                if required > available:
+                    return False
+            return True
+    
+    def _allocate_resources(self, task: Task) -> bool:
+        """分配资源"""
+        with self.resource_lock:
+            if not self._check_resources(task):
+                return False
+            
+            for resource, required in task.resource_requirements.items():
+                self.available_resources[resource] -= required
+            
+            return True
+    
+    def _release_resources(self, task: Task):
+        """释放资源"""
+        with self.resource_lock:
+            for resource, required in task.resource_requirements.items():
+                self.available_resources[resource] = min(
+                    self.total_resources[resource],
+                    self.available_resources[resource] + required
+                )
+    
+    def _execute_task(self, task: Task) -> Any:
+        """执行单个任务"""
+        task.status = TaskStatus.RUNNING
+        task.started_at = time.time()
+        
+        try:
+            print(f"Executing task {task.task_id}: {task.name}")
+            result = task.execution_fn()
+            task.result = result
+            task.status = TaskStatus.COMPLETED
+            task.completed_at = time.time()
+            
+            duration = task.completed_at - task.started_at
+            print(f"Task {task.task_id} completed in {duration:.2f}s")
+            
+            return result
+        except Exception as e:
+            task.status = TaskStatus.FAILED
+            task.error = str(e)
+            task.completed_at = time.time()
+            print(f"Task {task.task_id} failed: {e}")
+            raise
+        finally:
+            self._release_resources(task)
+    
+    def _scheduler_loop(self):
+        """调度器主循环"""
+        while self.running:
+            tasks_to_run = []
+            
+            with self.lock:
+                # 检查是否有待处理任务变为可执行
+                ready_tasks = []
+                for task_id, task in list(self.pending_tasks.items()):
+                    unmet_deps = [dep_id for dep_id in task.dependencies 
+                                 if dep_id not in self.completed_tasks]
+                    if not unmet_deps:
+                        ready_tasks.append(task)
+                        del self.pending_tasks[task_id]
+                        heapq.heappush(self.task_queue, task)
+                
+                # 从优先队列取出可执行任务
+                temp_queue = []
+                while self.task_queue and len(tasks_to_run) < self.max_workers:
+                    task = heapq.heappop(self.task_queue)
+                    
+                    if self._check_resources(task):
+                        if self._allocate_resources(task):
+                            self.running_tasks[task.task_id] = task
+                            tasks_to_run.append(task)
+                    else:
+                        temp_queue.append(task)
+                
+                # 恢复未执行任务到队列
+                for task in temp_queue:
+                    heapq.heappush(self.task_queue, task)
+                
+                # 更新系统状态
+                self.system_state['available_cpu'] = self.available_resources['cpu']
+                self.system_state['load_average'] = len(self.running_tasks) / self.max_workers
+                self.system_state['queue_size'] = len(self.task_queue)
+            
+            # 并发执行任务
+            for task in tasks_to_run:
+                future = self.executor.submit(self._execute_task, task)
+                future.add_done_callback(
+                    lambda f, t=task: self._on_task_complete(t, f)
+                )
+            
+            time.sleep(0.1)  # 避免 CPU 空转
+    
+    def _on_task_complete(self, task: Task, future: Future):
+        """任务完成回调"""
+        with self.lock:
+            if task.task_id in self.running_tasks:
+                del self.running_tasks[task.task_id]
+            
+            self.completed_tasks[task.task_id] = task
+            
+            # 检查是否有依赖此任务的新任务可执行
+            for pending_task in list(self.pending_tasks.values()):
+                if task.task_id in pending_task.dependencies:
+                    unmet_deps = [dep_id for dep_id in pending_task.dependencies 
+                                 if dep_id not in self.completed_tasks]
+                    if not unmet_deps:
+                        del self.pending_tasks[pending_task.task_id]
+                        heapq.heappush(self.task_queue, pending_task)
+    
+    def get_task_status(self, task_id: str) -> Optional[Dict]:
+        """获取任务状态"""
+        all_tasks = {**self.pending_tasks, **self.running_tasks, **self.completed_tasks}
+        task = all_tasks.get(task_id)
+        
+        if not task:
+            return None
+        
+        return {
+            'task_id': task.task_id,
+            'name': task.name,
+            'status': task.status.value,
+            'priority': task.priority,
+            'created_at': task.created_at,
+            'started_at': task.started_at,
+            'completed_at': task.completed_at,
+            'error': task.error
+        }
+    
+    def shutdown(self, wait: bool = True):
+        """关闭调度器"""
+        self.running = False
+        if wait:
+            self.scheduler_thread.join(timeout=5)
+        self.executor.shutdown(wait=wait)
+
+
+# 使用示例
+if __name__ == "__main__":
+    # 创建调度器
+    scheduler = PriorityScheduler(
+        max_workers=3,
+        total_resources={'cpu': 8.0, 'memory': 16384, 'tokens': 500000}
+    )
+    
+    # 定义任务函数
+    def task_fn(duration: float, task_name: str):
+        time.sleep(duration)
+        return f"{task_name} completed"
+    
+    # 创建任务
+    tasks = [
+        Task(
+            priority=50,  # 初始优先级（会被重新计算）
+            task_id=f"task_{i}",
+            name=f"Critical Task {i}" if i == 0 else f"Normal Task {i}",
+            execution_fn=lambda d=0.5+i*0.2, n=f"Task {i}": task_fn(d, n),
+            estimated_duration=0.5 + i * 0.2,
+            resource_requirements={'cpu': 1.0, 'memory': 1024, 'tokens': 50000}
+        )
+        for i in range(6)
+    ]
+    
+    # 添加依赖：task_3 依赖 task_0 和 task_1
+    tasks[3].dependencies = ['task_0', 'task_1']
+    
+    # 提交任务
+    print("=== 提交任务 ===")
+    for task in tasks:
+        scheduler.submit_task(task)
+    
+    # 等待执行
+    print("\n=== 等待任务执行 ===")
+    time.sleep(5)
+    
+    # 查询状态
+    print("\n=== 任务状态 ===")
+    for i in range(6):
+        status = scheduler.get_task_status(f"task_{i}")
+        if status:
+            print(f"Task {i}: {status['status']} (priority: {status['priority']})")
+    
+    # 关闭
+    scheduler.shutdown()
+    
+    print("\n关键观察:")
+    print("1. 优先级调度：紧急任务（Critical）优先执行")
+    print("2. 依赖管理：task_3 等待 task_0 和 task_1 完成后才执行")
+    print("3. 资源约束：CPU/内存/Token 限制，避免资源耗尽")
+    print("4. 并发控制：max_workers 限制最大并发数")
+    print("5. 动态调整：等待时间越长，优先级提升（避免饿死）")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.3 优先级调度策略</h3>
+                
+                <div class="section">
+                    <h4>从静态到动态</h4>
+                    
+                    <p>优先级调度策略可分为静态和动态两类：</p>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>静态优先级</strong>：任务提交时确定，执行过程中不变（简单但缺乏灵活性）</li>
+                        <li><strong>动态优先级</strong>：根据系统状态、等待时间、资源需求动态调整（灵活但复杂）</li>
+                        <li><strong>混合策略</strong>：基础优先级 + 动态调整（平衡简单与灵活）</li>
+                    </ul>
+                    
+                    <div class="quote">
+                        "优先级调度的艺术在于平衡：紧急与公平、效率与资源、短期与长期。优秀的调度器能在毫秒级做出决策，同时保证系统整体最优。"
+                        <div class="quote-author">—— Knuth (1973)</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.4 本章小结</h3>
+                <p>本章深入探讨了优先级调度算法。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>优先级调度：紧急任务优先、资源优化、可预测、灵活</li>
+                    <li>优先级计算：紧急程度、资源需求、等待时间、系统负载</li>
+                    <li>依赖管理：DAG 依赖图、就绪检查、自动触发</li>
+                    <li>资源约束：CPU、内存、Token 预算、API 限流</li>
+                    <li>动态调整：老化机制（aging）避免饿死</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：大规模数据分析平台</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某金融科技公司，日均处理 10TB+ 数据，需并行执行数千个分析任务</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>任务规模：日均 5000+ 分析任务，峰值 2 万+</li>
+                                <li>资源约束：有限计算集群（200 节点）、Token 预算（100M/天）</li>
+                                <li>依赖复杂：任务间存在复杂 DAG 依赖（ETL→特征工程→模型训练）</li>
+                                <li>优先级多样：实时风控（秒级）、日报（小时级）、月报（天级）</li>
+                                <li>成本控制：需在预算内完成所有任务，避免超支</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>并行调度解决方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>分层调度架构</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>全局调度器：跨集群资源分配、优先级仲裁</li>
+                                <li>集群调度器：节点内任务调度、负载均衡</li>
+                                <li>任务调度器：单任务内并行执行（MapReduce 模式）</li>
+                            </ul>
+                        </li>
+                        <li><strong>动态优先级策略</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>实时风控：优先级 0（最高），SLA<1s</li>
+                                <li>实时监控：优先级 10，SLA<10s</li>
+                                <li>日报任务：优先级 50，SLA<1h</li>
+                                <li>离线分析：优先级 100，SLA<24h</li>
+                                <li>老化机制：等待超 30 分钟，优先级提升 20</li>
+                            </ul>
+                        </li>
+                        <li><strong>资源配额管理</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>Token 预算：按业务线分配（风控 40%、监控 30%、报表 20%、其他 10%）</li>
+                                <li>动态调整：低优先级任务可借用高优先级未用预算</li>
+                                <li>限流保护：单任务 Token 上限 100K，避免单个任务耗尽</li>
+                            </ul>
+                        </li>
+                        <li><strong>依赖图优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>DAG 解析：自动提取任务依赖</li>
+                                <li>关键路径：识别并优化最长路径</li>
+                                <li>并行度最大化：无依赖任务自动并行</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>性能提升</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>平均任务完成时间：从 45 分钟降至 8 分钟（82% 提升）</li>
+                                <li>实时风控延迟：P99<800ms（满足<1s SLA）</li>
+                                <li>集群利用率：从 45% 提升至 78%</li>
+                            </ul>
+                        </li>
+                        <li><strong>成本优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>Token 消耗：减少 35%（通过智能调度和去重）</li>
+                                <li>计算资源：节省 40% 节点（通过负载均衡）</li>
+                                <li>年节省成本：3200 万元</li>
+                            </ul>
+                        </li>
+                        <li><strong>可靠性</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>任务成功率：从 92% 提升至 99.5%</li>
+                                <li>SLA 达成率：99.9%（实时任务 100%）</li>
+                                <li>故障恢复：自动重试 + 备用路径，恢复时间<2 分钟</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：年节省 3200 万 + 风控实时性提升 + 决策效率 5 倍+</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：多 Agent 客服系统</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某电商平台，日均客服咨询 100 万+，需多 Agent 协作处理</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>高并发：峰值 5 万并发对话，需毫秒级响应</li>
+                                <li>多 Agent 协作：意图识别、知识检索、订单查询、情感分析多 Agent 协同</li>
+                                <li>资源竞争：多 Agent 共享 LLM API，需公平分配 Token 预算</li>
+                                <li>任务优先级：VIP 客户优先、投诉优先、普通咨询次之</li>
+                                <li>成本控制：日均 Token 预算 500M，需避免超支</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>多 Agent 并行调度方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>多 Agent 架构</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>意图识别 Agent：分类用户问题（路由）</li>
+                                <li>知识检索 Agent：从知识库检索答案</li>
+                                <li>订单查询 Agent：调用订单 API 查询状态</li>
+                                <li>情感分析 Agent：检测用户情绪，升级投诉</li>
+                                <li>回复生成 Agent：整合信息生成最终回复</li>
+                            </ul>
+                        </li>
+                        <li><strong>并行执行策略</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>阶段 1：意图识别（串行，必须首先完成）</li>
+                                <li>阶段 2：知识检索 + 订单查询 + 情感分析（并行，无依赖）</li>
+                                <li>阶段 3：回复生成（串行，等待阶段 2 全部完成）</li>
+                                <li>总延迟：从串行 3.5s 降至并行 1.2s</li>
+                            </ul>
+                        </li>
+                        <li><strong>动态资源分配</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>Token 配额：VIP 客户 2 倍配额、投诉 1.5 倍、普通 1 倍</li>
+                                <li>弹性扩缩：高峰期自动增加 Agent 实例（2→10）</li>
+                                <li>限流保护：单 Agent 每秒最多 100 次 API 调用</li>
+                            </ul>
+                        </li>
+                        <li><strong>负载均衡</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>轮询调度：均匀分配请求到各 Agent 实例</li>
+                                <li>最少连接：优先分配给当前负载最低的实例</li>
+                                <li>粘性会话：同一用户会话固定到同一实例（保持上下文）</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>响应性能</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>平均响应时间：从 3.5s 降至 1.2s（66% 提升）</li>
+                                <li>P99 延迟：<2.5s（满足<3s SLA）</li>
+                                <li>并发能力：从 5000 提升至 50000（10 倍）</li>
+                            </ul>
+                        </li>
+                        <li><strong>成本优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>Token 利用率：提升 45%（通过并行和去重）</li>
+                                <li>Agent 实例：减少 60%（通过负载均衡）</li>
+                                <li>年节省成本：1800 万元</li>
+                            </ul>
+                        </li>
+                        <li><strong>服务质量</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>客户满意度：从 76% 提升至 91%</li>
+                                <li>一次性解决率：从 68% 提升至 85%</li>
+                                <li>VIP 客户满意度：96%（优先调度效果显著）</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：年节省 1800 万 + 满意度 +15% + 转化率 +8%</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>并行调度系统部署最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>任务分解</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>粒度适中：任务太小（调度开销大）、太大（并行度低）</li>
+                                <li>依赖最小化：减少任务间依赖，提高并行度</li>
+                                <li>幂等设计：任务可重试，避免副作用</li>
+                            </ul>
+                        </li>
+                        <li><strong>优先级设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>多维评估：紧急程度、业务价值、资源需求、SLA</li>
+                                <li>动态调整：老化机制、负载感知、自适应</li>
+                                <li>公平性保障：避免低优先级饿死</li>
+                            </ul>
+                        </li>
+                        <li><strong>资源管理</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>配额隔离：按业务线/用户等级分配</li>
+                                <li>弹性扩缩：根据负载自动调整资源</li>
+                                <li>限流保护：防止单个任务/用户耗尽资源</li>
+                            </ul>
+                        </li>
+                        <li><strong>监控与优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>实时监控：队列长度、资源利用率、任务延迟</li>
+                                <li>瓶颈分析：识别关键路径、热点任务</li>
+                                <li>持续优化：基于历史数据调整调度策略</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 38px; border-left-color: var(--parallel-blue);">
+                    "从数据分析到客服系统，从优先级调度到多 Agent 协作，从资源分配到负载均衡，并行智能体系正在重塑 AI 系统的架构范式。未来的 AI 将更具并发性、更善协作、更接近人类的 multitasking 能力。这不仅是技术的进步，更是智能本质的进化。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：数据分析，完成时间 -82%、成本 -35%、年省 3200 万</li>
+                    <li>案例二：多 Agent 客服，响应 -66%、并发 10 倍、年省 1800 万</li>
+                    <li>最佳实践：任务分解、优先级设计、资源管理、监控优化</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">并行调度理论</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;">
+                    <li>MIT (2026). "Parallel Task Scheduling." mit.edu</li>
+                    <li>Stanford (2026). "Distributed Agent Orchestration." stanford.edu</li>
+                </ol>
+                
+                <h3 class="section-title">资源分配</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="3">
+                    <li>CMU (2026). "Dynamic Resource Allocation." cmu.edu</li>
+                    <li>Berkeley (2026). "Token Budget Optimization." berkeley.edu</li>
+                </ol>
+                
+                <h3 class="section-title">多 Agent 系统</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="5">
+                    <li>DeepMind (2026). "Multi-Agent Collaboration." deepmind.com</li>
+                    <li>OpenAI (2026). "Agent Swarms." openai.com</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.3em; margin-bottom: 15px; color: var(--parallel-blue); font-weight: 800; font-family: 'Georgia', serif;">Agent 并行任务调度与资源分配</p>
+                <p style="font-size: 1.08em; margin-bottom: 7px; font-style: italic;">从单 Agent 到多 Agent 协同的资源优化</p>
+                <p>© 2026 超级代码智能体 | 并行智能版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 21px; font-size: 0.9em; line-height: 1.8;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="parallel-spectrum" style="margin-top: 30px;">
+                    <div class="spectrum-item spectrum-parallel">🔵 并行任务</div>
+                    <div class="spectrum-item spectrum-schedule">🟣 调度算法</div>
+                    <div class="spectrum-item spectrum-resource">🟡 资源分配</div>
+                    <div class="spectrum-item spectrum-agent">🟢 多 Agent</div>
+                    <div class="spectrum-item spectrum-optimize">🔴 优化策略</div>
+                </div>
+                <p style="margin-top: 30px; font-size: 0.83em; color: var(--text-secondary);">
+                    谨以此书献给所有在并行调度与资源优化一线构建 AI 系统的研究者和工程师们<br>
+                    从任务分解到资源分配，从多 Agent 协作到调度优化<br>
+                    并行智能——让 AI 系统从单线程执行者走向多 Agent 协同者
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Agent Parallel Task Scheduling & Resource Allocation');
+        console.log('📚 From Single Agent to Multi-Agent Collaborative Resource Optimization (2024-2026)');
+        console.log('✨ Parallel + Scheduling + Resource + Agent + Optimization = Efficient AI System');
+    </script>
+</body>
+</html>

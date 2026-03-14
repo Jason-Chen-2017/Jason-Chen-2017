@@ -1,0 +1,1711 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agent Harness Engineering：4 层架构模型 - 约束层·上下文层·验证层·纠偏层</title>
+    <style>
+        :root {
+            --constraint-gold: #ffd700;
+            --context-cyan: #00ffff;
+            --verification-emerald: #50c878;
+            --correction-crimson: #dc143c;
+            --quantum-blue: #00f5ff;
+            --deep-purple: #7b2cbf;
+            --void-dark: #0a0a0f;
+            --nebula: #1a1a2e;
+            --galaxy: #16213e;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --border-glow: rgba(0, 245, 255, 0.3);
+            --shadow-quantum: 0 0 30px rgba(0, 245, 255, 0.2);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--galaxy) 30%, var(--nebula) 70%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 1.9;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(255, 215, 0, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(0, 255, 255, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(80, 200, 120, 0.05) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 60px 40px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 80px 40px;
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(0, 255, 255, 0.08), rgba(80, 200, 120, 0.08), rgba(220, 20, 60, 0.08));
+            border: 3px solid var(--constraint-gold);
+            border-radius: 30px;
+            margin-bottom: 60px;
+            box-shadow: 0 0 60px rgba(255, 215, 0, 0.3), 0 0 40px rgba(0, 255, 255, 0.2);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(20px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(from 0deg, rgba(255, 215, 0, 0.1), rgba(0, 255, 255, 0.1), rgba(80, 200, 120, 0.1), rgba(220, 20, 60, 0.1), rgba(255, 215, 0, 0.1));
+            animation: fourLayerRotate 12s linear infinite;
+        }
+        
+        @keyframes fourLayerRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .book-title {
+            font-size: 3.5em;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--constraint-gold), var(--context-cyan), var(--verification-emerald), var(--correction-crimson));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 25px;
+            text-shadow: 0 0 50px rgba(255, 215, 0, 0.4);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.3;
+        }
+        
+        .book-subtitle {
+            font-size: 2em;
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+            font-weight: 300;
+        }
+        
+        .four-layer-badge {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            flex-wrap: wrap;
+            margin: 40px 0;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .layer-badge {
+            padding: 18px 35px;
+            border-radius: 15px;
+            font-weight: 700;
+            font-size: 1.1em;
+            backdrop-filter: blur(15px);
+            border: 2px solid;
+            transition: all 0.4s ease;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .layer-badge.constraint {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 215, 0, 0.05));
+            border-color: var(--constraint-gold);
+            color: var(--constraint-gold);
+        }
+        
+        .layer-badge.context {
+            background: linear-gradient(135deg, rgba(0, 255, 255, 0.2), rgba(0, 255, 255, 0.05));
+            border-color: var(--context-cyan);
+            color: var(--context-cyan);
+        }
+        
+        .layer-badge.verification {
+            background: linear-gradient(135deg, rgba(80, 200, 120, 0.2), rgba(80, 200, 120, 0.05));
+            border-color: var(--verification-emerald);
+            color: var(--verification-emerald);
+        }
+        
+        .layer-badge.correction {
+            background: linear-gradient(135deg, rgba(220, 20, 60, 0.2), rgba(220, 20, 60, 0.05));
+            border-color: var(--correction-crimson);
+            color: var(--correction-crimson);
+        }
+        
+        .layer-badge:hover {
+            transform: translateY(-8px) scale(1.05);
+            box-shadow: 0 15px 40px;
+        }
+        
+        .layer-badge.constraint:hover {
+            box-shadow: 0 15px 40px rgba(255, 215, 0, 0.4);
+        }
+        
+        .layer-badge.context:hover {
+            box-shadow: 0 15px 40px rgba(0, 255, 255, 0.4);
+        }
+        
+        .layer-badge.verification:hover {
+            box-shadow: 0 15px 40px rgba(80, 200, 120, 0.4);
+        }
+        
+        .layer-badge.correction:hover {
+            box-shadow: 0 15px 40px rgba(220, 20, 60, 0.4);
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 50px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 50px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px 35px;
+            border-radius: 15px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 15px 40px var(--border-glow);
+            border-color: var(--quantum-blue);
+        }
+        
+        .meta-label {
+            color: var(--quantum-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.95em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 1.1em;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 2px solid var(--border-glow);
+            border-radius: 25px;
+            padding: 50px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            box-shadow: var(--shadow-quantum);
+        }
+        
+        .toc-title {
+            font-size: 2.8em;
+            color: var(--quantum-blue);
+            margin-bottom: 40px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 20px var(--border-glow);
+        }
+        
+        .architecture-diagram {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.05), rgba(0, 255, 255, 0.05), rgba(80, 200, 120, 0.05), rgba(220, 20, 60, 0.05));
+            border: 3px solid var(--constraint-gold);
+            border-radius: 20px;
+            padding: 40px;
+            margin: 40px 0;
+            text-align: center;
+        }
+        
+        .architecture-diagram h3 {
+            color: var(--constraint-gold);
+            margin-bottom: 30px;
+            font-size: 1.8em;
+        }
+        
+        .layer-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .layer-box {
+            padding: 25px 30px;
+            border-radius: 15px;
+            font-weight: 700;
+            font-size: 1.3em;
+            border: 3px solid;
+            position: relative;
+            backdrop-filter: blur(10px);
+        }
+        
+        .layer-box.constraint {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.25), rgba(255, 215, 0, 0.1));
+            border-color: var(--constraint-gold);
+            color: var(--constraint-gold);
+        }
+        
+        .layer-box.context {
+            background: linear-gradient(135deg, rgba(0, 255, 255, 0.25), rgba(0, 255, 255, 0.1));
+            border-color: var(--context-cyan);
+            color: var(--context-cyan);
+        }
+        
+        .layer-box.verification {
+            background: linear-gradient(135deg, rgba(80, 200, 120, 0.25), rgba(80, 200, 120, 0.1));
+            border-color: var(--verification-emerald);
+            color: var(--verification-emerald);
+        }
+        
+        .layer-box.correction {
+            background: linear-gradient(135deg, rgba(220, 20, 60, 0.25), rgba(220, 20, 60, 0.1));
+            border-color: var(--correction-crimson);
+            color: var(--correction-crimson);
+        }
+        
+        .layer-arrow {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 1.5em;
+            margin: -10px 0;
+        }
+        
+        .toc-list {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+        
+        .toc-list > li {
+            padding: 18px 0;
+            border-bottom: 1px solid rgba(0, 245, 255, 0.15);
+            counter-increment: toc-counter;
+            transition: all 0.3s ease;
+        }
+        
+        .toc-list > li:hover {
+            padding-left: 15px;
+            background: rgba(0, 245, 255, 0.05);
+            border-left: 4px solid var(--quantum-blue);
+        }
+        
+        .toc-list > li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-part {
+            font-weight: 800;
+            margin: 40px 0 20px 0;
+            font-size: 1.6em;
+            padding: 15px 25px;
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(0, 255, 255, 0.1));
+            border-radius: 12px;
+            border-left: 5px solid;
+        }
+        
+        .toc-part.part1 { border-color: var(--constraint-gold); color: var(--constraint-gold); }
+        .toc-part.part2 { border-color: var(--context-cyan); color: var(--context-cyan); }
+        .toc-part.part3 { border-color: var(--verification-emerald); color: var(--verification-emerald); }
+        .toc-part.part4 { border-color: var(--correction-crimson); color: var(--correction-crimson); }
+        .toc-part.part5 { border-color: var(--quantum-blue); color: var(--quantum-blue); }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+            font-size: 1.05em;
+        }
+        
+        .toc-list a:hover {
+            color: var(--quantum-blue);
+            text-shadow: 0 0 10px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 2px solid rgba(0, 245, 255, 0.2);
+            border-radius: 25px;
+            padding: 60px 50px;
+            margin-bottom: 50px;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            box-shadow: 0 5px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 60px var(--border-glow), 0 0 40px rgba(123, 44, 191, 0.2);
+            border-color: var(--quantum-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.6em;
+            color: var(--quantum-blue);
+            margin-bottom: 35px;
+            border-bottom: 3px solid var(--deep-purple);
+            padding-bottom: 20px;
+            font-weight: 800;
+            text-shadow: 0 0 20px var(--border-glow);
+        }
+        
+        .section {
+            margin: 40px 0;
+        }
+        
+        .section-title {
+            font-size: 1.9em;
+            color: var(--cosmic-pink);
+            margin-bottom: 25px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--quantum-blue);
+            font-size: 0.8em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.1;
+            font-size: 1.08em;
+        }
+        
+        .content p {
+            margin-bottom: 25px;
+        }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(0, 255, 255, 0.1));
+            padding: 35px 40px;
+            border-left: 6px solid var(--constraint-gold);
+            border-radius: 15px;
+            margin: 35px 0;
+            box-shadow: 0 5px 25px rgba(255, 215, 0, 0.2);
+        }
+        
+        .highlight strong {
+            color: var(--constraint-gold);
+            font-weight: 700;
+        }
+        
+        .layer-insight {
+            padding: 35px 40px;
+            border-radius: 15px;
+            margin: 35px 0;
+            border-left: 6px solid;
+            box-shadow: 0 5px 25px rgba(0, 0, 0, 0.3);
+        }
+        
+        .layer-insight.constraint {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 215, 0, 0.05));
+            border-left-color: var(--constraint-gold);
+        }
+        
+        .layer-insight.context {
+            background: linear-gradient(135deg, rgba(0, 255, 255, 0.15), rgba(0, 255, 255, 0.05));
+            border-left-color: var(--context-cyan);
+        }
+        
+        .layer-insight.verification {
+            background: linear-gradient(135deg, rgba(80, 200, 120, 0.15), rgba(80, 200, 120, 0.05));
+            border-left-color: var(--verification-emerald);
+        }
+        
+        .layer-insight.correction {
+            background: linear-gradient(135deg, rgba(220, 20, 60, 0.15), rgba(220, 20, 60, 0.05));
+            border-left-color: var(--correction-crimson);
+        }
+        
+        .layer-insight-title {
+            font-weight: 800;
+            font-size: 1.4em;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .layer-insight.constraint .layer-insight-title { color: var(--constraint-gold); }
+        .layer-insight.context .layer-insight-title { color: var(--context-cyan); }
+        .layer-insight.verification .layer-insight-title { color: var(--verification-emerald); }
+        .layer-insight.correction .layer-insight-title { color: var(--correction-crimson); }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #1a1a2e);
+            border: 2px solid var(--border-glow);
+            border-radius: 15px;
+            padding: 30px;
+            overflow-x: auto;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+            font-size: 0.92em;
+            margin: 35px 0;
+            box-shadow: inset 0 0 30px rgba(0, 245, 255, 0.05);
+            line-height: 1.7;
+        }
+        
+        .code-block code {
+            color: var(--quantum-blue);
+        }
+        
+        .warning {
+            background: linear-gradient(135deg, rgba(220, 20, 60, 0.15), rgba(255, 68, 0, 0.1));
+            border-left: 6px solid var(--correction-crimson);
+            padding: 30px 35px;
+            border-radius: 15px;
+            margin: 35px 0;
+            box-shadow: 0 5px 25px rgba(220, 20, 60, 0.2);
+        }
+        
+        .warning-title {
+            color: var(--correction-crimson);
+            font-weight: 800;
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .best-practice {
+            background: linear-gradient(135deg, rgba(80, 200, 120, 0.15), rgba(0, 255, 255, 0.1));
+            border-left: 6px solid var(--verification-emerald);
+            padding: 30px 35px;
+            border-radius: 15px;
+            margin: 35px 0;
+            box-shadow: 0 5px 25px rgba(80, 200, 120, 0.2);
+        }
+        
+        .best-practice-title {
+            color: var(--verification-emerald);
+            font-weight: 800;
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .diagram {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 20px;
+            padding: 40px;
+            margin: 40px 0;
+            text-align: center;
+            box-shadow: var(--shadow-quantum);
+        }
+        
+        .diagram-title {
+            color: var(--quantum-blue);
+            margin-bottom: 25px;
+            font-weight: 800;
+            font-size: 1.5em;
+        }
+        
+        .diagram pre {
+            text-align: left;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9em;
+            line-height: 1.8;
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 35px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 15px;
+            overflow: hidden;
+            border: 2px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            padding: 20px;
+            text-align: left;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.2), rgba(123, 44, 191, 0.15));
+            color: var(--quantum-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.9em;
+        }
+        
+        tr:hover {
+            background: rgba(0, 245, 255, 0.08);
+        }
+        
+        .author-note {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.12), rgba(0, 255, 255, 0.12));
+            border: 3px solid var(--constraint-gold);
+            border-radius: 20px;
+            padding: 45px;
+            margin: 60px 0;
+            box-shadow: 0 0 40px rgba(255, 215, 0, 0.3);
+        }
+        
+        .author-note h3 {
+            color: var(--constraint-gold);
+            margin-bottom: 25px;
+            font-size: 1.8em;
+            font-weight: 800;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 60px 40px;
+            border-top: 3px solid var(--border-glow);
+            margin-top: 100px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 25px 25px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 5px solid var(--deep-purple);
+            padding-left: 30px;
+            margin: 30px 0;
+            color: var(--text-secondary);
+            font-size: 1.15em;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 15px;
+            color: var(--quantum-blue);
+            font-weight: 600;
+        }
+        
+        ul, ol {
+            margin: 25px 0;
+            padding-left: 40px;
+        }
+        
+        li {
+            margin-bottom: 15px;
+            line-height: 2;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 30px 20px;
+            }
+            
+            .book-title {
+                font-size: 2.2em;
+            }
+            
+            .chapter {
+                padding: 35px 25px;
+            }
+            
+            .toc {
+                padding: 30px 20px;
+            }
+            
+            .four-layer-badge {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <h1 class="book-title">AI Agent Harness Engineering</h1>
+            <h2 class="book-subtitle">4 层架构模型：约束层 · 上下文层 · 验证层 · 纠偏层</h2>
+            
+            <div class="four-layer-badge">
+                <div class="layer-badge constraint">🔒 约束层 Constraint</div>
+                <div class="layer-badge context">🧠 上下文层 Context</div>
+                <div class="layer-badge verification">✓ 验证层 Verification</div>
+                <div class="layer-badge correction">🔄 纠偏层 Correction</div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">第一版 · 开创性理论版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">理论体系</span>
+                    <span class="meta-value">4 层架构模型</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4 层架构图 -->
+        <div class="architecture-diagram">
+            <h3>🏗️ AI Agent Harness 4 层架构模型</h3>
+            <div class="layer-stack">
+                <div class="layer-box constraint">
+                    🔒 约束层 (Constraint Layer)<br>
+                    <span style="font-size: 0.7em; font-weight: 400; margin-top: 10px; display: block;">边界定义 · 权限控制 · 规则引擎 · 资源限制</span>
+                </div>
+                <div class="layer-arrow">⬇️ 输入过滤 ⬇️</div>
+                <div class="layer-box context">
+                    🧠 上下文层 (Context Layer)<br>
+                    <span style="font-size: 0.7em; font-weight: 400; margin-top: 10px; display: block;">记忆管理 · 知识检索 · 状态追踪 · 信息组装</span>
+                </div>
+                <div class="layer-arrow">⬇️ 执行监控 ⬇️</div>
+                <div class="layer-box verification">
+                    ✓ 验证层 (Verification Layer)<br>
+                    <span style="font-size: 0.7em; font-weight: 400; margin-top: 10px; display: block;">质量检查 · 安全审计 · 一致性验证 · 合规性检测</span>
+                </div>
+                <div class="layer-arrow">⬇️ 反馈循环 ⬇️</div>
+                <div class="layer-box correction">
+                    🔄 纠偏层 (Correction Layer)<br>
+                    <span style="font-size: 0.7em; font-weight: 400; margin-top: 10px; display: block;">错误检测 · 自动修复 · 策略调整 · 学习优化</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            <ul class="toc-list">
+                <li class="toc-part part1">第一部分 理论篇 · 4 层架构模型基础</li>
+                <li><a href="#preface">序言：为什么需要 4 层架构模型</a></li>
+                <li><a href="#chapter1">第 1 章 AI Agent Harness 的演进与范式转移</a></li>
+                <li><a href="#chapter2">第 2 章 4 层架构模型的理论基础</a></li>
+                <li><a href="#chapter3">第 3 章 层间交互与数据流设计</a></li>
+                
+                <li class="toc-part part2">第二部分 约束层篇 · 边界与规则设计</li>
+                <li><a href="#chapter4">第 4 章 约束层核心职责与架构</a></li>
+                <li><a href="#chapter5">第 5 章 权限边界与资源限制</a></li>
+                <li><a href="#chapter6">第 6 章 规则引擎与策略语言</a></li>
+                
+                <li class="toc-part part3">第三部分 上下文层篇 · 记忆与认知工程</li>
+                <li><a href="#chapter7">第 7 章 上下文层的核心挑战</a></li>
+                <li><a href="#chapter8">第 8 章 记忆系统设计：从短期到长期</a></li>
+                <li><a href="#chapter9">第 9 章 知识检索与信息组装策略</a></li>
+                
+                <li class="toc-part part4">第四部分 验证层篇 · 质量与安全保障</li>
+                <li><a href="#chapter10">第 10 章 验证层的多维质量检查</a></li>
+                <li><a href="#chapter11">第 11 章 安全审计与威胁检测</a></li>
+                <li><a href="#chapter12">第 12 章 合规性验证与形式化方法</a></li>
+                
+                <li class="toc-part part5">第五部分 纠偏层篇 · 容错与自愈机制</li>
+                <li><a href="#chapter13">第 13 章 纠偏层的错误检测与分类</a></li>
+                <li><a href="#chapter14">第 14 章 自动修复策略与执行引擎</a></li>
+                <li><a href="#chapter15">第 15 章 学习优化与持续改进</a></li>
+                
+                <li class="toc-part part1">第六部分 实践篇 · 落地与演进</li>
+                <li><a href="#chapter16">第 16 章 4 层架构的实现模式</a></li>
+                <li><a href="#chapter17">第 17 章 性能优化与成本工程</a></li>
+                <li><a href="#chapter18">第 18 章 未来：从 4 层到自适应架构</a></li>
+                
+                <li class="toc-part part2">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 4 层架构检查清单</a></li>
+                <li><a href="#appendix-b">附录 B 主流框架的 4 层映射分析</a></li>
+                <li><a href="#appendix-c">附录 C 代码模板与最佳实践</a></li>
+                <li><a href="#references">参考文献与延伸阅读</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：为什么需要 4 层架构模型</h2>
+            <div class="content">
+                <p>2026 年 3 月，OpenAI 团队发布了一项震撼业界的实验：他们用 5 个月时间、仅 3 名工程师，通过 Codex Agent 构建了 100 万行代码的产品，且<strong>零行人工编写代码</strong>。这一成就揭示了一个深刻的事实：AI Agent 的生产力已经超越人类，但前提是必须构建正确的驾驭基础设施。</p>
+                
+                <div class="highlight">
+                    <p><strong>核心洞察：</strong>OpenAI 团队发现，当 Agent 吞吐量远超人类注意力时，传统的工程规范变得适得其反。他们被迫重新思考软件工程的本质——从编写代码转向<strong>设计环境、指定意图、构建反馈循环</strong>。这正是 4 层架构模型诞生的历史背景。</p>
+                </div>
+                
+                <p>与此同时，arXiv 在 2026 年 3 月 5 日发表的论文《Building AI Coding Agents for the Terminal》指出：有效的自主协助需要<strong>严格的安全控制和高效的上下文管理</strong>，以防止上下文膨胀和推理退化。论文提出了复合 AI 系统架构、双 Agent 设计、自适应上下文压缩等关键技术。</p>
+                
+                <p>然而，业界仍缺乏一个统一的理论框架来系统化地理解和设计 AI Agent Harness。现有的框架（如 LangChain、LlamaIndex）侧重于工具编排，而忽视了更深层的架构原则。这正是本书要填补的空白。</p>
+                
+                <div class="author-note">
+                    <h3>4 层架构模型的革命性意义</h3>
+                    <p>本书首次提出<strong>约束层 - 上下文层 - 验证层 - 纠偏层</strong>的 4 层架构模型，这一理论体系具有以下开创性贡献：</p>
+                    <ul style="margin-left: 20px; margin-top: 15px;">
+                        <li><strong>理论统一</strong>：将分散的最佳实践整合为连贯的理论框架，为 AI Agent 工程提供共同语言</li>
+                        <li><strong>职责分离</strong>：明确每层的核心职责，避免功能耦合导致的复杂性爆炸</li>
+                        <li><strong>数据流清晰</strong>：定义层间交互协议，确保信息流动的可预测性和可调试性</li>
+                        <li><strong>可扩展性</strong>：模块化设计支持独立演进，新模型能力可直接映射到对应层</li>
+                        <li><strong>安全内建</strong>：将安全从"附加功能"转变为架构 DNA，从第一行代码就嵌入零信任原则</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">4 层架构的核心价值</h3>
+                
+                <div class="layer-insight constraint">
+                    <div class="layer-insight-title">🔒 约束层：定义安全的边界</div>
+                    <p>约束层是 Harness 的"免疫系统"，负责定义 Agent 的行为边界。它回答关键问题：Agent 可以做什么？不可以做什么？资源限制是什么？权限边界在哪里？</p>
+                    <p style="margin-top: 15px;"><strong>核心组件</strong>：权限控制、资源配额、规则引擎、沙箱隔离、网络策略</p>
+                </div>
+                
+                <div class="layer-insight context">
+                    <div class="layer-insight-title">🧠 上下文层：构建认知的基石</div>
+                    <p>上下文层是 Harness 的"大脑皮层"，负责管理 Agent 的记忆、知识和状态。它解决 LLM 的根本局限：有限的上下文窗口、遗忘问题、知识更新滞后。</p>
+                    <p style="margin-top: 15px;"><strong>核心组件</strong>：短期记忆、长期记忆、向量检索、知识图谱、状态追踪、上下文压缩</p>
+                </div>
+                
+                <div class="layer-insight verification">
+                    <div class="layer-insight-title">✓ 验证层：确保质量的关卡</div>
+                    <p>验证层是 Harness 的"质检部门"，负责在 Agent 执行前后进行多维度检查。它确保输出符合质量标准、安全要求和业务规则。</p>
+                    <p style="margin-top: 15px;"><strong>核心组件</strong>：代码审查、安全扫描、一致性验证、合规性检测、性能基准</p>
+                </div>
+                
+                <div class="layer-insight correction">
+                    <div class="layer-insight-title">🔄 纠偏层：实现自愈的智慧</div>
+                    <p>纠偏层是 Harness 的"自我修复系统"，负责检测错误、执行修复、调整策略、持续学习。它将失败转化为改进的机会，构建真正的自适应系统。</p>
+                    <p style="margin-top: 15px;"><strong>核心组件</strong>：错误检测、自动修复、策略调整、反馈循环、强化学习</p>
+                </div>
+                
+                <h3 class="section-title">本书的结构与阅读指南</h3>
+                <p>本书分为六个部分，循序渐进地探索 4 层架构模型的深度与广度：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>第一部分 理论篇</strong>：建立 4 层架构的理论基础，理解范式转移和核心原则</li>
+                    <li><strong>第二部分 约束层篇</strong>：深入讲解边界定义、权限控制、规则引擎设计</li>
+                    <li><strong>第三部分 上下文层篇</strong>：全面探讨记忆系统、知识检索、上下文工程</li>
+                    <li><strong>第四部分 验证层篇</strong>：系统讲解质量检查、安全审计、形式化验证</li>
+                    <li><strong>第五部分 纠偏层篇</strong>：详细阐述错误检测、自动修复、学习优化</li>
+                    <li><strong>第六部分 实践篇</strong>：提供实现模式、性能优化、未来演进的实战指南</li>
+                </ul>
+                
+                <div class="quote">
+                    "架构不是关于组件，而是关于关系。4 层模型的价值不在于每层的独立功能，而在于层间交互产生的涌现智能。"
+                    <div class="quote-author">—— 本书核心理念</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 50px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+            </div>
+        </div>
+
+        <!-- 第 1 章 -->
+        <div class="chapter" id="chapter1">
+            <h2 class="chapter-title">第 1 章 AI Agent Harness 的演进与范式转移</h2>
+            <div class="content">
+                <h3 class="section-title">1.1 从 Framework 到 Harness 的演进</h3>
+                <p>AI Agent 基础设施的发展经历了三个关键阶段：</p>
+                
+                <div class="section">
+                    <h4>第一阶段：Framework 时代（2023-2024）</h4>
+                    <p>以 LangChain、LlamaIndex 为代表的框架提供了工具编排和基础 Agent 循环。这一阶段的特点是：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>关注点：如何连接 LLM 与外部工具</li>
+                        <li>抽象层级：代码库/SDK</li>
+                        <li>安全模型：事后添加，缺乏系统性</li>
+                        <li>上下文管理：简单的对话历史拼接</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>第二阶段：Platform 时代（2025）</h4>
+                    <p>以 E2B、Northflank、Modal 为代表的平台提供了沙箱执行和部署基础设施。这一阶段的特点是：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>关注点：如何安全执行 Agent 生成的代码</li>
+                        <li>抽象层级：运行时环境 + 管控系统</li>
+                        <li>安全模型：沙箱隔离、资源限制</li>
+                        <li>上下文管理：向量数据库 + 语义缓存</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>第三阶段：Harness 时代（2026-）</h4>
+                    <p>以 Claude Code、OpenAI Codex Harness、OPENDEV 为代表的驾驭系统提供了完整的操作系统级基础设施。这一阶段的特点是：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>关注点：如何管理长周期、高自主性任务</li>
+                        <li>抽象层级：操作系统（上下文管理、安全、调度、可观测性）</li>
+                        <li>安全模型：零信任内建、多层防御</li>
+                        <li>上下文管理：自适应压缩、知识图谱、事件驱动提醒</li>
+                    </ul>
+                </div>
+                
+                <div class="highlight">
+                    <p><strong>范式转移：</strong>从"如何构建 Agent"转向"如何驾驭 Agent"。工程师的角色从代码编写者转变为环境设计者、意图指定者、反馈循环构建者。</p>
+                </div>
+                
+                <h3 class="section-title">1.2 OpenAI Codex Harness 的启示</h3>
+                <p>OpenAI 团队在 2026 年 2 月分享的 Harness 工程经验揭示了关键洞见：</p>
+                
+                <div class="section">
+                    <h4>1.2.1 人类时间是最稀缺资源</h4>
+                    <p>OpenAI 团队发现，当 Agent 吞吐量远超人类注意力时，传统工程规范变得适得其反。他们采用了新的合并哲学：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>最小化合并阻塞门控</li>
+                        <li>测试 Flake 通过后续运行修复，而非无限期阻塞</li>
+                        <li>在 Agent 吞吐量极高的系统中，纠正是廉价的，等待是昂贵的</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>1.2.2 仓库知识作为系统记录</h4>
+                    <p>OpenAI 尝试了"一个巨大的 AGENTS.md"方法，但失败了。他们转而采用结构化知识库：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>AGENTS.md 仅作为目录（约 100 行）</li>
+                        <li>真正的知识库位于结构化的 docs/ 目录</li>
+                        <li>设计文档、执行计划、产品规范、参考材料分类存储</li>
+                        <li>专用 linter 和 CI 任务验证知识库的更新和交叉链接</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>1.2.3 架构品味的机械执行</h4>
+                    <p>OpenAI 通过自定义 linter 强制执行架构规则：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>每个业务域分为固定层（Types → Config → Repo → Service → Runtime → UI）</li>
+                        <li>跨领域关注点通过 Providers 单一接口进入</li>
+                        <li>结构化日志、命名约定、文件大小限制、平台特定可靠性要求</li>
+                        <li>Lint 错误消息包含修复指令，直接注入 Agent 上下文</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>1.2.4 熵与垃圾回收</h4>
+                    <p>完全 Agent 自主引入了新问题：Codex 会复制仓库中已有的模式，包括次优模式。OpenAI 的解决方案：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>将"黄金原则"编码到仓库中</li>
+                        <li>定期清理流程：后台 Codex 任务扫描偏差、更新质量等级、开启针对性重构 PR</li>
+                        <li>技术债务像高息贷款：持续小额偿还优于累积后痛苦爆发</li>
+                        <li>人类品味被捕获一次，然后在每行代码上持续执行</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">1.3 OPENDEV 的复合 AI 系统架构</h3>
+                <p>arXiv:2603.05344 论文提出的 OPENDEV 展示了终端原生 Agent 的最佳实践：</p>
+                
+                <div class="section">
+                    <h4>1.3.1 双 Agent 架构</h4>
+                    <p>OPENDEV 采用规划与执行分离的双 Agent 设计：</p>
+                    <ul style="margin-left: 20px;">
+                        <li><strong>规划 Agent</strong>：负责任务分解、策略制定、风险评估</li>
+                        <li><strong>执行 Agent</strong>：负责具体工具调用、代码执行、结果收集</li>
+                        <li>优势：职责分离、降低认知负荷、提高可调试性</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>1.3.2 自适应上下文压缩</h4>
+                    <p>OPENDEV 采用渐进式上下文压缩策略：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>早期观察逐步压缩，保留关键信息</li>
+                        <li>基于重要性的选择性保留</li>
+                        <li>事件驱动的系统提醒对抗指令 fade-out</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>1.3.3 自动化记忆系统</h4>
+                    <p>OPENDEV 构建了跨会话的项目特定知识积累系统：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>自动提取项目结构、依赖关系、编码规范</li>
+                        <li>会话间持久化，避免重复学习</li>
+                        <li>支持增量更新和版本追踪</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">1.4 4 层架构模型的诞生</h3>
+                <p>基于业界最佳实践和理论分析，我们提出 4 层架构模型：</p>
+                
+                <div class="diagram">
+                    <div class="diagram-title">4 层架构模型 vs 业界实践映射</div>
+                    <pre>
+┌─────────────────────────────────────────────────────┐
+│  约束层 (Constraint)                                │
+│  • OpenAI: 架构 linter、 Providers 边界             │
+│  • OPENDEV: 沙箱隔离、网络策略                      │
+│  • Claude Code: 权限控制、资源配额                  │
+├─────────────────────────────────────────────────────┤
+│  上下文层 (Context)                                 │
+│  • OpenAI: 结构化知识库、AGENTS.md 目录             │
+│  • OPENDEV: 自适应压缩、自动化记忆                  │
+│  • Zep: 上下文图谱、实体关系提取                    │
+├─────────────────────────────────────────────────────┤
+│  验证层 (Verification)                              │
+│  • OpenAI: 质量文档、领域评分、结构性测试           │
+│  • OPENDEV: 显式推理阶段、工具发现验证              │
+│  • Anthropic: 人类介入点、中断机制                  │
+├─────────────────────────────────────────────────────┤
+│  纠偏层 (Correction)                                │
+│  • OpenAI: 垃圾回收 Agent、黄金原则执行             │
+│  • OPENDEV: 事件驱动提醒、错误恢复                  │
+│  • Microsoft: 自愈循环、策略调整                    │
+└─────────────────────────────────────────────────────┘
+                    </pre>
+                </div>
+                
+                <h3 class="section-title">1.5 本章小结</h3>
+                <p>本章回顾了 AI Agent Harness 的演进历程，从 Framework 到 Platform 再到 Harness 的范式转移。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>工程师角色从代码编写者转变为环境设计者</li>
+                    <li>OpenAI 和 OPENDEV 的实践揭示了 Harness 工程的核心原则</li>
+                    <li>4 层架构模型是对业界最佳实践的理论抽象和统一</li>
+                    <li>人类时间是最稀缺资源，Harness 必须最大化人类杠杆</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 2 章 -->
+        <div class="chapter" id="chapter2">
+            <h2 class="chapter-title">第 2 章 4 层架构模型的理论基础</h2>
+            <div class="content">
+                <h3 class="section-title">2.1 控制论与反馈循环</h3>
+                <p>4 层架构模型的理论根基来自控制论（Cybernetics）的反馈循环原理。Norbert Wiener 在 1948 年定义控制论为"关于动物和机器中控制与通信的科学"。</p>
+                
+                <div class="highlight">
+                    <p><strong>核心原理：</strong>任何自适应系统都必须具备感知 - 决策 - 执行的闭环，并通过反馈不断调整行为。4 层架构正是这一原理在 AI Agent 工程中的具体实现。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>2.1.1 负反馈与稳定性</h4>
+                    <p>约束层和验证层构成负反馈机制，确保系统稳定性：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>约束层定义边界，防止系统偏离安全区域</li>
+                        <li>验证层检测偏差，触发纠正措施</li>
+                        <li>负反馈越强，系统越稳定，但响应速度越慢</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>2.1.2 正反馈与适应性</h4>
+                    <p>上下文层和纠偏层构成正反馈机制，促进系统适应性：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>上下文层积累知识，增强系统能力</li>
+                        <li>纠偏层从错误中学习，优化未来行为</li>
+                        <li>正反馈过强可能导致不稳定，需要负反馈平衡</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">2.2 信息论与上下文管理</h3>
+                <p>香农信息论为上下文层设计提供了数学基础。关键概念：</p>
+                
+                <div class="section">
+                    <h4>2.2.1 信息熵与上下文压缩</h4>
+                    <p>上下文压缩的本质是在保留信息量的前提下减少 token 消耗：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>高熵信息（新颖、关键）应优先保留</li>
+                        <li>低熵信息（重复、可预测）可压缩或丢弃</li>
+                        <li>OPENDEV 的渐进式压缩基于信息熵原理</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>2.2.2 信道容量与上下文窗口</h4>
+                    <p>LLM 的上下文窗口是有限信道容量，必须优化信息传输：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>噪声（无关信息）降低有效容量</li>
+                        <li>编码效率（结构化、索引）提高容量利用率</li>
+                        <li>OpenAI 的"地图而非手册"原则是信道优化的体现</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">2.3 复杂系统与涌现智能</h3>
+                <p>4 层架构模型是复杂系统理论在 AI 工程中的应用：</p>
+                
+                <div class="section">
+                    <h4>2.4.1 模块化与层次结构</h4>
+                    <p>复杂系统通过模块化降低认知负荷：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>每层有明确定义的接口和职责</li>
+                        <li>层内高内聚，层间低耦合</li>
+                        <li>层次结构支持独立演进和替换</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>2.4.2 涌现与层间交互</h4>
+                    <p>4 层架构的价值不在于单层的独立功能，而在于层间交互产生的涌现智能：</p>
+                    <ul style="margin-left: 20px;">
+                        <li>约束层 + 上下文层 = 安全的信息积累</li>
+                        <li>验证层 + 纠偏层 = 自适应的质量保证</li>
+                        <li>4 层协同 = 可靠、高效、自学习的 Agent 系统</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">2.4 4 层架构的形式化定义</h3>
+                <p>我们用数学语言形式化定义 4 层架构模型：</p>
+                
+                <div class="code-block">
+                    <code>
+定义：AI Agent Harness 4 层架构模型
+
+设 H 为 Harness 系统，A 为 Agent 模型，E 为环境，则：
+
+H = (C, X, V, R, Φ)
+
+其中：
+  C = 约束层 (Constraint Layer)
+    C: E × A → {0, 1}  (二元决策：允许/拒绝)
+    职责：∀(e, a), C(e, a) = 1 ⇔ 行为 a 在环境 e 中是安全的
+
+  X = 上下文层 (Context Layer)
+    X: History × Query → Context
+    职责：从历史 H 中提取与查询 Q 相关的上下文 C
+
+  V = 验证层 (Verification Layer)
+    V: Output × Criteria → {Pass, Fail} × Feedback
+    职责：验证输出 O 是否符合标准 S，提供反馈 F
+
+  R = 纠偏层 (Correction Layer)
+    R: Failure × Context → Correction × Strategy
+    职责：从失败 F 中学习，生成修正 C 和策略调整 S
+
+  Φ = 层间交互协议
+    Φ: (C, X, V, R) → Coherent System
+    职责：定义数据流、控制流、反馈循环
+
+系统不变式：
+  1. 安全性：∀执行轨迹 T, C(T) = 1 (所有轨迹都通过约束检查)
+  2. 一致性：∀输出 O, V(O) = Pass (所有输出都通过验证)
+  3. 适应性：lim(t→∞) R(t) → Optimal (纠偏策略收敛到最优)
+  4. 可观测性：∀状态 S, ∃监控 M, M(S) 可查询
+                    </code>
+                </div>
+                
+                <h3 class="section-title">2.5 本章小结</h3>
+                <p>本章建立了 4 层架构模型的理论基础，包括控制论、信息论、复杂系统理论和形式化定义。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>约束层和验证层构成负反馈，确保稳定性</li>
+                    <li>上下文层和纠偏层构成正反馈，促进适应性</li>
+                    <li>信息论指导上下文压缩和窗口优化</li>
+                    <li>模块化设计支持独立演进和涌现智能</li>
+                    <li>形式化定义为工程实现提供精确规范</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 由于篇幅限制，后续章节将精简呈现核心内容 -->
+        <!-- 第三部分 上下文层篇 -->
+        <div class="chapter" id="chapter7">
+            <h2 class="chapter-title">第 7 章 上下文层的核心挑战</h2>
+            <div class="content">
+                <h3 class="section-title">7.1 上下文膨胀问题</h3>
+                <div class="highlight">
+                    <p><strong>核心挑战：</strong>随着任务执行，上下文窗口被历史对话、工具响应、中间结果填满，导致关键信息被挤出、推理质量下降、token 成本飙升。</p>
+                </div>
+                
+                <p>OPENDEV 论文指出，上下文膨胀是长周期任务失败的主要原因之一。当上下文超过模型最佳处理范围时，会出现"指令 fade-out"现象：早期指令被遗忘，Agent 偏离原始目标。</p>
+                
+                <h3 class="section-title">7.2 记忆系统的层次设计</h3>
+                <p>上下文层必须实现多层次记忆系统：</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>记忆类型</th>
+                            <th>存储内容</th>
+                            <th>访问模式</th>
+                            <th>生命周期</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>工作记忆</td>
+                            <td>当前任务上下文、最近对话</td>
+                            <td>顺序访问</td>
+                            <td>会话内</td>
+                        </tr>
+                        <tr>
+                            <td>情景记忆</td>
+                            <td>特定事件的时间戳记录</td>
+                            <td>时间范围查询</td>
+                            <td>跨会话</td>
+                        </tr>
+                        <tr>
+                            <td>语义记忆</td>
+                            <td>事实、概念、规则</td>
+                            <td>语义相似度检索</td>
+                            <td>永久</td>
+                        </tr>
+                        <tr>
+                            <td>程序记忆</td>
+                            <td>技能、工具使用方法</td>
+                            <td>任务触发检索</td>
+                            <td>永久</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">7.3 上下文压缩策略</h3>
+                <div class="best-practice">
+                    <div class="best-practice-title">✓ 渐进式压缩</div>
+                    <p>OPENDEV 采用渐进式压缩：早期观察逐步摘要化，保留关键信息，丢弃冗余细节。压缩率随时间递增。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <div class="best-practice-title">✓ 重要性评分</div>
+                    <p>为每个上下文片段计算重要性分数（基于频率、最近性、任务相关性），优先保留高分片段。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <div class="best-practice-title">✓ 事件驱动提醒</div>
+                    <p>OPENDEV 使用事件驱动的系统提醒对抗指令 fade-out。当检测到关键指令可能被遗忘时，主动重新注入上下文。</p>
+                </div>
+                
+                <h3 class="section-title">7.4 知识检索优化</h3>
+                <p>Zep 等现代上下文平台采用图谱增强检索：</p>
+                <ul style="margin-left: 20px;">
+                    <li>从多源数据（聊天、JSON、文档）自动提取实体、关系、事实</li>
+                    <li>构建时序上下文图谱，事实变化时自动失效旧信息</li>
+                    <li>检索时组装相关上下文，格式化后提供给 LLM</li>
+                    <li>Token 高效，避免无关信息污染</li>
+                </ul>
+                
+                <h3 class="section-title">7.5 本章小结</h3>
+                <p>上下文层是 Harness 的认知引擎。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>上下文膨胀是长周期任务的主要威胁</li>
+                    <li>多层次记忆系统模拟人类认知</li>
+                    <li>渐进式压缩 + 重要性评分 + 事件驱动提醒是核心策略</li>
+                    <li>图谱增强检索提高信息组装质量</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第四部分 验证层篇 -->
+        <div class="chapter" id="chapter10">
+            <h2 class="chapter-title">第 10 章 验证层的多维质量检查</h2>
+            <div class="content">
+                <h3 class="section-title">10.1 验证层的职责边界</h3>
+                <div class="highlight">
+                    <p><strong>核心职责：</strong>验证层是 Harness 的质量关卡，负责在 Agent 执行前后进行多维度检查，确保输出符合质量标准、安全要求和业务规则。</p>
+                </div>
+                
+                <h3 class="section-title">10.2 代码质量验证</h3>
+                <p>OpenAI 团队实施了严格的代码质量验证：</p>
+                
+                <div class="section">
+                    <h4>10.2.1 静态分析</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>自定义 linter 强制执行架构规则</li>
+                        <li>类型检查（TypeScript、Pyright）</li>
+                        <li>代码风格检查（ESLint、Pylint）</li>
+                        <li>圈复杂度限制</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>10.2.2 结构性测试</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>依赖方向验证（禁止反向依赖）</li>
+                        <li>层间边界检查（Providers 是唯一入口）</li>
+                        <li>文件大小限制</li>
+                        <li>命名约定验证</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>10.2.3 质量文档评分</h4>
+                    <p>OpenAI 维护质量文档，对每个产品域和架构层进行评分，追踪差距随时间变化。Agent 可以查询质量评分，了解改进优先级。</p>
+                </div>
+                
+                <h3 class="section-title">10.3 安全验证</h3>
+                <div class="warning">
+                    <div class="warning-title">⚠️ 安全验证是零和游戏</div>
+                    <p>安全验证必须 100% 准确。漏报（False Negative）导致安全漏洞，误报（False Positive）降低生产力。验证层必须平衡两者。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>10.3.1 静态应用安全测试（SAST）</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>依赖漏洞扫描（npm audit、pip-audit）</li>
+                        <li>硬编码密钥检测</li>
+                        <li>SQL 注入、XSS 模式识别</li>
+                        <li>不安全的加密算法检测</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>10.3.2 动态应用安全测试（DAST）</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>运行时行为监控</li>
+                        <li>网络请求审计（目标域名、协议、数据量）</li>
+                        <li>文件系统访问模式分析</li>
+                        <li>系统调用追踪</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">10.4 业务规则验证</h3>
+                <p>验证层必须确保 Agent 行为符合业务规则：</p>
+                <ul style="margin-left: 20px;">
+                    <li>数据格式验证（Schema 校验）</li>
+                    <li>业务逻辑一致性（如订单金额=单价×数量）</li>
+                    <li>合规性检查（GDPR、HIPAA 等法规）</li>
+                    <li>领域特定约束（如金融风控规则）</li>
+                </ul>
+                
+                <h3 class="section-title">10.5 验证策略设计</h3>
+                <div class="best-practice">
+                    <div class="best-practice-title">✓ 分层验证</div>
+                    <p>快速验证（语法、格式）→ 中等验证（逻辑、一致性）→ 深度验证（安全、合规）。逐层过滤，避免过度验证。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <div class="best-practice-title">✓ 验证即代码</div>
+                    <p>将验证规则编码为可执行代码，而非文档。OpenAI 的自定义 linter 是典范。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <div class="best-practice-title">✓ 反馈注入</div>
+                    <p>验证失败时，将修复指令直接注入 Agent 上下文，而非仅报告错误。OpenAI 的 linter 错误消息包含修复指南。</p>
+                </div>
+                
+                <h3 class="section-title">10.6 本章小结</h3>
+                <p>验证层是 Harness 的质量守护者。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>多维验证：代码质量、安全、业务规则</li>
+                    <li>OpenAI 实践：自定义 linter、质量评分、结构性测试</li>
+                    <li>分层验证策略平衡速度与准确性</li>
+                    <li>验证规则必须可执行、可反馈</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第五部分 纠偏层篇 -->
+        <div class="chapter" id="chapter13">
+            <h2 class="chapter-title">第 13 章 纠偏层的错误检测与分类</h2>
+            <div class="content">
+                <h3 class="section-title">13.1 纠偏层的使命</h3>
+                <div class="highlight">
+                    <p><strong>核心使命：</strong>纠偏层是 Harness 的自我修复系统，负责检测错误、执行修复、调整策略、持续学习。它将失败转化为改进机会，构建真正的自适应系统。</p>
+                </div>
+                
+                <h3 class="section-title">13.2 错误检测机制</h3>
+                
+                <div class="section">
+                    <h4>13.2.1 显式错误</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>编译错误、运行时异常</li>
+                        <li>测试失败、断言违反</li>
+                        <li>API 错误响应（HTTP 4xx/5xx）</li>
+                        <li>超时、资源耗尽</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>13.2.2 隐式错误</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>逻辑错误（输出不符合预期但无异常）</li>
+                        <li>性能退化（响应时间超过阈值）</li>
+                        <li>架构漂移（违反层间依赖规则）</li>
+                        <li>知识腐化（过时信息与代码不一致）</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>13.2.3 检测策略</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>断言注入：在关键点插入运行时检查</li>
+                        <li>金丝雀测试：小流量验证新行为</li>
+                        <li>异常检测：基于统计的偏差识别</li>
+                        <li>人类反馈：用户报告、审查意见</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">13.3 错误分类体系</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>错误类型</th>
+                            <th>来源</th>
+                            <th>严重性</th>
+                            <th>修复策略</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>语法错误</td>
+                            <td>代码生成</td>
+                            <td>低</td>
+                            <td>自动修复（重试 + 错误提示）</td>
+                        </tr>
+                        <tr>
+                            <td>逻辑错误</td>
+                            <td>推理偏差</td>
+                            <td>中</td>
+                            <td>人类审查 + 策略调整</td>
+                        </tr>
+                        <tr>
+                            <td>安全漏洞</td>
+                            <td>约束绕过</td>
+                            <td>高</td>
+                            <td>立即阻断 + 根因分析</td>
+                        </tr>
+                        <tr>
+                            <td>架构漂移</td>
+                            <td>模式复制</td>
+                            <td>中</td>
+                            <td>垃圾回收 Agent 重构</td>
+                        </tr>
+                        <tr>
+                            <td>知识腐化</td>
+                            <td>文档过时</td>
+                            <td>低</td>
+                            <td>doc-gardening Agent 更新</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">13.4 OpenAI 的垃圾回收模式</h3>
+                <p>OpenAI 团队发现，Codex 会复制仓库中已有的模式，包括次优模式。他们构建了垃圾回收机制：</p>
+                
+                <div class="best-practice">
+                    <div class="best-practice-title">✓ 黄金原则编码</div>
+                    <p>将 opinionated、机械化的规则编码到仓库中，如"优先共享工具包而非手写辅助函数"、"禁止 YOLO 式数据探测"。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <div class="best-practice-title">✓ 定期清理流程</div>
+                    <p>后台 Codex 任务定期扫描偏差、更新质量等级、开启针对性重构 PR。大部分 PR 可在 1 分钟内审查并自动合并。</p>
+                </div>
+                
+                <div class="best-practice">
+                    <div class="best-practice-title">✓ 技术债务管理</div>
+                    <p>技术债务像高息贷款：持续小额偿还优于累积后痛苦爆发。人类品味被捕获一次，然后在每行代码上持续执行。</p>
+                </div>
+                
+                <h3 class="section-title">13.5 本章小结</h3>
+                <p>纠偏层是 Harness 的自适应引擎。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>错误检测包括显式和隐式两类</li>
+                    <li>错误分类指导修复策略选择</li>
+                    <li>OpenAI 的垃圾回收模式是纠偏层典范</li>
+                    <li>技术债务必须持续偿还，避免复利效应</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第六部分 实践篇 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 4 层架构的实现模式</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 参考架构</h3>
+                <div class="diagram">
+                    <div class="diagram-title">4 层架构参考实现</div>
+                    <pre>
+┌─────────────────────────────────────────────────────┐
+│                  API Gateway                        │
+│              (请求路由、认证、限流)                  │
+└─────────────────────────────────────────────────────┘
+                          │
+                          ⬇️
+┌─────────────────────────────────────────────────────┐
+│                约束层 (Constraint)                  │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
+│  │ 权限控制    │  │ 资源配额    │  │ 规则引擎    │ │
+│  │ IAM/RBAC    │  │ CPU/Mem/Disk│  │ OPA/Rego    │ │
+│  └─────────────┘  └─────────────┘  └─────────────┘ │
+│  ┌─────────────┐  ┌─────────────┐                  │
+│  │ 沙箱隔离    │  │ 网络策略    │                  │
+│  │ Firecracker │  │ 白名单/防火墙│                  │
+│  └─────────────┘  └─────────────┘                  │
+└─────────────────────────────────────────────────────┘
+                          │
+                          ⬇️
+┌─────────────────────────────────────────────────────┐
+│                上下文层 (Context)                   │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
+│  │ 短期记忆    │  │ 长期记忆    │  │ 知识图谱    │ │
+│  │ Redis       │  │ Vector DB   │  │ Neo4j       │ │
+│  └─────────────┘  └─────────────┘  └─────────────┘ │
+│  ┌─────────────┐  ┌─────────────┐                  │
+│  │ 上下文压缩  │  │ 事件提醒    │                  │
+│  │ 摘要/重要性 │  │ 指令 fade-out│                  │
+│  └─────────────┘  └─────────────┘                  │
+└─────────────────────────────────────────────────────┘
+                          │
+                          ⬇️
+┌─────────────────────────────────────────────────────┐
+│                验证层 (Verification)                │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
+│  │ 代码审查    │  │ 安全扫描    │  │ 一致性验证  │ │
+│  │ Linter      │  │ SAST/DAST   │  │ Schema 校验  │ │
+│  └─────────────┘  └─────────────┘  └─────────────┘ │
+│  ┌─────────────┐  ┌─────────────┐                  │
+│  │ 合规检测    │  │ 性能基准    │                  │
+│  │ GDPR/HIPAA  │  │ 延迟/吞吐量 │                  │
+│  └─────────────┘  └─────────────┘                  │
+└─────────────────────────────────────────────────────┘
+                          │
+                          ⬇️
+┌─────────────────────────────────────────────────────┐
+│                纠偏层 (Correction)                  │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
+│  │ 错误检测    │  │ 自动修复    │  │ 策略调整    │ │
+│  │ 断言/监控   │  │ 重试/回滚   │  │ RLHF/微调   │ │
+│  └─────────────┘  └─────────────┘  └─────────────┘ │
+│  ┌─────────────┐  ┌─────────────┐                  │
+│  │ 垃圾回收    │  │ 学习优化    │                  │
+│  │ 重构 Agent  │  │ 反馈循环    │                  │
+│  └─────────────┘  └─────────────┘                  │
+└─────────────────────────────────────────────────────┘
+                          │
+                          ⬇️
+┌─────────────────────────────────────────────────────┐
+│                  AI Agent                           │
+│              (LLM + 工具编排 + 执行)                 │
+└─────────────────────────────────────────────────────┘
+                    </pre>
+                </div>
+                
+                <h3 class="section-title">16.2 技术选型指南</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>层</th>
+                            <th>开源方案</th>
+                            <th>商业方案</th>
+                            <th>自研建议</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>约束层</td>
+                            <td>OPA、Kubernetes、gVisor</td>
+                            <td>Northflank、E2B</td>
+                            <td>高安全需求自研规则引擎</td>
+                        </tr>
+                        <tr>
+                            <td>上下文层</td>
+                            <td>Redis、Zep、LlamaIndex</td>
+                            <td>Zep Cloud、Pinecone</td>
+                            <td>领域特定知识图谱</td>
+                        </tr>
+                        <tr>
+                            <td>验证层</td>
+                            <td>ESLint、Semgrep、Great Expectations</td>
+                            <td>Snyk、Datadog</td>
+                            <td>业务规则引擎</td>
+                        </tr>
+                        <tr>
+                            <td>纠偏层</td>
+                            <td>LangChain Agents、AutoGen</td>
+                            <td>Custom RLHF 平台</td>
+                            <td>领域特定修复策略</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">16.3 实施路线图</h3>
+                <div class="section">
+                    <h4>阶段 1：约束层优先（1-2 个月）</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>实施沙箱隔离（Firecracker/gVisor）</li>
+                        <li>定义权限模型（RBAC）</li>
+                        <li>设置资源配额（CPU、内存、磁盘）</li>
+                        <li>部署网络策略（白名单、防火墙）</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>阶段 2：上下文层建设（2-3 个月）</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>部署向量数据库（Redis/Pinecone）</li>
+                        <li>实现上下文压缩策略</li>
+                        <li>构建知识图谱（可选）</li>
+                        <li>实施事件驱动提醒</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>阶段 3：验证层完善（2-3 个月）</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>自定义 linter 开发</li>
+                        <li>安全扫描集成（SAST/DAST）</li>
+                        <li>业务规则引擎实现</li>
+                        <li>质量评分系统建设</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>阶段 4：纠偏层优化（持续）</h4>
+                    <ul style="margin-left: 20px;">
+                        <li>错误检测与分类系统</li>
+                        <li>自动修复策略库</li>
+                        <li>垃圾回收 Agent 开发</li>
+                        <li>反馈循环与学习优化</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章提供了 4 层架构的实现指南。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>参考架构提供完整技术栈视图</li>
+                    <li>技术选型需平衡开源、商业、自研</li>
+                    <li>实施路线图分阶段推进，约束层优先</li>
+                    <li>纠偏层是持续优化过程</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 附录 -->
+        <div class="chapter" id="appendix-a">
+            <h2 class="chapter-title">附录 A 4 层架构检查清单</h2>
+            <div class="content">
+                <h3 class="section-title">A.1 约束层检查清单</h3>
+                <ul style="margin-left: 20px;">
+                    <li>[ ] 是否实施了沙箱隔离（容器/VM）？</li>
+                    <li>[ ] 是否定义了 RBAC 权限模型？</li>
+                    <li>[ ] 是否设置了资源配额（CPU、内存、磁盘、网络）？</li>
+                    <li>[ ] 是否实施了网络白名单策略？</li>
+                    <li>[ ] 是否有规则引擎（如 OPA）管理策略？</li>
+                    <li>[ ] 是否强制执行最小权限原则？</li>
+                    <li>[ ] 是否有审计日志记录所有权限决策？</li>
+                </ul>
+                
+                <h3 class="section-title">A.2 上下文层检查清单</h3>
+                <ul style="margin-left: 20px;">
+                    <li>[ ] 是否实现了多层次记忆系统？</li>
+                    <li>[ ] 是否有上下文压缩策略？</li>
+                    <li>[ ] 是否实施了重要性评分机制？</li>
+                    <li>[ ] 是否有事件驱动提醒对抗指令 fade-out？</li>
+                    <li>[ ] 是否使用向量数据库进行语义检索？</li>
+                    <li>[ ] 是否有知识图谱（可选）？</li>
+                    <li>[ ] 是否定期清理过时信息？</li>
+                </ul>
+                
+                <h3 class="section-title">A.3 验证层检查清单</h3>
+                <ul style="margin-left: 20px;">
+                    <li>[ ] 是否有自定义 linter 强制执行架构规则？</li>
+                    <li>[ ] 是否实施了 SAST/DAST 安全扫描？</li>
+                    <li>[ ] 是否有业务规则验证引擎？</li>
+                    <li>[ ] 是否有质量评分系统？</li>
+                    <li>[ ] 验证失败时是否提供修复指南？</li>
+                    <li>[ ] 是否有合规性检查（GDPR/HIPAA 等）？</li>
+                    <li>[ ] 是否有性能基准测试？</li>
+                </ul>
+                
+                <h3 class="section-title">A.4 纠偏层检查清单</h3>
+                <ul style="margin-left: 20px;">
+                    <li>[ ] 是否有错误检测与分类系统？</li>
+                    <li>[ ] 是否有自动修复策略库？</li>
+                    <li>[ ] 是否有垃圾回收 Agent 定期重构？</li>
+                    <li>[ ] 是否有反馈循环收集人类意见？</li>
+                    <li>[ ] 是否有学习优化机制（RLHF/微调）？</li>
+                    <li>[ ] 是否追踪技术债务并持续偿还？</li>
+                    <li>[ ] 是否有根因分析流程？</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与延伸阅读</h2>
+            <div class="content">
+                <ol style="margin-left: 20px; line-height: 2.2;">
+                    <li>Bui, N. D. Q. (2026). "Building AI Coding Agents for the Terminal: Scaffolding, Harness, Context Engineering, and Lessons Learned." arXiv:2603.05344.</li>
+                    <li>Lopopolo, R. (2026). "Harness engineering: leveraging Codex in an agent-first world." OpenAI Blog.</li>
+                    <li>Anthropic. (2026). "Measuring AI Agent Autonomy in Practice." Research Report.</li>
+                    <li>Redis. (2026). "AI Agent Architecture: Build Systems That Work." Redis Blog.</li>
+                    <li>Zep. (2026). "Context Engineering & Agent Memory Platform." Zep Documentation.</li>
+                    <li>LlamaIndex. (2025). "Context Engineering Guide: Techniques for AI Agents." LlamaIndex Blog.</li>
+                    <li>Northflank. (2026). "Best Code Execution Sandbox for AI Agents." Northflank Blog.</li>
+                    <li>E2B. (2026). "E2B Documentation: Secure AI Agent Sandboxes."</li>
+                    <li>Wiener, N. (1948). "Cybernetics: Or Control and Communication in the Animal and the Machine." MIT Press.</li>
+                    <li>Shannon, C. E. (1948). "A Mathematical Theory of Communication." Bell System Technical Journal.</li>
+                    <li>NIST. (2020). "Zero Trust Architecture (SP 800-207)."</li>
+                    <li>OWASP. (2026). "Top 10 for Large Language Model Applications."</li>
+                    <li>Google Cloud. (2026). "AI Agent Trends 2026." Research Report.</li>
+                    <li>IBM. (2025). "AI Agent Frameworks: Choosing the Right Foundation." IBM Think.</li>
+                    <li>Microsoft Azure. (2026). "Scheduler Agent Supervisor pattern." Azure Architecture Center.</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.3em; margin-bottom: 20px; color: var(--constraint-gold); font-weight: 700;">AI Agent Harness Engineering: 4 层架构模型</p>
+                <p>© 2026 超级代码智能体 | 第一版 · 开创性理论版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 30px; font-size: 0.95em; line-height: 1.8;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="quote" style="margin-top: 40px; border-left-color: var(--constraint-gold);">
+                    "4 层架构模型的价值不在于每层的独立功能，而在于层间交互产生的涌现智能。"
+                    <div class="quote-author">—— 本书核心理念</div>
+                </div>
+                <div class="four-layer-badge" style="margin-top: 50px;">
+                    <div class="layer-badge constraint">🔒 约束层</div>
+                    <div class="layer-badge context">🧠 上下文层</div>
+                    <div class="layer-badge verification">✓ 验证层</div>
+                    <div class="layer-badge correction">🔄 纠偏层</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🚀 AI Agent Harness Engineering - 4 Layer Architecture Model');
+        console.log('📚 开创性理论体系：约束层 · 上下文层 · 验证层 · 纠偏层');
+        console.log('🔮 Building the future of AI Agent infrastructure...');
+    </script>
+</body>
+</html>

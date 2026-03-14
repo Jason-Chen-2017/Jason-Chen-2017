@@ -1,0 +1,1910 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>超级马里奥 - Super Mario Bros</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            position: relative;
+            border: 4px solid #fff;
+        }
+        
+        #gameCanvas {
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            color: #fff;
+            font-size: 14px;
+            text-shadow: 2px 2px 0 #000;
+            z-index: 10;
+        }
+        
+        #startScreen, #gameOverScreen, #winScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            z-index: 20;
+        }
+        
+        #startScreen h1, #gameOverScreen h1, #winScreen h1 {
+            font-size: 32px;
+            margin-bottom: 20px;
+            color: #ff6b6b;
+            text-shadow: 3px 3px 0 #8b0000;
+        }
+        
+        #startScreen p, #gameOverScreen p, #winScreen p {
+            font-size: 14px;
+            margin: 10px 0;
+            text-align: center;
+        }
+        
+        .btn {
+            margin-top: 30px;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-family: inherit;
+            background: #e52521;
+            color: #fff;
+            border: 4px solid #fff;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+        
+        .btn:hover {
+            background: #ff6b6b;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            z-index: 10;
+        }
+        
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.3);
+            border: 3px solid #fff;
+            border-radius: 50%;
+            color: #fff;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+        }
+        
+        .control-btn:active {
+            background: rgba(255, 255, 255, 0.6);
+        }
+        
+        @media (max-width: 768px) {
+            #gameCanvas {
+                width: 100%;
+                height: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="768" height="480"></canvas>
+        
+        <div id="ui">
+            <div>MARIO<br><span id="score">000000</span></div>
+            <div>COINS<br><span id="coins">×00</span></div>
+            <div>WORLD<br><span id="world">1-1</span></div>
+            <div>TIME<br><span id="time">300</span></div>
+            <div>LIVES<br><span id="lives">×3</span></div>
+        </div>
+        
+        <div id="startScreen">
+            <h1>SUPER MARIO BROS</h1>
+            <p>超级马里奥兄弟</p>
+            <p style="margin-top: 20px; color: #ffd700;">控制说明:</p>
+            <p>← → 或 A/D - 移动</p>
+            <p>空格 或 W - 跳跃</p>
+            <p>SHIFT - 奔跑</p>
+            <p>P - 暂停</p>
+            <button class="btn" onclick="game.start()">开始游戏</button>
+        </div>
+        
+        <div id="gameOverScreen" class="hidden">
+            <h1>GAME OVER</h1>
+            <p>游戏结束</p>
+            <p>最终得分：<span id="finalScore">0</span></p>
+            <button class="btn" onclick="game.restart()">重新开始</button>
+        </div>
+        
+        <div id="winScreen" class="hidden">
+            <h1>YOU WIN!</h1>
+            <p>恭喜你通关了!</p>
+            <p>最终得分：<span id="winScore">0</span></p>
+            <button class="btn" onclick="game.restart()">再玩一次</button>
+        </div>
+        
+        <div id="controls">
+            <div class="control-btn" id="btnLeft">←</div>
+            <div class="control-btn" id="btnRight">→</div>
+            <div class="control-btn" id="btnJump">A</div>
+            <div class="control-btn" id="btnRun">B</div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 音频系统 ====================
+        class AudioSystem {
+            constructor() {
+                this.audioContext = null;
+                this.enabled = true;
+                this.musicPlaying = false;
+                this.currentMusic = null;
+            }
+            
+            init() {
+                if (!this.audioContext) {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+            
+            // 生成经典马里奥音效
+            playSound(type) {
+                if (!this.enabled || !this.audioContext) return;
+                
+                const ctx = this.audioContext;
+                const oscillator = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(ctx.destination);
+                
+                const now = ctx.currentTime;
+                
+                switch(type) {
+                    case 'jump':
+                        oscillator.type = 'square';
+                        oscillator.frequency.setValueAtTime(150, now);
+                        oscillator.frequency.linearRampToValueAtTime(300, now + 0.1);
+                        gainNode.gain.setValueAtTime(0.3, now);
+                        gainNode.gain.linearRampToValueAtTime(0, now + 0.1);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.1);
+                        break;
+                        
+                    case 'coin':
+                        oscillator.type = 'square';
+                        oscillator.frequency.setValueAtTime(900, now);
+                        oscillator.frequency.setValueAtTime(1200, now + 0.08);
+                        gainNode.gain.setValueAtTime(0.2, now);
+                        gainNode.gain.linearRampToValueAtTime(0, now + 0.15);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.15);
+                        break;
+                        
+                    case 'stomp':
+                        oscillator.type = 'square';
+                        oscillator.frequency.setValueAtTime(200, now);
+                        oscillator.frequency.linearRampToValueAtTime(100, now + 0.1);
+                        gainNode.gain.setValueAtTime(0.3, now);
+                        gainNode.gain.linearRampToValueAtTime(0, now + 0.1);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.1);
+                        break;
+                        
+                    case 'powerup':
+                        oscillator.type = 'square';
+                        for (let i = 0; i < 4; i++) {
+                            const t = now + i * 0.1;
+                            oscillator.frequency.setValueAtTime(400 + i * 100, t);
+                        }
+                        gainNode.gain.setValueAtTime(0.2, now);
+                        gainNode.gain.linearRampToValueAtTime(0, now + 0.4);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.4);
+                        break;
+                        
+                    case 'die':
+                        oscillator.type = 'square';
+                        oscillator.frequency.setValueAtTime(400, now);
+                        oscillator.frequency.linearRampToValueAtTime(200, now + 0.3);
+                        oscillator.frequency.linearRampToValueAtTime(100, now + 0.6);
+                        gainNode.gain.setValueAtTime(0.3, now);
+                        gainNode.gain.linearRampToValueAtTime(0, now + 0.6);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.6);
+                        break;
+                        
+                    case 'break':
+                        oscillator.type = 'square';
+                        oscillator.frequency.setValueAtTime(150, now);
+                        gainNode.gain.setValueAtTime(0.3, now);
+                        gainNode.gain.linearRampToValueAtTime(0, now + 0.05);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.05);
+                        break;
+                        
+                    case 'bump':
+                        oscillator.type = 'square';
+                        oscillator.frequency.setValueAtTime(100, now);
+                        gainNode.gain.setValueAtTime(0.2, now);
+                        gainNode.gain.linearRampToValueAtTime(0, now + 0.05);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.05);
+                        break;
+                        
+                    case 'flagpole':
+                        oscillator.type = 'square';
+                        for (let i = 0; i < 8; i++) {
+                            const t = now + i * 0.05;
+                            oscillator.frequency.setValueAtTime(300 + i * 50, t);
+                        }
+                        gainNode.gain.setValueAtTime(0.2, now);
+                        gainNode.gain.linearRampToValueAtTime(0, now + 0.4);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.4);
+                        break;
+                        
+                    case 'stage_clear':
+                        // 简单的过关音效
+                        const notes = [523, 659, 784, 1047, 784, 1047];
+                        notes.forEach((freq, i) => {
+                            const osc = ctx.createOscillator();
+                            const gain = ctx.createGain();
+                            osc.connect(gain);
+                            gain.connect(ctx.destination);
+                            osc.type = 'square';
+                            osc.frequency.setValueAtTime(freq, now + i * 0.15);
+                            gain.gain.setValueAtTime(0.2, now + i * 0.15);
+                            gain.gain.linearRampToValueAtTime(0, now + i * 0.15 + 0.1);
+                            osc.start(now + i * 0.15);
+                            osc.stop(now + i * 0.15 + 0.1);
+                        });
+                        break;
+                }
+            }
+            
+            // 播放背景音乐
+            playMusic(type) {
+                if (!this.enabled || !this.audioContext) return;
+                this.stopMusic();
+                
+                const ctx = this.audioContext;
+                const now = ctx.currentTime;
+                
+                // 简单的地面主题音乐
+                if (type === 'ground') {
+                    const melody = [
+                        659, 659, 0, 659, 0, 523, 659, 0, 784, 0, 0, 0, 392, 0, 0, 0,
+                        523, 0, 0, 392, 0, 0, 330, 0, 0, 440, 0, 494, 0, 466, 0, 440,
+                        659, 784, 880, 0, 698, 784, 0, 784, 0, 659, 523, 587, 494, 0,
+                        523, 0, 392, 0, 0, 330, 0, 0, 440, 0, 494, 0, 466, 0, 440
+                    ];
+                    
+                    const tempo = 0.15;
+                    melody.forEach((freq, i) => {
+                        if (freq > 0) {
+                            const osc = ctx.createOscillator();
+                            const gain = ctx.createGain();
+                            osc.connect(gain);
+                            gain.connect(ctx.destination);
+                            osc.type = 'square';
+                            osc.frequency.setValueAtTime(freq, now + i * tempo);
+                            gain.gain.setValueAtTime(0.1, now + i * tempo);
+                            gain.gain.linearRampToValueAtTime(0, now + i * tempo + tempo * 0.8);
+                            osc.start(now + i * tempo);
+                            osc.stop(now + i * tempo + tempo * 0.8);
+                        }
+                    });
+                    
+                    // 循环播放
+                    setTimeout(() => {
+                        if (this.musicPlaying && this.currentMusic === 'ground') {
+                            this.playMusic('ground');
+                        }
+                    }, melody.length * tempo * 1000);
+                }
+                
+                this.musicPlaying = true;
+                this.currentMusic = type;
+            }
+            
+            stopMusic() {
+                this.musicPlaying = false;
+                this.currentMusic = null;
+            }
+        }
+
+        // ==================== 精灵渲染系统 ====================
+        class SpriteRenderer {
+            constructor() {
+                this.tileSize = 32;
+                this.sprites = {};
+                this.generateSprites();
+            }
+            
+            generateSprites() {
+                // 创建离屏 canvas 用于存储精灵
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                // 马里奥小形态
+                this.sprites.mario_small = this.createMarioSmall();
+                this.sprites.mario_small_run = this.createMarioSmallRun();
+                this.sprites.mario_small_jump = this.createMarioSmallJump();
+                
+                // 马里奥大形态
+                this.sprites.mario_big = this.createMarioBig();
+                this.sprites.mario_big_run = this.createMarioBigRun();
+                this.sprites.mario_big_jump = this.createMarioBigJump();
+                
+                // 敌人
+                this.sprites.goomba = this.createGoomba();
+                this.sprites.koopa = this.createKoopa();
+                
+                // 道具
+                this.sprites.mushroom = this.createMushroom();
+                this.sprites.star = this.createStar();
+                this.sprites.flower = this.createFlower();
+                
+                // 方块
+                this.sprites.brick = this.createBrick();
+                this.sprites.question = this.createQuestion();
+                this.sprites.ground = this.createGround();
+                this.sprites.hard = this.createHard();
+                
+                // 其他
+                this.sprites.pipe_left = this.createPipeLeft();
+                this.sprites.pipe_right = this.createPipeRight();
+                this.sprites.flag = this.createFlag();
+                this.sprites.cloud = this.createCloud();
+                this.sprites.bush = this.createBush();
+                this.sprites.hill = this.createHill();
+            }
+            
+            createMarioSmall() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                // 帽子
+                ctx.fillStyle = '#e52521';
+                ctx.fillRect(8, 0, 16, 8);
+                ctx.fillRect(4, 4, 24, 4);
+                
+                // 脸
+                ctx.fillStyle = '#ffcc99';
+                ctx.fillRect(8, 8, 16, 8);
+                ctx.fillRect(4, 12, 4, 4);
+                
+                // 头发/胡子
+                ctx.fillStyle = '#663300';
+                ctx.fillRect(20, 12, 4, 4);
+                ctx.fillRect(4, 16, 8, 4);
+                
+                // 身体
+                ctx.fillStyle = '#e52521';
+                ctx.fillRect(8, 16, 16, 8);
+                
+                // 背带裤
+                ctx.fillStyle = '#3366cc';
+                ctx.fillRect(8, 20, 6, 8);
+                ctx.fillRect(18, 20, 6, 8);
+                
+                // 腿
+                ctx.fillStyle = '#3366cc';
+                ctx.fillRect(6, 28, 8, 4);
+                ctx.fillRect(18, 28, 8, 4);
+                
+                return canvas;
+            }
+            
+            createMarioSmallRun() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                // 帽子
+                ctx.fillStyle = '#e52521';
+                ctx.fillRect(8, 0, 16, 8);
+                ctx.fillRect(4, 4, 24, 4);
+                
+                // 脸
+                ctx.fillStyle = '#ffcc99';
+                ctx.fillRect(8, 8, 16, 8);
+                ctx.fillRect(4, 12, 4, 4);
+                
+                // 头发/胡子
+                ctx.fillStyle = '#663300';
+                ctx.fillRect(20, 12, 4, 4);
+                ctx.fillRect(4, 16, 8, 4);
+                
+                // 身体
+                ctx.fillStyle = '#e52521';
+                ctx.fillRect(8, 16, 16, 8);
+                
+                // 背带裤
+                ctx.fillStyle = '#3366cc';
+                ctx.fillRect(8, 20, 6, 8);
+                ctx.fillRect(18, 20, 6, 8);
+                
+                // 跑步姿势 - 腿分开
+                ctx.fillStyle = '#3366cc';
+                ctx.fillRect(4, 28, 8, 4);
+                ctx.fillRect(20, 28, 8, 4);
+                
+                return canvas;
+            }
+            
+            createMarioSmallJump() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                // 帽子
+                ctx.fillStyle = '#e52521';
+                ctx.fillRect(8, 0, 16, 8);
+                ctx.fillRect(4, 4, 24, 4);
+                
+                // 脸
+                ctx.fillStyle = '#ffcc99';
+                ctx.fillRect(8, 8, 16, 8);
+                ctx.fillRect(4, 12, 4, 4);
+                
+                // 头发/胡子
+                ctx.fillStyle = '#663300';
+                ctx.fillRect(20, 12, 4, 4);
+                ctx.fillRect(4, 16, 8, 4);
+                
+                // 身体
+                ctx.fillStyle = '#e52521';
+                ctx.fillRect(8, 16, 16, 8);
+                
+                // 背带裤
+                ctx.fillStyle = '#3366cc';
+                ctx.fillRect(8, 20, 6, 8);
+                ctx.fillRect(18, 20, 6, 8);
+                
+                // 跳跃姿势 - 腿弯曲
+                ctx.fillStyle = '#3366cc';
+                ctx.fillRect(6, 24, 8, 4);
+                ctx.fillRect(18, 24, 8, 4);
+                
+                return canvas;
+            }
+            
+            createMarioBig() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 48;
+                const ctx = canvas.getContext('2d');
+                
+                // 帽子
+                ctx.fillStyle = '#e52521';
+                ctx.fillRect(8, 0, 16, 8);
+                ctx.fillRect(4, 4, 24, 4);
+                
+                // 脸
+                ctx.fillStyle = '#ffcc99';
+                ctx.fillRect(8, 8, 16, 12);
+                ctx.fillRect(4, 12, 4, 8);
+                
+                // 头发/胡子
+                ctx.fillStyle = '#663300';
+                ctx.fillRect(20, 16, 4, 4);
+                ctx.fillRect(4, 20, 8, 4);
+                
+                // 身体
+                ctx.fillStyle = '#e52521';
+                ctx.fillRect(8, 24, 16, 12);
+                
+                // 背带裤
+                ctx.fillStyle = '#3366cc';
+                ctx.fillRect(8, 32, 16, 12);
+                
+                // 腿
+                ctx.fillStyle = '#3366cc';
+                ctx.fillRect(6, 44, 8, 4);
+                ctx.fillRect(18, 44, 8, 4);
+                
+                return canvas;
+            }
+            
+            createMarioBigRun() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 48;
+                const ctx = canvas.getContext('2d');
+                
+                // 帽子
+                ctx.fillStyle = '#e52521';
+                ctx.fillRect(8, 0, 16, 8);
+                ctx.fillRect(4, 4, 24, 4);
+                
+                // 脸
+                ctx.fillStyle = '#ffcc99';
+                ctx.fillRect(8, 8, 16, 12);
+                ctx.fillRect(4, 12, 4, 8);
+                
+                // 头发/胡子
+                ctx.fillStyle = '#663300';
+                ctx.fillRect(20, 16, 4, 4);
+                ctx.fillRect(4, 20, 8, 4);
+                
+                // 身体
+                ctx.fillStyle = '#e52521';
+                ctx.fillRect(8, 24, 16, 12);
+                
+                // 背带裤
+                ctx.fillStyle = '#3366cc';
+                ctx.fillRect(8, 32, 16, 12);
+                
+                // 跑步姿势
+                ctx.fillStyle = '#3366cc';
+                ctx.fillRect(4, 44, 8, 4);
+                ctx.fillRect(20, 44, 8, 4);
+                
+                return canvas;
+            }
+            
+            createMarioBigJump() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 48;
+                const ctx = canvas.getContext('2d');
+                
+                // 帽子
+                ctx.fillStyle = '#e52521';
+                ctx.fillRect(8, 0, 16, 8);
+                ctx.fillRect(4, 4, 24, 4);
+                
+                // 脸
+                ctx.fillStyle = '#ffcc99';
+                ctx.fillRect(8, 8, 16, 12);
+                ctx.fillRect(4, 12, 4, 8);
+                
+                // 头发/胡子
+                ctx.fillStyle = '#663300';
+                ctx.fillRect(20, 16, 4, 4);
+                ctx.fillRect(4, 20, 8, 4);
+                
+                // 身体
+                ctx.fillStyle = '#e52521';
+                ctx.fillRect(8, 24, 16, 12);
+                
+                // 背带裤
+                ctx.fillStyle = '#3366cc';
+                ctx.fillRect(8, 32, 16, 12);
+                
+                // 跳跃姿势
+                ctx.fillStyle = '#3366cc';
+                ctx.fillRect(6, 40, 8, 4);
+                ctx.fillRect(18, 40, 8, 4);
+                
+                return canvas;
+            }
+            
+            createGoomba() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                // 身体
+                ctx.fillStyle = '#996633';
+                ctx.beginPath();
+                ctx.arc(16, 18, 12, Math.PI, 0);
+                ctx.fillRect(4, 18, 24, 10);
+                ctx.fill();
+                
+                // 眼睛
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(8, 12, 6, 8);
+                ctx.fillRect(18, 12, 6, 8);
+                
+                ctx.fillStyle = '#000';
+                ctx.fillRect(10, 14, 3, 5);
+                ctx.fillRect(20, 14, 3, 5);
+                
+                // 眉毛
+                ctx.fillStyle = '#000';
+                ctx.fillRect(7, 10, 8, 2);
+                ctx.fillRect(17, 10, 8, 2);
+                
+                // 脚
+                ctx.fillStyle = '#000';
+                ctx.fillRect(4, 28, 10, 4);
+                ctx.fillRect(18, 28, 10, 4);
+                
+                return canvas;
+            }
+            
+            createKoopa() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                // 壳
+                ctx.fillStyle = '#33cc33';
+                ctx.beginPath();
+                ctx.ellipse(16, 20, 12, 10, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 头
+                ctx.fillStyle = '#ffcc66';
+                ctx.beginPath();
+                ctx.arc(16, 10, 8, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 眼睛
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(12, 8, 4, 4);
+                ctx.fillRect(18, 8, 4, 4);
+                
+                ctx.fillStyle = '#000';
+                ctx.fillRect(13, 9, 2, 3);
+                ctx.fillRect(19, 9, 2, 3);
+                
+                // 脚
+                ctx.fillStyle = '#ffcc66';
+                ctx.fillRect(6, 28, 8, 4);
+                ctx.fillRect(18, 28, 8, 4);
+                
+                return canvas;
+            }
+            
+            createMushroom() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                // 伞盖
+                ctx.fillStyle = '#e52521';
+                ctx.beginPath();
+                ctx.arc(16, 14, 12, Math.PI, 0);
+                ctx.fillRect(4, 14, 24, 4);
+                ctx.fill();
+                
+                // 白点
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(10, 12, 3, 0, Math.PI * 2);
+                ctx.arc(22, 12, 3, 0, Math.PI * 2);
+                ctx.arc(16, 8, 3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 茎
+                ctx.fillStyle = '#ffcc99';
+                ctx.fillRect(10, 18, 12, 12);
+                
+                // 眼睛
+                ctx.fillStyle = '#000';
+                ctx.fillRect(11, 22, 3, 4);
+                ctx.fillRect(18, 22, 3, 4);
+                
+                return canvas;
+            }
+            
+            createStar() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                ctx.fillStyle = '#ffd700';
+                ctx.beginPath();
+                for (let i = 0; i < 5; i++) {
+                    const angle = (i * 4 * Math.PI / 5) - Math.PI / 2;
+                    const x = 16 + Math.cos(angle) * 14;
+                    const y = 16 + Math.sin(angle) * 14;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.fill();
+                
+                // 眼睛
+                ctx.fillStyle = '#000';
+                ctx.fillRect(11, 14, 3, 4);
+                ctx.fillRect(18, 14, 3, 4);
+                
+                return canvas;
+            }
+            
+            createFlower() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                // 茎
+                ctx.fillStyle = '#33cc33';
+                ctx.fillRect(14, 16, 4, 14);
+                
+                // 花瓣
+                ctx.fillStyle = '#e52521';
+                for (let i = 0; i < 5; i++) {
+                    const angle = (i * 2 * Math.PI / 5);
+                    const x = 16 + Math.cos(angle) * 8;
+                    const y = 12 + Math.sin(angle) * 8;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                // 花心
+                ctx.fillStyle = '#ffd700';
+                ctx.beginPath();
+                ctx.arc(16, 12, 5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                return canvas;
+            }
+            
+            createBrick() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                ctx.fillStyle = '#cc6633';
+                ctx.fillRect(0, 0, 32, 32);
+                
+                // 砖块纹理
+                ctx.fillStyle = '#994422';
+                ctx.fillRect(0, 0, 32, 2);
+                ctx.fillRect(0, 15, 32, 2);
+                ctx.fillRect(0, 30, 32, 2);
+                ctx.fillRect(0, 0, 2, 32);
+                ctx.fillRect(15, 0, 2, 15);
+                ctx.fillRect(15, 17, 2, 15);
+                ctx.fillRect(30, 0, 2, 32);
+                
+                return canvas;
+            }
+            
+            createQuestion() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                ctx.fillStyle = '#ffd700';
+                ctx.fillRect(0, 0, 32, 32);
+                
+                // 边框
+                ctx.fillStyle = '#cc9900';
+                ctx.fillRect(0, 0, 32, 2);
+                ctx.fillRect(0, 0, 2, 32);
+                ctx.fillRect(30, 0, 2, 32);
+                ctx.fillRect(0, 30, 32, 2);
+                
+                // 问号
+                ctx.fillStyle = '#996600';
+                ctx.font = 'bold 24px monospace';
+                ctx.fillText('?', 10, 24);
+                
+                // 铆钉
+                ctx.fillStyle = '#cc9900';
+                ctx.fillRect(2, 2, 3, 3);
+                ctx.fillRect(27, 2, 3, 3);
+                ctx.fillRect(2, 27, 3, 3);
+                ctx.fillRect(27, 27, 3, 3);
+                
+                return canvas;
+            }
+            
+            createGround() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                ctx.fillStyle = '#cc6633';
+                ctx.fillRect(0, 0, 32, 32);
+                
+                // 地面纹理
+                ctx.fillStyle = '#994422';
+                for (let i = 0; i < 5; i++) {
+                    for (let j = 0; j < 5; j++) {
+                        if ((i + j) % 2 === 0) {
+                            ctx.fillRect(i * 6 + 1, j * 6 + 1, 4, 4);
+                        }
+                    }
+                }
+                
+                return canvas;
+            }
+            
+            createHard() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                ctx.fillStyle = '#996633';
+                ctx.fillRect(0, 0, 32, 32);
+                
+                // 硬块纹理
+                ctx.fillStyle = '#663311';
+                ctx.fillRect(0, 0, 32, 2);
+                ctx.fillRect(0, 0, 2, 32);
+                ctx.fillRect(30, 0, 2, 32);
+                ctx.fillRect(0, 30, 32, 2);
+                
+                return canvas;
+            }
+            
+            createPipeLeft() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                ctx.fillStyle = '#33cc33';
+                ctx.fillRect(0, 0, 32, 32);
+                
+                // 管道高光
+                ctx.fillStyle = '#66dd66';
+                ctx.fillRect(2, 0, 8, 32);
+                
+                // 管道阴影
+                ctx.fillStyle = '#228822';
+                ctx.fillRect(24, 0, 6, 32);
+                
+                // 边框
+                ctx.fillStyle = '#228822';
+                ctx.fillRect(0, 0, 32, 4);
+                
+                return canvas;
+            }
+            
+            createPipeRight() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                ctx.fillStyle = '#33cc33';
+                ctx.fillRect(0, 0, 32, 32);
+                
+                // 管道高光
+                ctx.fillStyle = '#66dd66';
+                ctx.fillRect(2, 0, 8, 32);
+                
+                // 管道阴影
+                ctx.fillStyle = '#228822';
+                ctx.fillRect(24, 0, 6, 32);
+                
+                // 边框
+                ctx.fillStyle = '#228822';
+                ctx.fillRect(0, 0, 32, 4);
+                
+                return canvas;
+            }
+            
+            createFlag() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                
+                // 旗杆
+                ctx.fillStyle = '#33cc33';
+                ctx.fillRect(14, 0, 4, 64);
+                
+                // 旗帜
+                ctx.fillStyle = '#e52521';
+                ctx.beginPath();
+                ctx.moveTo(18, 4);
+                ctx.lineTo(32, 12);
+                ctx.lineTo(18, 20);
+                ctx.closePath();
+                ctx.fill();
+                
+                // 顶部球
+                ctx.fillStyle = '#ffd700';
+                ctx.beginPath();
+                ctx.arc(16, 4, 5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                return canvas;
+            }
+            
+            createCloud() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 64;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(16, 20, 12, 0, Math.PI * 2);
+                ctx.arc(32, 16, 14, 0, Math.PI * 2);
+                ctx.arc(48, 20, 12, 0, Math.PI * 2);
+                ctx.fill();
+                
+                return canvas;
+            }
+            
+            createBush() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 64;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                ctx.fillStyle = '#33cc33';
+                ctx.beginPath();
+                ctx.arc(12, 24, 10, 0, Math.PI * 2);
+                ctx.arc(28, 20, 12, 0, Math.PI * 2);
+                ctx.arc(44, 24, 10, 0, Math.PI * 2);
+                ctx.fill();
+                
+                return canvas;
+            }
+            
+            createHill() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 96;
+                canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                
+                ctx.fillStyle = '#33cc33';
+                ctx.beginPath();
+                ctx.moveTo(48, 0);
+                ctx.lineTo(96, 64);
+                ctx.lineTo(0, 64);
+                ctx.closePath();
+                ctx.fill();
+                
+                // 纹理
+                ctx.fillStyle = '#228822';
+                for (let i = 0; i < 5; i++) {
+                    ctx.fillRect(40 + i * 4, 20 + i * 8, 16, 4);
+                }
+                
+                return canvas;
+            }
+            
+            draw(ctx, spriteName, x, y, frame = 0) {
+                const sprite = this.sprites[spriteName];
+                if (sprite) {
+                    ctx.drawImage(sprite, x, y);
+                }
+            }
+        }
+
+        // ==================== 游戏实体类 ====================
+        class Entity {
+            constructor(x, y, width, height) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.vx = 0;
+                this.vy = 0;
+                this.grounded = false;
+                this.dead = false;
+            }
+            
+            getBounds() {
+                return {
+                    left: this.x,
+                    right: this.x + this.width,
+                    top: this.y,
+                    bottom: this.y + this.height
+                };
+            }
+        }
+
+        class Mario extends Entity {
+            constructor(x, y) {
+                super(x, y, 28, 28);
+                this.speed = 4;
+                this.runSpeed = 6;
+                this.jumpForce = -13;
+                this.gravity = 0.5;
+                this.friction = 0.8;
+                this.isBig = false;
+                this.isInvincible = false;
+                this.invincibleTimer = 0;
+                this.facing = 1;
+                this.isRunning = false;
+                this.isJumping = false;
+                this.onGround = false;
+                this.hasFlower = false;
+            }
+            
+            update(input, tiles) {
+                // 水平移动
+                if (input.left) {
+                    this.vx = -this.isRunning ? this.speed : this.runSpeed;
+                    this.facing = -1;
+                } else if (input.right) {
+                    this.vx = this.isRunning ? this.runSpeed : this.speed;
+                    this.facing = 1;
+                } else {
+                    this.vx *= this.friction;
+                }
+                
+                // 跳跃
+                if (input.jump && this.onGround) {
+                    this.vy = this.jumpForce;
+                    this.onGround = false;
+                    this.isJumping = true;
+                }
+                
+                // 重力
+                this.vy += this.gravity;
+                
+                // 应用速度
+                this.x += this.vx;
+                this.checkHorizontalCollisions(tiles);
+                
+                this.y += this.vy;
+                this.checkVerticalCollisions(tiles);
+                
+                // 边界检查
+                if (this.x < 0) this.x = 0;
+                
+                // 无敌时间
+                if (this.isInvincible) {
+                    this.invincibleTimer--;
+                    if (this.invincibleTimer <= 0) {
+                        this.isInvincible = false;
+                    }
+                }
+            }
+            
+            checkHorizontalCollisions(tiles) {
+                const bounds = this.getBounds();
+                
+                for (const tile of tiles) {
+                    if (this.checkCollision(bounds, tile)) {
+                        if (this.vx > 0) {
+                            this.x = tile.x - this.width;
+                        } else if (this.vx < 0) {
+                            this.x = tile.x + tile.width;
+                        }
+                        this.vx = 0;
+                    }
+                }
+            }
+            
+            checkVerticalCollisions(tiles) {
+                const bounds = this.getBounds();
+                this.onGround = false;
+                
+                for (const tile of tiles) {
+                    if (this.checkCollision(bounds, tile)) {
+                        if (this.vy > 0) {
+                            this.y = tile.y - this.height;
+                            this.vy = 0;
+                            this.onGround = true;
+                            this.isJumping = false;
+                        } else if (this.vy < 0) {
+                            this.y = tile.y + tile.height;
+                            this.vy = 0;
+                            // 顶方块
+                            if (tile.type === 'question' && !tile.hit) {
+                                tile.hit = true;
+                                return 'question_hit';
+                            } else if (tile.type === 'brick' && this.isBig) {
+                                return 'brick_break';
+                            }
+                        }
+                    }
+                }
+                
+                // 掉落死亡
+                if (this.y > 600) {
+                    return 'die';
+                }
+                
+                return null;
+            }
+            
+            checkCollision(a, b) {
+                return a.left < b.x + b.width &&
+                       a.right > b.x &&
+                       a.top < b.y + b.height &&
+                       a.bottom > b.y;
+            }
+            
+            grow() {
+                if (!this.isBig) {
+                    this.isBig = true;
+                    this.height = 48;
+                    this.y -= 20;
+                    return true;
+                }
+                return false;
+            }
+            
+            shrink() {
+                if (this.isBig) {
+                    this.isBig = false;
+                    this.height = 28;
+                    this.y += 20;
+                    this.isInvincible = true;
+                    this.invincibleTimer = 120;
+                    return true;
+                }
+                return false;
+            }
+            
+            getSprite() {
+                if (this.isInvincible && Math.floor(Date.now() / 50) % 2 === 0) {
+                    return null;
+                }
+                
+                let base = this.isBig ? 'mario_big' : 'mario_small';
+                
+                if (!this.onGround) {
+                    return base + '_jump';
+                } else if (Math.abs(this.vx) > 0.5) {
+                    return base + '_run';
+                }
+                
+                return base;
+            }
+        }
+
+        class Goomba extends Entity {
+            constructor(x, y) {
+                super(x, y, 32, 32);
+                this.speed = 1;
+                this.vx = -this.speed;
+                this.gravity = 0.5;
+            }
+            
+            update(tiles) {
+                this.vy += this.gravity;
+                
+                this.x += this.vx;
+                this.checkHorizontalCollisions(tiles);
+                
+                this.y += this.vy;
+                this.checkVerticalCollisions(tiles);
+            }
+            
+            checkHorizontalCollisions(tiles) {
+                const bounds = this.getBounds();
+                
+                for (const tile of tiles) {
+                    if (this.checkCollision(bounds, tile)) {
+                        this.vx = -this.vx;
+                        this.x += this.vx * 2;
+                    }
+                }
+            }
+            
+            checkVerticalCollisions(tiles) {
+                const bounds = this.getBounds();
+                
+                for (const tile of tiles) {
+                    if (this.checkCollision(bounds, tile)) {
+                        if (this.vy > 0) {
+                            this.y = tile.y - this.height;
+                            this.vy = 0;
+                        }
+                    }
+                }
+            }
+            
+            checkCollision(a, b) {
+                return a.left < b.x + b.width &&
+                       a.right > b.x &&
+                       a.top < b.y + b.height &&
+                       a.bottom > b.y;
+            }
+        }
+
+        class Koopa extends Entity {
+            constructor(x, y) {
+                super(x, y, 32, 32);
+                this.speed = 1.5;
+                this.vx = -this.speed;
+                this.gravity = 0.5;
+                this.isShell = false;
+            }
+            
+            update(tiles) {
+                if (!this.isShell) {
+                    this.vy += this.gravity;
+                    
+                    this.x += this.vx;
+                    this.checkHorizontalCollisions(tiles);
+                    
+                    this.y += this.vy;
+                    this.checkVerticalCollisions(tiles);
+                }
+            }
+            
+            checkHorizontalCollisions(tiles) {
+                const bounds = this.getBounds();
+                
+                for (const tile of tiles) {
+                    if (this.checkCollision(bounds, tile)) {
+                        this.vx = -this.vx;
+                        this.x += this.vx * 2;
+                    }
+                }
+            }
+            
+            checkVerticalCollisions(tiles) {
+                const bounds = this.getBounds();
+                
+                for (const tile of tiles) {
+                    if (this.checkCollision(bounds, tile)) {
+                        if (this.vy > 0) {
+                            this.y = tile.y - this.height;
+                            this.vy = 0;
+                        }
+                    }
+                }
+            }
+            
+            checkCollision(a, b) {
+                return a.left < b.x + b.width &&
+                       a.right > b.x &&
+                       a.top < b.y + b.height &&
+                       a.bottom > b.y;
+            }
+        }
+
+        class Mushroom extends Entity {
+            constructor(x, y) {
+                super(x, y, 32, 32);
+                this.speed = 2;
+                this.vx = this.speed;
+                this.gravity = 0.5;
+            }
+            
+            update(tiles) {
+                this.vy += this.gravity;
+                
+                this.x += this.vx;
+                this.checkHorizontalCollisions(tiles);
+                
+                this.y += this.vy;
+                this.checkVerticalCollisions(tiles);
+            }
+            
+            checkHorizontalCollisions(tiles) {
+                const bounds = this.getBounds();
+                
+                for (const tile of tiles) {
+                    if (this.checkCollision(bounds, tile)) {
+                        this.vx = -this.vx;
+                        this.x += this.vx * 2;
+                    }
+                }
+            }
+            
+            checkVerticalCollisions(tiles) {
+                const bounds = this.getBounds();
+                
+                for (const tile of tiles) {
+                    if (this.checkCollision(bounds, tile)) {
+                        if (this.vy > 0) {
+                            this.y = tile.y - this.height;
+                            this.vy = 0;
+                        }
+                    }
+                }
+            }
+            
+            checkCollision(a, b) {
+                return a.left < b.x + b.width &&
+                       a.right > b.x &&
+                       a.top < b.y + b.height &&
+                       a.bottom > b.y;
+            }
+        }
+
+        // ==================== 关卡数据 ====================
+        class Level {
+            constructor(levelNum) {
+                this.levelNum = levelNum;
+                this.tiles = [];
+                this.enemies = [];
+                this.items = [];
+                this.width = 200;
+                this.generate();
+            }
+            
+            generate() {
+                // 地面
+                for (let x = 0; x < this.width * 32; x += 32) {
+                    // 坑洞
+                    if ((x >= 672 && x < 736) || (x >= 1376 && x < 1440) || (x >= 1856 && x < 1920)) {
+                        continue;
+                    }
+                    this.tiles.push({
+                        x: x,
+                        y: 448,
+                        width: 32,
+                        height: 32,
+                        type: 'ground'
+                    });
+                    this.tiles.push({
+                        x: x,
+                        y: 480,
+                        width: 32,
+                        height: 32,
+                        type: 'ground'
+                    });
+                }
+                
+                // 关卡 1-1 设计
+                if (this.levelNum === 1) {
+                    // 问号方块
+                    this.tiles.push({ x: 256, y: 320, width: 32, height: 32, type: 'question', hit: false, item: 'mushroom' });
+                    this.tiles.push({ x: 352, y: 320, width: 32, height: 32, type: 'brick', hit: false });
+                    this.tiles.push({ x: 384, y: 320, width: 32, height: 32, type: 'question', hit: false, item: 'coin' });
+                    this.tiles.push({ x: 416, y: 320, width: 32, height: 32, type: 'brick', hit: false });
+                    this.tiles.push({ x: 448, y: 320, width: 32, height: 32, type: 'question', hit: false, item: 'coin' });
+                    this.tiles.push({ x: 480, y: 320, width: 32, height: 32, type: 'brick', hit: false });
+                    this.tiles.push({ x: 512, y: 320, width: 32, height: 32, type: 'question', hit: false, item: 'coin' });
+                    
+                    // 更高的问号
+                    this.tiles.push({ x: 384, y: 192, width: 32, height: 32, type: 'question', hit: false, item: 'coin' });
+                    
+                    // 管道
+                    this.addPipe(768, 384, 2);
+                    this.addPipe(1024, 352, 3);
+                    this.addPipe(1280, 320, 4);
+                    
+                    // 砖块平台
+                    for (let i = 0; i < 5; i++) {
+                        this.tiles.push({ x: 1536 + i * 32, y: 320, width: 32, height: 32, type: 'brick', hit: false });
+                    }
+                    
+                    // 硬块
+                    this.tiles.push({ x: 1600, y: 192, width: 32, height: 32, type: 'hard', hit: false });
+                    
+                    // 敌人
+                    this.enemies.push(new Goomba(512, 400));
+                    this.enemies.push(new Goomba(896, 400));
+                    this.enemies.push(new Goomba(1152, 400));
+                    this.enemies.push(new Koopa(1408, 400));
+                    this.enemies.push(new Goomba(1664, 400));
+                    
+                    // 旗杆
+                    this.flagX = 1920;
+                    this.flagY = 128;
+                    
+                } else if (this.levelNum === 2) {
+                    // 更多坑洞和敌人
+                    this.tiles.push({ x: 192, y: 320, width: 32, height: 32, type: 'question', hit: false, item: 'mushroom' });
+                    this.tiles.push({ x: 448, y: 320, width: 32, height: 32, type: 'brick', hit: false });
+                    this.tiles.push({ x: 480, y: 320, width: 32, height: 32, type: 'question', hit: false, item: 'coin' });
+                    
+                    this.addPipe(640, 384, 2);
+                    this.addPipe(960, 352, 3);
+                    
+                    this.enemies.push(new Goomba(384, 400));
+                    this.enemies.push(new Koopa(704, 400));
+                    this.enemies.push(new Goomba(1024, 400));
+                    this.enemies.push(new Koopa(1280, 400));
+                    
+                    this.flagX = 1920;
+                    this.flagY = 128;
+                    
+                } else {
+                    // 随机生成后续关卡
+                    for (let i = 0; i < 10; i++) {
+                        const x = 256 + i * 192;
+                        this.tiles.push({ x: x, y: 320, width: 32, height: 32, type: 'question', hit: false, item: Math.random() > 0.5 ? 'coin' : 'mushroom' });
+                    }
+                    
+                    for (let i = 0; i < 5; i++) {
+                        const x = 512 + i * 384;
+                        this.addPipe(x, 384, 2 + Math.floor(Math.random() * 3));
+                    }
+                    
+                    for (let i = 0; i < 8; i++) {
+                        const x = 384 + i * 256;
+                        this.enemies.push(new Goomba(x, 400));
+                    }
+                    
+                    for (let i = 0; i < 4; i++) {
+                        const x = 640 + i * 384;
+                        this.enemies.push(new Koopa(x, 400));
+                    }
+                    
+                    this.flagX = 1920;
+                    this.flagY = 128;
+                }
+            }
+            
+            addPipe(x, y, height) {
+                for (let i = 0; i < height; i++) {
+                    this.tiles.push({
+                        x: x,
+                        y: y - i * 32,
+                        width: 32,
+                        height: 32,
+                        type: 'pipe_left'
+                    });
+                    this.tiles.push({
+                        x: x + 32,
+                        y: y - i * 32,
+                        width: 32,
+                        height: 32,
+                        type: 'pipe_right'
+                    });
+                }
+            }
+        }
+
+        // ==================== 主游戏类 ====================
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.spriteRenderer = new SpriteRenderer();
+                this.audio = new AudioSystem();
+                
+                this.state = 'start'; // start, playing, gameover, win
+                this.currentLevel = 1;
+                this.maxLevels = 8;
+                
+                this.mario = null;
+                this.level = null;
+                
+                this.score = 0;
+                this.coins = 0;
+                this.lives = 3;
+                this.time = 300;
+                this.lastTime = 0;
+                this.timeAccumulator = 0;
+                
+                this.cameraX = 0;
+                
+                this.input = {
+                    left: false,
+                    right: false,
+                    jump: false,
+                    run: false
+                };
+                
+                this.setupInput();
+                this.setupTouchControls();
+                
+                this.isPaused = false;
+            }
+            
+            setupInput() {
+                document.addEventListener('keydown', (e) => {
+                    if (this.state !== 'playing') return;
+                    
+                    switch(e.code) {
+                        case 'ArrowLeft':
+                        case 'KeyA':
+                            this.input.left = true;
+                            break;
+                        case 'ArrowRight':
+                        case 'KeyD':
+                            this.input.right = true;
+                            break;
+                        case 'Space':
+                        case 'KeyW':
+                        case 'ArrowUp':
+                            this.input.jump = true;
+                            e.preventDefault();
+                            break;
+                        case 'ShiftLeft':
+                        case 'ShiftRight':
+                            this.input.run = true;
+                            break;
+                        case 'KeyP':
+                            this.togglePause();
+                            break;
+                    }
+                });
+                
+                document.addEventListener('keyup', (e) => {
+                    switch(e.code) {
+                        case 'ArrowLeft':
+                        case 'KeyA':
+                            this.input.left = false;
+                            break;
+                        case 'ArrowRight':
+                        case 'KeyD':
+                            this.input.right = false;
+                            break;
+                        case 'Space':
+                        case 'KeyW':
+                        case 'ArrowUp':
+                            this.input.jump = false;
+                            break;
+                        case 'ShiftLeft':
+                        case 'ShiftRight':
+                            this.input.run = false;
+                            break;
+                    }
+                });
+            }
+            
+            setupTouchControls() {
+                const btnLeft = document.getElementById('btnLeft');
+                const btnRight = document.getElementById('btnRight');
+                const btnJump = document.getElementById('btnJump');
+                const btnRun = document.getElementById('btnRun');
+                
+                const addTouch = (btn, key) => {
+                    btn.addEventListener('touchstart', (e) => {
+                        e.preventDefault();
+                        this.input[key] = true;
+                    });
+                    btn.addEventListener('touchend', (e) => {
+                        e.preventDefault();
+                        this.input[key] = false;
+                    });
+                    btn.addEventListener('mousedown', () => {
+                        this.input[key] = true;
+                    });
+                    btn.addEventListener('mouseup', () => {
+                        this.input[key] = false;
+                    });
+                };
+                
+                addTouch(btnLeft, 'left');
+                addTouch(btnRight, 'right');
+                addTouch(btnJump, 'jump');
+                addTouch(btnRun, 'run');
+            }
+            
+            start() {
+                this.audio.init();
+                document.getElementById('startScreen').classList.add('hidden');
+                this.state = 'playing';
+                this.currentLevel = 1;
+                this.score = 0;
+                this.coins = 0;
+                this.lives = 3;
+                this.startLevel();
+                this.audio.playMusic('ground');
+                this.gameLoop();
+            }
+            
+            startLevel() {
+                this.level = new Level(this.currentLevel);
+                this.mario = new Mario(100, 300);
+                this.cameraX = 0;
+                this.time = 300;
+                this.timeAccumulator = 0;
+                this.isPaused = false;
+                this.updateUI();
+            }
+            
+            restart() {
+                document.getElementById('gameOverScreen').classList.add('hidden');
+                document.getElementById('winScreen').classList.add('hidden');
+                this.start();
+            }
+            
+            togglePause() {
+                this.isPaused = !this.isPaused;
+            }
+            
+            update(deltaTime) {
+                if (this.isPaused || this.state !== 'playing') return;
+                
+                // 更新时间
+                this.timeAccumulator += deltaTime;
+                if (this.timeAccumulator >= 1000) {
+                    this.time--;
+                    this.timeAccumulator -= 1000;
+                    if (this.time <= 0) {
+                        this.marioDie();
+                    }
+                }
+                
+                // 更新马里奥
+                this.input.isRunning = this.input.run;
+                const result = this.mario.update(this.input, this.level.tiles);
+                
+                if (result === 'die') {
+                    this.marioDie();
+                    return;
+                } else if (result === 'question_hit') {
+                    this.handleQuestionHit();
+                } else if (result === 'brick_break') {
+                    this.audio.playSound('break');
+                }
+                
+                // 更新敌人
+                for (const enemy of this.level.enemies) {
+                    if (!enemy.dead) {
+                        enemy.update(this.level.tiles);
+                        
+                        // 检查与马里奥的碰撞
+                        if (this.checkEntityCollision(this.mario, enemy)) {
+                            // 从上方踩敌人
+                            if (this.mario.vy > 0 && this.mario.y + this.mario.height - 10 < enemy.y + enemy.height / 2) {
+                                enemy.dead = true;
+                                this.mario.vy = -8;
+                                this.score += 100;
+                                this.audio.playSound('stomp');
+                            } else if (!this.mario.isInvincible) {
+                                if (this.mario.shrink()) {
+                                    this.audio.playSound('powerup');
+                                } else {
+                                    this.marioDie();
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // 更新道具
+                for (const item of this.level.items) {
+                    if (!item.collected) {
+                        item.update(this.level.tiles);
+                        
+                        if (this.checkEntityCollision(this.mario, item)) {
+                            item.collected = true;
+                            if (item.type === 'mushroom') {
+                                if (this.mario.grow()) {
+                                    this.score += 1000;
+                                    this.audio.playSound('powerup');
+                                }
+                            } else if (item.type === 'star') {
+                                this.mario.isInvincible = true;
+                                this.mario.invincibleTimer = 600;
+                                this.score += 1000;
+                                this.audio.playSound('powerup');
+                            }
+                        }
+                    }
+                }
+                
+                // 更新摄像机
+                const targetCameraX = this.mario.x - 300;
+                if (targetCameraX > this.cameraX) {
+                    this.cameraX = targetCameraX;
+                }
+                if (this.cameraX < 0) this.cameraX = 0;
+                if (this.cameraX > this.level.width * 32 - 768) {
+                    this.cameraX = this.level.width * 32 - 768;
+                }
+                
+                // 检查旗杆
+                if (this.mario.x >= this.level.flagX && this.mario.x <= this.level.flagX + 32) {
+                    this.levelComplete();
+                }
+                
+                // 掉落死亡
+                if (this.mario.y > 500) {
+                    this.marioDie();
+                }
+                
+                this.updateUI();
+            }
+            
+            checkEntityCollision(a, b) {
+                return a.x < b.x + b.width &&
+                       a.x + a.width > b.x &&
+                       a.y < b.y + b.height &&
+                       a.y + a.height > b.y;
+            }
+            
+            handleQuestionHit() {
+                this.audio.playSound('coin');
+                // 从问号方块中生成物品
+                const questionBlock = this.level.tiles.find(t => 
+                    t.type === 'question' && t.hit && 
+                    Math.abs(t.x - (this.mario.x + this.mario.width/2)) < 50
+                );
+                
+                if (questionBlock && questionBlock.item) {
+                    if (questionBlock.item === 'mushroom') {
+                        const mushroom = new Mushroom(questionBlock.x, questionBlock.y - 32);
+                        this.level.items.push(mushroom);
+                    } else if (questionBlock.item === 'coin') {
+                        this.coins++;
+                        this.score += 200;
+                    }
+                }
+            }
+            
+            marioDie() {
+                this.audio.playSound('die');
+                this.lives--;
+                if (this.lives <= 0) {
+                    this.gameOver();
+                } else {
+                    this.startLevel();
+                }
+            }
+            
+            levelComplete() {
+                this.audio.playSound('flagpole');
+                this.audio.playSound('stage_clear');
+                
+                // 时间奖励
+                this.score += this.time * 10;
+                
+                this.currentLevel++;
+                if (this.currentLevel > this.maxLevels) {
+                    this.win();
+                } else {
+                    setTimeout(() => {
+                        this.startLevel();
+                    }, 2000);
+                }
+            }
+            
+            gameOver() {
+                this.state = 'gameover';
+                document.getElementById('finalScore').textContent = this.score;
+                document.getElementById('gameOverScreen').classList.remove('hidden');
+                this.audio.stopMusic();
+            }
+            
+            win() {
+                this.state = 'win';
+                document.getElementById('winScore').textContent = this.score;
+                document.getElementById('winScreen').classList.remove('hidden');
+                this.audio.stopMusic();
+            }
+            
+            updateUI() {
+                document.getElementById('score').textContent = this.score.toString().padStart(6, '0');
+                document.getElementById('coins').textContent = '×' + this.coins.toString().padStart(2, '0');
+                document.getElementById('world').textContent = '1-' + this.currentLevel;
+                document.getElementById('time').textContent = this.time;
+                document.getElementById('lives').textContent = '×' + this.lives;
+            }
+            
+            render() {
+                // 清空画布
+                this.ctx.fillStyle = '#5c94fc';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                if (!this.level) return;
+                
+                this.ctx.save();
+                this.ctx.translate(-this.cameraX, 0);
+                
+                // 绘制背景装饰
+                this.drawBackground();
+                
+                // 绘制方块
+                for (const tile of this.level.tiles) {
+                    if (tile.x + tile.width > this.cameraX && tile.x < this.cameraX + 768) {
+                        let spriteName = tile.type;
+                        if (tile.type === 'question' && tile.hit) {
+                            spriteName = 'hard';
+                        }
+                        this.spriteRenderer.draw(this.ctx, spriteName, tile.x, tile.y);
+                    }
+                }
+                
+                // 绘制旗杆
+                this.spriteRenderer.draw(this.ctx, 'flag', this.level.flagX, this.level.flagY);
+                
+                // 绘制道具
+                for (const item of this.level.items) {
+                    if (!item.collected && item.x + item.width > this.cameraX && item.x < this.cameraX + 768) {
+                        this.spriteRenderer.draw(this.ctx, item.type, item.x, item.y);
+                    }
+                }
+                
+                // 绘制敌人
+                for (const enemy of this.level.enemies) {
+                    if (!enemy.dead && enemy.x + enemy.width > this.cameraX && enemy.x < this.cameraX + 768) {
+                        this.spriteRenderer.draw(this.ctx, enemy instanceof Goomba ? 'goomba' : 'koopa', enemy.x, enemy.y);
+                    }
+                }
+                
+                // 绘制马里奥
+                if (this.mario && this.state === 'playing') {
+                    const sprite = this.mario.getSprite();
+                    if (sprite) {
+                        this.spriteRenderer.draw(this.ctx, sprite, this.mario.x, this.mario.y);
+                    }
+                }
+                
+                this.ctx.restore();
+                
+                // 暂停显示
+                if (this.isPaused) {
+                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                    this.ctx.fillStyle = '#fff';
+                    this.ctx.font = '32px monospace';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('PAUSED', this.canvas.width / 2, this.canvas.height / 2);
+                }
+            }
+            
+            drawBackground() {
+                // 云
+                const clouds = [100, 400, 700, 1100, 1500, 1900];
+                for (const x of clouds) {
+                    this.spriteRenderer.draw(this.ctx, 'cloud', x, 80);
+                }
+                
+                // 山
+                this.spriteRenderer.draw(this.ctx, 'hill', 50, 384);
+                this.spriteRenderer.draw(this.ctx, 'hill', 800, 384);
+                this.spriteRenderer.draw(this.ctx, 'hill', 1400, 384);
+                
+                // 灌木
+                const bushes = [200, 600, 1000, 1400, 1800];
+                for (const x of bushes) {
+                    this.spriteRenderer.draw(this.ctx, 'bush', x, 416);
+                }
+            }
+            
+            gameLoop(timestamp = 0) {
+                const deltaTime = timestamp - this.lastTime;
+                this.lastTime = timestamp;
+                
+                this.update(deltaTime);
+                this.render();
+                
+                requestAnimationFrame((t) => this.gameLoop(t));
+            }
+        }
+
+        // ==================== 启动游戏 ====================
+        const game = new Game();
+    </script>
+</body>
+</html>

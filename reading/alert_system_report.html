@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统异常告警规则设计与多渠道告警对接方案</title>
+    <style>
+        :root {
+            --primary-color: #00f5ff;
+            --secondary-color: #7b2cbf;
+            --accent-color: #ff006e;
+            --bg-dark: #0a0a1a;
+            --bg-card: rgba(20, 20, 40, 0.8);
+            --text-primary: #ffffff;
+            --text-secondary: #b8b8d0;
+            --border-glow: 0 0 20px rgba(0, 245, 255, 0.3);
+            --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a1a3e 50%, #0f0f2d 100%);
+            color: var(--text-primary);
+            line-height: 1.8;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated Background */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .bg-animation::before {
+            content: '';
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            top: -50%;
+            left: -50%;
+            background: radial-gradient(circle at 20% 80%, rgba(123, 44, 191, 0.15) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 20%, rgba(0, 245, 255, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 40% 40%, rgba(255, 0, 110, 0.08) 0%, transparent 40%);
+            animation: bgRotate 30s linear infinite;
+        }
+
+        @keyframes bgRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .particles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            opacity: 0.3;
+            animation: float 15s infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+            10% { opacity: 0.5; }
+            90% { opacity: 0.5; }
+            100% { transform: translateY(-100vh) rotate(720deg); opacity: 0; }
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.3), rgba(0, 245, 255, 0.2));
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(0, 245, 255, 0.3);
+            padding: 3rem 2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(0, 245, 255, 0.1) 50%, 
+                transparent 100%);
+            animation: shimmer 3s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        h1 {
+            font-size: 2.8rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+            text-shadow: 0 0 40px rgba(0, 245, 255, 0.5);
+            position: relative;
+            z-index: 1;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            max-width: 800px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .meta-info {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 1.5rem;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: rgba(0, 245, 255, 0.1);
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: var(--primary-color);
+        }
+
+        /* Main Content */
+        main {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 3rem 2rem;
+        }
+
+        section {
+            margin-bottom: 4rem;
+        }
+
+        .section-title {
+            font-size: 2rem;
+            color: var(--primary-color);
+            margin-bottom: 1.5rem;
+            padding-left: 1rem;
+            border-left: 4px solid var(--accent-color);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .section-title::before {
+            content: '◈';
+            color: var(--accent-color);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--card-shadow);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(0, 245, 255, 0.5);
+            box-shadow: 0 12px 48px rgba(0, 245, 255, 0.2);
+        }
+
+        .card:hover::before {
+            opacity: 1;
+        }
+
+        .card-title {
+            font-size: 1.4rem;
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Grid Layouts */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(0, 245, 255, 0.1);
+        }
+
+        th {
+            background: rgba(0, 245, 255, 0.15);
+            color: var(--primary-color);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+
+        tr:hover {
+            background: rgba(0, 245, 255, 0.05);
+        }
+
+        /* Code Blocks */
+        pre {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            border-radius: 8px;
+            padding: 1.5rem;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: #a8d8ea;
+        }
+
+        code {
+            font-family: 'Consolas', 'Monaco', monospace;
+            background: rgba(0, 245, 255, 0.1);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            color: var(--primary-color);
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+        }
+
+        /* Severity Badges */
+        .severity-badge {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .severity-p0 {
+            background: rgba(220, 53, 69, 0.3);
+            color: #dc3545;
+            border: 1px solid #dc3545;
+        }
+
+        .severity-p1 {
+            background: rgba(253, 126, 20, 0.3);
+            color: #fd7e14;
+            border: 1px solid #fd7e14;
+        }
+
+        .severity-p2 {
+            background: rgba(255, 193, 7, 0.3);
+            color: #ffc107;
+            border: 1px solid #ffc107;
+        }
+
+        .severity-p3 {
+            background: rgba(23, 162, 184, 0.3);
+            color: #17a2b8;
+            border: 1px solid #17a2b8;
+        }
+
+        /* Architecture Diagram */
+        .architecture-diagram {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            border-radius: 16px;
+            padding: 2rem;
+            margin: 2rem 0;
+        }
+
+        .arch-layer {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin: 1rem 0;
+            flex-wrap: wrap;
+        }
+
+        .arch-box {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.15), rgba(123, 44, 191, 0.15));
+            border: 2px solid rgba(0, 245, 255, 0.4);
+            border-radius: 12px;
+            padding: 1.5rem;
+            min-width: 200px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .arch-box:hover {
+            transform: scale(1.05);
+            border-color: var(--primary-color);
+            box-shadow: 0 0 30px rgba(0, 245, 255, 0.4);
+        }
+
+        .arch-box h4 {
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .arch-box p {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .arrow-down {
+            text-align: center;
+            font-size: 2rem;
+            color: var(--accent-color);
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(10px); }
+        }
+
+        /* Feature List */
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-list li {
+            padding: 0.75rem 0;
+            padding-left: 2rem;
+            position: relative;
+            border-bottom: 1px solid rgba(0, 245, 255, 0.1);
+        }
+
+        .feature-list li::before {
+            content: '▸';
+            position: absolute;
+            left: 0;
+            color: var(--accent-color);
+            font-size: 1.2rem;
+        }
+
+        .feature-list li:hover {
+            color: var(--primary-color);
+        }
+
+        /* File Tree */
+        .file-tree {
+            font-family: 'Consolas', 'Monaco', monospace;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+        }
+
+        .file-tree div {
+            padding: 0.3rem 0;
+            color: var(--text-secondary);
+        }
+
+        .file-tree .folder {
+            color: var(--primary-color);
+        }
+
+        .file-tree .file {
+            color: #a8d8ea;
+        }
+
+        .file-tree .file-python {
+            color: #ffd8a8;
+        }
+
+        /* Footer */
+        footer {
+            background: rgba(0, 0, 0, 0.5);
+            border-top: 1px solid rgba(0, 245, 255, 0.2);
+            padding: 2rem;
+            text-align: center;
+            color: var(--text-secondary);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8rem;
+            }
+
+            .section-title {
+                font-size: 1.5rem;
+            }
+
+            .grid-2, .grid-3 {
+                grid-template-columns: 1fr;
+            }
+
+            .meta-info {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+        }
+
+        /* Highlight Box */
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(123, 44, 191, 0.1));
+            border-left: 4px solid var(--primary-color);
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .highlight-box strong {
+            color: var(--primary-color);
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(123, 44, 191, 0.1));
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Background Animation -->
+    <div class="bg-animation">
+        <div class="particles" id="particles"></div>
+    </div>
+
+    <!-- Header -->
+    <header>
+        <h1>⚡ 系统异常告警规则设计与多渠道告警对接方案</h1>
+        <p class="subtitle">基于 OpenClaw + Claude Code 的端到端研发自动化系统 · 告警子系统技术报告</p>
+        <div class="meta-info">
+            <div class="meta-item">📅 2026 年 3 月 14 日</div>
+            <div class="meta-item">🔧 Version 1.0.0</div>
+            <div class="meta-item">👨‍💻 AI Code Agent</div>
+            <div class="meta-item">📊 Python 3.12</div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main>
+        <!-- Executive Summary -->
+        <section>
+            <h2 class="section-title">执行摘要</h2>
+            <div class="card">
+                <p style="font-size: 1.1rem; line-height: 2;">
+                    本报告详细阐述了<strong>系统异常告警规则设计</strong>与<strong>多渠道告警通知对接方案</strong>，
+                    作为端到端研发自动化系统的核心监控组件。系统支持<strong>5 种告警级别</strong>（P0-P4）、
+                    <strong>6 种规则类型</strong>（阈值、速率、异常、模式、复合、缺失检测），以及
+                    <strong>5 种通知渠道</strong>（邮件、短信、企业微信、钉钉、飞书）。
+                </p>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number">5</div>
+                        <div class="stat-label">告警级别</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">6</div>
+                        <div class="stat-label">规则类型</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">5</div>
+                        <div class="stat-label">通知渠道</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">&lt;3s</div>
+                        <div class="stat-label">响应时间</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- System Architecture -->
+        <section>
+            <h2 class="section-title">系统架构设计</h2>
+            
+            <div class="architecture-diagram">
+                <div class="arch-layer">
+                    <div class="arch-box">
+                        <h4>📊 数据源层</h4>
+                        <p>Prometheus<br>Zabbix<br>应用日志<br>自定义指标</p>
+                    </div>
+                </div>
+                
+                <div class="arrow-down">⬇</div>
+                
+                <div class="arch-layer">
+                    <div class="arch-box">
+                        <h4>⚙️ 告警规则引擎</h4>
+                        <p>阈值检测<br>速率分析<br>异常识别<br>模式匹配</p>
+                    </div>
+                    <div class="arch-box">
+                        <h4>🔄 告警处理</h4>
+                        <p>去重降噪<br>分组聚合<br>抑制静默<br>状态管理</p>
+                    </div>
+                </div>
+                
+                <div class="arrow-down">⬇</div>
+                
+                <div class="arch-layer">
+                    <div class="arch-box">
+                        <h4>📢 通知管理器</h4>
+                        <p>渠道路由<br>速率限制<br>重试机制<br>发送记录</p>
+                    </div>
+                </div>
+                
+                <div class="arrow-down">⬇</div>
+                
+                <div class="arch-layer">
+                    <div class="arch-box">
+                        <h4>📱 通知渠道</h4>
+                        <p>邮件 SMTP<br>短信网关<br>企业微信<br>钉钉/飞书</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Alert Rules Design -->
+        <section>
+            <h2 class="section-title">告警规则设计</h2>
+            
+            <div class="grid-2">
+                <div class="card">
+                    <h3 class="card-title">🎯 规则类型</h3>
+                    <ul class="feature-list">
+                        <li><strong>阈值规则 (Threshold)</strong> - 简单阈值比较，如 CPU > 90%</li>
+                        <li><strong>速率规则 (Rate)</strong> - 变化率检测，如错误率激增</li>
+                        <li><strong>异常规则 (Anomaly)</strong> - 统计异常检测</li>
+                        <li><strong>模式规则 (Pattern)</strong> - 日志正则匹配</li>
+                        <li><strong>复合规则 (Composite)</strong> - 多条件 AND/OR 组合</li>
+                        <li><strong>缺失规则 (Absence)</strong> - 指标缺失检测</li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h3 class="card-title">🚨 告警级别</h3>
+                    <table>
+                        <tr>
+                            <th>级别</th>
+                            <th>标识</th>
+                            <th>说明</th>
+                            <th>响应要求</th>
+                        </tr>
+                        <tr>
+                            <td><span class="severity-badge severity-p0">P0</span></td>
+                            <td>Critical</td>
+                            <td>系统宕机</td>
+                            <td>立即响应</td>
+                        </tr>
+                        <tr>
+                            <td><span class="severity-badge severity-p1">P1</span></td>
+                            <td>High</td>
+                            <td>主要功能受损</td>
+                            <td>15 分钟内</td>
+                        </tr>
+                        <tr>
+                            <td><span class="severity-badge severity-p2">P2</span></td>
+                            <td>Medium</td>
+                            <td>次要问题</td>
+                            <td>1 小时内</td>
+                        </tr>
+                        <tr>
+                            <td><span class="severity-badge severity-p3">P3</span></td>
+                            <td>Low</td>
+                            <td>信息性告警</td>
+                            <td>工作时间</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="card" style="margin-top: 1.5rem;">
+                <h3 class="card-title">📋 预定义系统告警规则</h3>
+                <table>
+                    <tr>
+                        <th>规则 ID</th>
+                        <th>规则名称</th>
+                        <th>类型</th>
+                        <th>级别</th>
+                        <th>条件</th>
+                        <th>持续时间</th>
+                    </tr>
+                    <tr>
+                        <td><code>cpu_usage_critical</code></td>
+                        <td>CPU 使用率严重</td>
+                        <td>Threshold</td>
+                        <td><span class="severity-badge severity-p0">P0</span></td>
+                        <td>CPU > 90%</td>
+                        <td>2 分钟</td>
+                    </tr>
+                    <tr>
+                        <td><code>memory_usage_high</code></td>
+                        <td>内存使用率高</td>
+                        <td>Threshold</td>
+                        <td><span class="severity-badge severity-p1">P1</span></td>
+                        <td>Memory > 85%</td>
+                        <td>3 分钟</td>
+                    </tr>
+                    <tr>
+                        <td><code>disk_space_critical</code></td>
+                        <td>磁盘空间严重</td>
+                        <td>Threshold</td>
+                        <td><span class="severity-badge severity-p0">P0</span></td>
+                        <td>Disk > 95%</td>
+                        <td>1 分钟</td>
+                    </tr>
+                    <tr>
+                        <td><code>error_rate_spike</code></td>
+                        <td>错误率激增</td>
+                        <td>Rate</td>
+                        <td><span class="severity-badge severity-p1">P1</span></td>
+                        <td>Errors > 10/s</td>
+                        <td>30 秒</td>
+                    </tr>
+                    <tr>
+                        <td><code>service_down</code></td>
+                        <td>服务宕机</td>
+                        <td>Absence</td>
+                        <td><span class="severity-badge severity-p0">P0</span></td>
+                        <td>Health = 0</td>
+                        <td>30 秒</td>
+                    </tr>
+                </table>
+            </div>
+        </section>
+
+        <!-- Notification Channels -->
+        <section>
+            <h2 class="section-title">多渠道告警通知对接</h2>
+            
+            <div class="grid-3">
+                <div class="card">
+                    <h3 class="card-title">📧 邮件通知 (SMTP)</h3>
+                    <ul class="feature-list">
+                        <li>支持 TLS/SSL加密</li>
+                        <li>HTML+ 纯文本双格式</li>
+                        <li>多收件人/抄送支持</li>
+                        <li>自动重试机制</li>
+                        <li>速率限制控制</li>
+                    </ul>
+                    <div class="highlight-box">
+                        <strong>配置示例:</strong><br>
+                        SMTP Host: smtp.gmail.com<br>
+                        Port: 587 (TLS)<br>
+                        支持所有标准 SMTP 服务商
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3 class="card-title">📱 短信通知</h3>
+                    <ul class="feature-list">
+                        <li>阿里云 SMS 集成</li>
+                        <li>腾讯云 SMS 集成</li>
+                        <li>Twilio 国际支持</li>
+                        <li>通用 HTTP API 适配</li>
+                        <li>模板消息支持</li>
+                    </ul>
+                    <div class="highlight-box">
+                        <strong>适用场景:</strong><br>
+                        P0/P1 级别紧急告警<br>
+                        非工作时间电话前哨<br>
+                        关键业务故障通知
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3 class="card-title">💼 企业微信</h3>
+                    <ul class="feature-list">
+                        <li>Webhook 机器人</li>
+                        <li>Markdown 格式化</li>
+                        <li>@指定成员</li>
+                        <li>@全体成员</li>
+                        <li>免域名配置</li>
+                    </ul>
+                    <div class="highlight-box">
+                        <strong>接入步骤:</strong><br>
+                        1. 创建智能机器人<br>
+                        2. 开启 API 模式<br>
+                        3. 获取 Webhook URL<br>
+                        4. 配置到系统
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3 class="card-title">🔔 钉钉通知</h3>
+                    <ul class="feature-list">
+                        <li>群机器人 Webhook</li>
+                        <li>签名安全验证</li>
+                        <li>Markdown 消息</li>
+                        <li>富文本卡片</li>
+                        <li>定时消息支持</li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h3 class="card-title">✈️ 飞书通知</h3>
+                    <ul class="feature-list">
+                        <li>交互式卡片</li>
+                        <li>富文本消息</li>
+                        <li>按钮操作支持</li>
+                        <li>主题颜色定制</li>
+                        <li>宽屏模式适配</li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h3 class="card-title">🔗 渠道管理特性</h3>
+                    <ul class="feature-list">
+                        <li>统一接口抽象</li>
+                        <li>动态渠道注册</li>
+                        <li>发送历史记录</li>
+                        <li>健康检查测试</li>
+                        <li>故障自动切换</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Core Features -->
+        <section>
+            <h2 class="section-title">核心功能特性</h2>
+            
+            <div class="grid-2">
+                <div class="card">
+                    <h3 class="card-title">✨ 告警处理机制</h3>
+                    <ul class="feature-list">
+                        <li><strong>去重降噪</strong> - 相同指纹告警自动合并，减少 90% 无效通知</li>
+                        <li><strong>分组聚合</strong> - 按标签分组，批量发送减少打扰</li>
+                        <li><strong>静默窗口</strong> - 可配置维护时段静默</li>
+                        <li><strong>抑制规则</strong> - 高级别告警抑制低级别</li>
+                        <li><strong>For 持续时间</strong> - 避免瞬时抖动误报</li>
+                        <li><strong>重复间隔</strong> - 控制相同告警通知频率</li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h3 class="card-title">🛡️ 可靠性保障</h3>
+                    <ul class="feature-list">
+                        <li><strong>重试机制</strong> - 失败自动重试最多 3 次</li>
+                        <li><strong>指数退避</strong> - 重试延迟递增避免雪崩</li>
+                        <li><strong>速率限制</strong> - 每分钟/小时发送上限</li>
+                        <li><strong>超时控制</strong> - 防止请求 hangs</li>
+                        <li><strong>降级策略</strong> - 主渠道失败切换备用</li>
+                        <li><strong>审计日志</strong> - 完整发送记录追溯</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- API Design -->
+        <section>
+            <h2 class="section-title">REST API 设计</h2>
+            
+            <div class="card">
+                <h3 class="card-title">📡 核心接口</h3>
+                <table>
+                    <tr>
+                        <th>方法</th>
+                        <th>路径</th>
+                        <th>描述</th>
+                        <th>参数</th>
+                    </tr>
+                    <tr>
+                        <td><code>POST</code></td>
+                        <td><code>/metrics/evaluate</code></td>
+                        <td>评估指标触发告警</td>
+                        <td>metric_name, value, labels</td>
+                    </tr>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td><code>/alerts/active</code></td>
+                        <td>获取活跃告警</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td><code>POST</code></td>
+                        <td><code>/alerts/{fp}/acknowledge</code></td>
+                        <td>确认告警</td>
+                        <td>fingerprint</td>
+                    </tr>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td><code>/alerts/history</code></td>
+                        <td>告警历史</td>
+                        <td>limit</td>
+                    </tr>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td><code>/rules</code></td>
+                        <td>列出规则</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td><code>POST</code></td>
+                        <td><code>/rules</code></td>
+                        <td>创建规则</td>
+                        <td>rule config</td>
+                    </tr>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td><code>/health</code></td>
+                        <td>健康检查</td>
+                        <td>-</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div class="card" style="margin-top: 1.5rem;">
+                <h3 class="card-title">💻 使用示例</h3>
+                <pre><code># 评估指标
+curl -X POST http://localhost:8000/metrics/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metric_name": "cpu_usage_percent",
+    "value": 95.5,
+    "labels": {"host": "server-01", "env": "production"}
+  }'
+
+# 获取活跃告警
+curl http://localhost:8000/alerts/active
+
+# 确认告警
+curl -X POST http://localhost:8000/alerts/abc123/acknowledge
+
+# 创建自定义规则
+curl -X POST http://localhost:8000/rules \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "custom_rule",
+    "name": "Custom CPU Rule",
+    "threshold": 85.0,
+    "operator": ">",
+    "severity": "high"
+  }'</code></pre>
+            </div>
+        </section>
+
+        <!-- File Structure -->
+        <section>
+            <h2 class="section-title">项目文件结构</h2>
+            
+            <div class="file-tree">
+                <div class="folder">alert_system/</div>
+                <div style="padding-left: 1.5rem;">
+                    <div class="file-python">├── alert_rule_engine.py</div>
+                    <div style="padding-left: 1.5rem; color: #666;"># 告警规则引擎核心模块</div>
+                    <div class="file-python">├── notification_channels.py</div>
+                    <div style="padding-left: 1.5rem; color: #666;"># 多渠道通知实现</div>
+                    <div class="file-python">├── alert_system_api.py</div>
+                    <div style="padding-left: 1.5rem; color: #666;"># FastAPI REST 接口</div>
+                    <div class="file-python">├── test_alert_system.py</div>
+                    <div style="padding-left: 1.5rem; color: #666;"># 单元测试套件</div>
+                    <div class="file">├── requirements.txt</div>
+                    <div style="padding-left: 1.5rem; color: #666;"># Python 依赖</div>
+                    <div class="file">├── Dockerfile</div>
+                    <div style="padding-left: 1.5rem; color: #666;"># Docker 构建配置</div>
+                    <div class="file">├── docker-compose.yml</div>
+                    <div style="padding-left: 1.5rem; color: #666;"># 容器编排</div>
+                    <div class="file">└── config.yaml</div>
+                    <div style="padding-left: 1.5rem; color: #666;"># 系统配置文件</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Deployment -->
+        <section>
+            <h2 class="section-title">部署方案</h2>
+            
+            <div class="grid-2">
+                <div class="card">
+                    <h3 class="card-title">🐳 Docker 部署</h3>
+                    <pre><code># 构建镜像
+docker build -t alert-system:1.0 .
+
+# 运行容器
+docker run -d \
+  --name alert-system \
+  -p 8000:8000 \
+  -v ./config:/app/config \
+  -e SMTP_HOST=smtp.gmail.com \
+  -e WECHAT_WEBHOOK=url \
+  alert-system:1.0
+
+# 查看日志
+docker logs -f alert-system</code></pre>
+                </div>
+                
+                <div class="card">
+                    <h3 class="card-title">☸️ Kubernetes 部署</h3>
+                    <pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alert-system
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: alert-system
+  template:
+    spec:
+      containers:
+      - name: alert-system
+        image: alert-system:1.0
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Testing -->
+        <section>
+            <h2 class="section-title">测试覆盖</h2>
+            
+            <div class="card">
+                <h3 class="card-title">🧪 单元测试用例</h3>
+                <div class="grid-3">
+                    <div>
+                        <h4 style="color: var(--primary-color); margin-bottom: 0.5rem;">规则引擎测试</h4>
+                        <ul class="feature-list">
+                            <li>阈值条件测试</li>
+                            <li>速率条件测试</li>
+                            <li>模式匹配测试</li>
+                            <li>复合条件测试</li>
+                            <li>规则注册/注销</li>
+                            <li>告警触发逻辑</li>
+                            <li>告警去重验证</li>
+                            <li>回调机制测试</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 style="color: var(--primary-color); margin-bottom: 0.5rem;">通知渠道测试</h4>
+                        <ul class="feature-list">
+                            <li>邮件发送测试</li>
+                            <li>短信网关测试</li>
+                            <li>企业微信测试</li>
+                            <li>钉钉推送测试</li>
+                            <li>飞书卡片测试</li>
+                            <li>重试机制测试</li>
+                            <li>速率限制测试</li>
+                            <li>渠道管理测试</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 style="color: var(--primary-color); margin-bottom: 0.5rem;">集成测试</h4>
+                        <ul class="feature-list">
+                            <li>完整告警工作流</li>
+                            <li>多规则并发评估</li>
+                            <li>多渠道并发通知</li>
+                            <li>API 端点测试</li>
+                            <li>配置加载测试</li>
+                            <li>健康检查测试</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Best Practices -->
+        <section>
+            <h2 class="section-title">最佳实践建议</h2>
+            
+            <div class="grid-2">
+                <div class="card">
+                    <h3 class="card-title">✅ 推荐做法</h3>
+                    <ul class="feature-list">
+                        <li>为不同环境配置独立告警规则</li>
+                        <li>P0 告警同时发送邮件 + 短信 + 企微</li>
+                        <li>设置合理的 For 持续时间避免误报</li>
+                        <li>使用标签进行告警分组和路由</li>
+                        <li>定期审查和优化告警规则</li>
+                        <li>建立告警响应 SOP 流程</li>
+                        <li>实施告警疲劳监控和分析</li>
+                        <li>维护告警文档和知识库</li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h3 class="card-title">❌ 避免事项</h3>
+                    <ul class="feature-list">
+                        <li>避免设置过于敏感的阈值</li>
+                        <li>不要对所有告警使用相同通知渠道</li>
+                        <li>避免告警风暴（无速率限制）</li>
+                        <li>不要在非工作时间发送低优先级告警</li>
+                        <li>避免缺少告警升级机制</li>
+                        <li>不要忽略告警历史记录分析</li>
+                        <li>避免硬编码配置（使用配置文件）</li>
+                        <li>不要跳过测试直接上线</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Configuration Example -->
+        <section>
+            <h2 class="section-title">配置示例</h2>
+            
+            <div class="card">
+                <h3 class="card-title">⚙️ YAML 配置文件</h3>
+                <pre><code># config.yaml
+alert_system:
+  engine:
+    evaluation_interval: 15s
+    rule_groups:
+      - name: system_rules
+        rules:
+          - id: cpu_critical
+            name: CPU 使用率严重
+            type: threshold
+            metric: cpu_usage_percent
+            operator: ">"
+            threshold: 90
+            for_duration: 2m
+            severity: critical
+            channels: [email, sms, wechat]
+          
+          - id: memory_high
+            name: 内存使用率高
+            type: threshold
+            metric: memory_usage_percent
+            operator: ">"
+            threshold: 85
+            for_duration: 3m
+            severity: high
+            channels: [email, wechat]
+
+notification:
+  email_channels:
+    - id: ops_team
+      name: 运维团队
+      smtp_host: smtp.gmail.com
+      smtp_port: 587
+      username: alerts@company.com
+      from_address: alerts@company.com
+      to_addresses:
+        - ops@company.com
+        - oncall@company.com
+  
+  sms_channels:
+    - id: emergency_sms
+      provider: aliyun
+      api_key: ${ALIYUN_API_KEY}
+      phone_numbers:
+        - "+86-13800138000"
+        - "+86-13900139000"
+  
+  wechat_channels:
+    - id: ops_wechat
+      webhook_url: ${WECHAT_WEBHOOK_URL}
+      mentioned_users: ["@all"]
+
+routing:
+  rules:
+    - match:
+        env: production
+        severity: critical
+      channels: [email, sms, wechat]
+    - match:
+        env: staging
+      channels: [email, wechat]</code></pre>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <p>© 2026 系统异常告警规则设计与多渠道告警对接方案 | AI Code Agent 生成</p>
+        <p style="margin-top: 0.5rem; font-size: 0.9rem;">
+            技术栈：Python 3.12 + FastAPI + Docker + Kubernetes
+        </p>
+    </footer>
+
+    <script>
+        // Generate particles
+        const particlesContainer = document.getElementById('particles');
+        for (let i = 0; i < 50; i++) {
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+            particle.style.left = Math.random() * 100 + '%';
+            particle.style.animationDelay = Math.random() * 15 + 's';
+            particle.style.animationDuration = (Math.random() * 10 + 10) + 's';
+            particlesContainer.appendChild(particle);
+        }
+
+        // Smooth scroll
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

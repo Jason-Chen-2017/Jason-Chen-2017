@@ -1,0 +1,1702 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Harness 技术原理与应用</title>
+    <style>
+        :root {
+            --harness-blue: #0284c7;
+            --control-purple: #a855f7;
+            --runtime-gold: #ca8a04;
+            --sandbox-green: #16a34a;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-harness: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--harness-blue), var(--control-purple), var(--runtime-gold), var(--sandbox-green)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-harness);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: harnessRotate 85s linear infinite;
+        }
+        
+        @keyframes harnessRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .harness-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 18px 40px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 1.15em;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-control {
+            background: linear-gradient(135deg, var(--harness-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-orchestration {
+            background: linear-gradient(135deg, var(--control-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-runtime {
+            background: linear-gradient(135deg, var(--runtime-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-sandbox {
+            background: linear-gradient(135deg, var(--sandbox-green), #4ade80);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.8em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 30px;
+            text-shadow: 0 0 60px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 3px;
+            line-height: 1.35;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 2em;
+            color: var(--text-secondary);
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .harness-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 25px;
+            margin: 60px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .harness-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 35px 45px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 200px;
+        }
+        
+        .harness-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .harness-box.control {
+            border-color: var(--harness-blue);
+            box-shadow: 0 15px 40px rgba(2, 132, 199, 0.35);
+        }
+        
+        .harness-box.orchestration {
+            border-color: var(--control-purple);
+            box-shadow: 0 15px 40px rgba(168, 85, 247, 0.35);
+        }
+        
+        .harness-box.runtime {
+            border-color: var(--runtime-gold);
+            box-shadow: 0 15px 40px rgba(202, 138, 4, 0.35);
+        }
+        
+        .harness-box.sandbox {
+            border-color: var(--sandbox-green);
+            box-shadow: 0 15px 40px rgba(22, 163, 74, 0.35);
+        }
+        
+        .harness-label {
+            font-size: 1.8em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 12px;
+        }
+        
+        .harness-box.control .harness-label { color: var(--harness-blue); }
+        .harness-box.orchestration .harness-label { color: var(--control-purple); }
+        .harness-box.runtime .harness-label { color: var(--runtime-gold); }
+        .harness-box.sandbox .harness-label { color: var(--sandbox-green); }
+        
+        .harness-desc {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.7;
+        }
+        
+        .harness-arrow {
+            font-size: 2em;
+            color: var(--runtime-gold);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 35px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 60px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px 35px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px var(--border-glow);
+            border-color: var(--harness-blue);
+        }
+        
+        .meta-label {
+            color: var(--harness-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 10px;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 1.05em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 60px 55px;
+            margin-bottom: 80px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 50px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 3em;
+            color: var(--harness-blue);
+            margin-bottom: 50px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 30px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 50px 0 30px 0;
+            padding: 25px 35px;
+            border-radius: 18px;
+            font-size: 1.7em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--harness-blue); 
+            color: var(--harness-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--control-purple); 
+            color: var(--control-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--runtime-gold); 
+            color: var(--runtime-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--sandbox-green); 
+            color: var(--sandbox-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: #ec4899; 
+            color: #ec4899;
+            background: linear-gradient(90deg, rgba(236, 72, 153, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 20px;
+        }
+        
+        .toc-list li {
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 1.05em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 18px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--harness-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--harness-blue);
+            text-shadow: 0 0 12px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 70px 60px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 25px 80px var(--border-glow), 0 0 60px rgba(2, 132, 199, 0.2);
+            border-color: var(--harness-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.8em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 45px;
+            border-bottom: 4px solid var(--harness-blue);
+            padding-bottom: 25px;
+            font-weight: 800;
+            text-shadow: 0 0 25px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 50px 0;
+        }
+        
+        .section-title {
+            font-size: 2em;
+            color: var(--harness-blue);
+            margin-bottom: 30px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--control-purple);
+            font-size: 0.7em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.2;
+            font-size: 1.1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 30px;
+        }
+        
+        .harness-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin: 50px 0;
+        }
+        
+        .harness-box-card {
+            padding: 38px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .harness-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .harness-box-card.control {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--harness-blue);
+            box-shadow: 0 8px 35px rgba(2, 132, 199, 0.3);
+        }
+        
+        .harness-box-card.orchestration {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--control-purple);
+            box-shadow: 0 8px 35px rgba(168, 85, 247, 0.3);
+        }
+        
+        .harness-box-card.runtime {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--runtime-gold);
+            box-shadow: 0 8px 35px rgba(202, 138, 4, 0.3);
+        }
+        
+        .harness-box-card.sandbox {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--sandbox-green);
+            box-shadow: 0 8px 35px rgba(22, 163, 74, 0.3);
+        }
+        
+        .harness-box-title {
+            font-size: 1.75em;
+            font-weight: 800;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .harness-box-card.control .harness-box-title { color: var(--harness-blue); }
+        .harness-box-card.orchestration .harness-box-title { color: var(--control-purple); }
+        .harness-box-card.runtime .harness-box-title { color: var(--runtime-gold); }
+        .harness-box-card.sandbox .harness-box-title { color: var(--sandbox-green); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 45px 50px;
+            border-left: 8px solid var(--harness-blue);
+            border-radius: 20px;
+            margin: 45px 0;
+            box-shadow: 0 8px 35px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--harness-blue);
+            font-weight: 800;
+        }
+        
+        .timeline-box {
+            background: linear-gradient(135deg, #0d0d14, #1a1a2e);
+            border: 3px solid var(--border-glow);
+            border-radius: 20px;
+            padding: 45px;
+            margin: 50px 0;
+            box-shadow: inset 0 0 40px rgba(2, 132, 199, 0.1);
+        }
+        
+        .timeline-title {
+            color: var(--harness-blue);
+            margin-bottom: 35px;
+            font-weight: 800;
+            font-size: 1.7em;
+            text-align: center;
+            font-family: 'Georgia', serif;
+        }
+        
+        .timeline-item {
+            display: flex;
+            gap: 25px;
+            margin: 30px 0;
+            padding: 25px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            border-left: 4px solid;
+        }
+        
+        .timeline-item.theory { border-color: var(--harness-blue); }
+        .timeline-item.architecture { border-color: var(--control-purple); }
+        .timeline-item.modern { border-color: var(--runtime-gold); }
+        
+        .timeline-year {
+            font-weight: 800;
+            font-size: 1.25em;
+            min-width: 120px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .timeline-item.theory .timeline-year { color: var(--harness-blue); }
+        .timeline-item.architecture .timeline-year { color: var(--control-purple); }
+        .timeline-item.modern .timeline-year { color: var(--runtime-gold); }
+        
+        .timeline-content {
+            color: var(--text-primary);
+            line-height: 1.9;
+        }
+        
+        .formal-diagram {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 3px solid var(--border-glow);
+            border-radius: 25px;
+            padding: 45px;
+            margin: 50px 0;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(2, 132, 199, 0.2);
+        }
+        
+        .formal-title {
+            color: var(--harness-blue);
+            margin-bottom: 35px;
+            font-weight: 800;
+            font-size: 1.6em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .formal-diagram pre {
+            text-align: left;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.9em;
+            line-height: 1.8;
+            overflow-x: auto;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 45px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 18px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 18px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--harness-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            font-size: 0.9em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--harness-blue);
+            padding-left: 35px;
+            margin: 40px 0;
+            color: var(--text-secondary);
+            font-size: 1.15em;
+            font-family: 'Georgia', serif;
+            line-height: 2.1;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 20px;
+            color: var(--control-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 30px 0;
+            padding-left: 45px;
+        }
+        
+        li {
+            margin-bottom: 18px;
+            line-height: 2.1;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 80px 50px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 120px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 40px 25px;
+            }
+            
+            .book-title {
+                font-size: 2.3em;
+            }
+            
+            .harness-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .harness-diagram {
+                flex-direction: column;
+            }
+            
+            .harness-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="harness-spectrum">
+                <div class="spectrum-item spectrum-control">🔵 控制</div>
+                <div class="spectrum-item spectrum-orchestration">🟣 编排</div>
+                <div class="spectrum-item spectrum-runtime">🟡 运行时</div>
+                <div class="spectrum-item spectrum-sandbox">🟢 沙箱</div>
+            </div>
+            <h1 class="book-title">Agent Harness 技术原理与应用</h1>
+            <h2 class="book-subtitle">从控制平面到安全执行的完整架构</h2>
+            
+            <div class="harness-diagram">
+                <div class="harness-box control">
+                    <span class="harness-label">🔵 控制平面</span>
+                    <span class="harness-desc">任务调度<br>状态管理<br>策略执行</span>
+                </div>
+                <div class="harness-arrow">→</div>
+                <div class="harness-box orchestration">
+                    <span class="harness-label">🟣 编排引擎</span>
+                    <span class="harness-desc">工作流定义<br>Agent 协调<br>依赖管理</span>
+                </div>
+                <div class="harness-arrow">→</div>
+                <div class="harness-box runtime">
+                    <span class="harness-label">🟡 运行时</span>
+                    <span class="harness-desc">执行引擎<br>资源管理<br>生命周期</span>
+                </div>
+                <div class="harness-arrow">→</div>
+                <div class="harness-box sandbox">
+                    <span class="harness-label">🟢 沙箱</span>
+                    <span class="harness-desc">安全隔离<br>工具执行<br>资源限制</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">Harness 架构版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">分布式系统·安全·编排·运行时</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 Harness 理论基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：Harness 范式——Agent 控制的新纪元</a></li>
+                <li><a href="#chapter1">第 1 章 Harness 概念与演进</a></li>
+                <li><a href="#chapter2">第 2 章 控制平面与数据平面分离</a></li>
+                <li><a href="#chapter3">第 3 章 编排理论模型</a></li>
+                
+                <div class="toc-part part2">第二编 核心组件与架构</div>
+                <li><a href="#chapter4">第 4 章 控制平面架构</a></li>
+                <li><a href="#chapter5">第 5 章 编排引擎设计</a></li>
+                <li><a href="#chapter6">第 6 章 运行时环境</a></li>
+                <li><a href="#chapter7">第 7 章 沙箱隔离机制</a></li>
+                
+                <div class="toc-part part3">第三编 控制流与执行引擎</div>
+                <li><a href="#chapter8">第 8 章 任务调度算法</a></li>
+                <li><a href="#chapter9">第 9 章 状态机与生命周期管理</a></li>
+                <li><a href="#chapter10">第 10 章 事件驱动架构</a></li>
+                <li><a href="#chapter11">第 11 章 执行引擎优化</a></li>
+                
+                <div class="toc-part part4">第四编 工程化实践</div>
+                <li><a href="#chapter12">第 12 章 安全与权限控制</a></li>
+                <li><a href="#chapter13">第 13 章 监控与可观测性</a></li>
+                <li><a href="#chapter14">第 14 章 性能优化与扩展</a></li>
+                <li><a href="#chapter15">第 15 章 错误处理与恢复</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 50px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A Harness 框架对比</a></li>
+                <li><a href="#appendix-b">附录 B 实现模板与示例</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：Harness 范式——Agent 控制的新纪元</h2>
+            <div class="content">
+                <p>随着大语言模型（LLM）驱动的 Agent 系统从单点实验走向规模化生产，一个根本性挑战日益凸显：<strong>如何安全、可靠、高效地控制和管理 Agent 的执行？</strong>传统的 Agent 框架往往将控制逻辑与执行逻辑耦合，导致系统难以扩展、难以调试、难以保证安全性。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>Agent Harness 范式通过控制平面与数据平面分离、编排引擎与运行时解耦、沙箱隔离执行，为生产级 Agent 系统提供了系统化的解决方案。Harness 不仅是技术架构，更是一种工程哲学：将控制权集中，将执行权隔离，将编排逻辑显式化。</p>
+                </div>
+                
+                <h3 class="section-title">Harness 范式的兴起</h3>
+                
+                <div class="timeline-box">
+                    <h4 class="timeline-title">Harness 技术演进历程</h4>
+                    <div class="timeline-item theory">
+                        <div class="timeline-year">2024</div>
+                        <div class="timeline-content"><strong>早期探索</strong>：DeerFlow、AgentScope 等项目提出 SuperAgent Harness 概念，初步实现子 Agent 编排</div>
+                    </div>
+                    <div class="timeline-item architecture">
+                        <div class="timeline-year">2025</div>
+                        <div class="timeline-content"><strong>架构成熟</strong>：控制平面/数据平面分离、沙箱隔离、Agent-as-a-Service 成为标准实践</div>
+                    </div>
+                    <div class="timeline-item modern">
+                        <div class="timeline-year">2026</div>
+                        <div class="timeline-content"><strong>生产普及</strong>：Amazon Bedrock AgentCore Runtime、AgentScope Runtime 等生产级 Harness 平台成熟</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">Harness 核心架构</h3>
+                
+                <div class="harness-card">
+                    <div class="harness-box-card control">
+                        <h3 class="harness-box-title">🔵 控制平面 (Control Plane)</h3>
+                        <p><strong>定义：</strong>负责全局决策、策略执行、状态管理的中央控制系统。</p>
+                        <p style="margin-top: 15px;"><strong>核心职责：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>任务调度与优先级管理</li>
+                            <li>全局状态追踪与持久化</li>
+                            <li>安全策略与权限控制</li>
+                            <li>资源配额与限流</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="harness-box-card orchestration">
+                        <h3 class="harness-box-title">🟣 编排引擎 (Orchestration Engine)</h3>
+                        <p><strong>定义：</strong>负责定义和执行 Agent 工作流的编排逻辑。</p>
+                        <p style="margin-top: 15px;"><strong>核心职责：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>工作流定义与解析</li>
+                            <li>Agent 间协调与通信</li>
+                            <li>依赖管理与执行顺序</li>
+                            <li>条件分支与循环控制</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="harness-box-card runtime">
+                        <h3 class="harness-box-title">🟡 运行时 (Runtime)</h3>
+                        <p><strong>定义：</strong>负责 Agent 实际执行的环境和引擎。</p>
+                        <p style="margin-top: 15px;"><strong>核心职责：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>Agent 生命周期管理</li>
+                            <li>资源分配与调度</li>
+                            <li>执行上下文管理</li>
+                            <li>性能监控与优化</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="harness-box-card sandbox">
+                        <h3 class="harness-box-title">🟢 沙箱 (Sandbox)</h3>
+                        <p><strong>定义：</strong>提供安全隔离的工具执行环境。</p>
+                        <p style="margin-top: 15px;"><strong>核心职责：</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 10px; font-size: 0.95em;">
+                            <li>进程/容器隔离</li>
+                            <li>文件系统访问限制</li>
+                            <li>网络访问控制</li>
+                            <li>资源使用限制（CPU、内存、时间）</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="quote">
+                    "Harness 范式不是对 Agent 的束缚，而是对 Agent 能力的释放。通过控制平面集中管理、编排引擎显式定义、运行时灵活执行、沙箱安全隔离，Harness 让 Agent 系统从'野马'变成'驯马'，既能保持活力，又能安全驰骋。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 Harness 理论基础</strong>：阐述 Harness 概念演进、控制平面与数据平面分离理论、编排理论模型等基础知识。</p>
+                
+                <p><strong>第二编 核心组件与架构</strong>：深入剖析控制平面、编排引擎、运行时、沙箱四大核心组件的设计与实现。</p>
+                
+                <p><strong>第三编 控制流与执行引擎</strong>：探讨任务调度算法、状态机管理、事件驱动架构、执行引擎优化等关键技术。</p>
+                
+                <p><strong>第四编 工程化实践</strong>：涵盖安全权限、监控可观测性、性能优化、错误处理等生产环境实践。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从 DeerFlow 的 SuperAgent Harness 到 Amazon Bedrock AgentCore Runtime，从控制平面集中管理到沙箱隔离执行，Harness 范式正在重塑 Agent 系统的架构设计。这不仅是技术的进步，更是工程哲学的演进。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 60px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在 Harness 架构前沿探索的工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 4 章 -->
+        <div class="chapter" id="chapter4">
+            <h2 class="chapter-title">第 4 章 控制平面架构</h2>
+            <div class="content">
+                <h3 class="section-title">4.1 控制平面概述</h3>
+                
+                <p>控制平面（Control Plane）是 Agent Harness 的"大脑"，负责全局决策、策略执行和状态管理。与控制平面相对的是数据平面（Data Plane），负责实际的数据处理和任务执行。</p>
+                
+                <div class="highlight">
+                    <p><strong>控制平面核心原则：</strong>集中决策、分散执行、状态持久化、策略统一。</p>
+                </div>
+                
+                <div class="section">
+                    <h4>控制平面 vs 数据平面</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>维度</th>
+                                <th>控制平面</th>
+                                <th>数据平面</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>职责</strong></td>
+                                <td>全局决策、策略执行、状态管理</td>
+                                <td>数据处理、任务执行、工具调用</td>
+                            </tr>
+                            <tr>
+                                <td><strong>特性</strong></td>
+                                <td>集中式、确定性、强一致性</td>
+                                <td>分布式、并发性、最终一致性</td>
+                            </tr>
+                            <tr>
+                                <td><strong>组件</strong></td>
+                                <td>调度器、状态管理器、策略引擎</td>
+                                <td>Agent 实例、工具执行器、沙箱</td>
+                            </tr>
+                            <tr>
+                                <td><strong>扩展性</strong></td>
+                                <td>垂直扩展（更强 CPU/内存）</td>
+                                <td>水平扩展（更多实例）</td>
+                            </tr>
+                            <tr>
+                                <td><strong>故障影响</strong></td>
+                                <td>全局影响，需高可用</td>
+                                <td>局部影响，可容错</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h3 class="section-title">4.2 控制平面核心组件</h3>
+                
+                <div class="section">
+                    <h4>组件架构图</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">控制平面架构组件</div>
+                        <pre>
+┌─────────────────────────────────────────────────────────────┐
+│                    控制平面 (Control Plane)                  │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │  API Gateway│  │  认证授权   │  │  速率限制   │        │
+│  │  (入口)     │  │  (Auth)     │  │  (Rate Limit)│       │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
+│         │                │                │                 │
+│         └────────────────┴────────────────┘                 │
+│                          │                                  │
+│                          ▼                                  │
+│  ┌─────────────────────────────────────────────────┐       │
+│  │            任务调度器 (Task Scheduler)           │       │
+│  │  • 任务队列管理                                 │       │
+│  │  • 优先级调度                                   │       │
+│  │  • 负载均衡                                     │       │
+│  └──────────────────┬──────────────────────────────┘       │
+│                     │                                       │
+│         ┌───────────┼───────────┐                          │
+│         │           │           │                          │
+│         ▼           ▼           ▼                          │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐          │
+│  │ 状态管理器  │ │ 策略引擎    │ │ 资源管理器  │          │
+│  │ (State Mgr) │ │ (Policy)    │ │ (Resource)  │          │
+│  │             │ │             │ │             │          │
+│  │ • 状态追踪  │ │ • 安全策略  │ │ • 配额管理  │          │
+│  │ • 持久化    │ │ • 权限控制  │ │ • 限流      │          │
+│  │ • 查询      │ │ • 合规检查  │ │ • 优化      │          │
+│  └──────┬──────┘ └──────┬──────┘ └──────┬──────┘          │
+│         │               │               │                   │
+│         └───────────────┴───────────────┘                   │
+│                          │                                  │
+│                          ▼                                  │
+│  ┌─────────────────────────────────────────────────┐       │
+│  │          监控与可观测性 (Monitoring)             │       │
+│  │  • 指标收集  • 日志聚合  • 分布式追踪           │       │
+│  └─────────────────────────────────────────────────┘       │
+│                                                             │
+│                          │                                  │
+│                          ▼                                  │
+│              下发指令到数据平面 (Data Plane)                │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+关键特性：
+  • 集中决策：所有全局决策由控制平面统一做出
+  • 状态持久化：关键状态持久化存储，支持故障恢复
+  • 策略统一：安全、权限、限流等策略集中管理
+  • 可观测性：完整监控、日志、追踪能力
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.3 任务调度器实现</h3>
+                
+                <div class="section">
+                    <h4>调度算法</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">任务调度器实现示例</div>
+                        <pre>
+from enum import Enum
+from dataclasses import dataclass
+from typing import List, Optional
+import heapq
+import time
+
+class Priority(Enum):
+    CRITICAL = 0
+    HIGH = 1
+    NORMAL = 2
+    LOW = 3
+
+@dataclass
+class Task:
+    id: str
+    priority: Priority
+    created_at: float
+    payload: dict
+    deadline: Optional[float] = None
+    
+    def __lt__(self, other):
+        # 优先级队列比较：优先级高 + 截止时间近
+        if self.priority.value != other.priority.value:
+            return self.priority.value < other.priority.value
+        if self.deadline and other.deadline:
+            return self.deadline < other.deadline
+        return self.created_at < other.created_at
+
+class TaskScheduler:
+    def __init__(self):
+        self.task_queue: List[Task] = []
+        self.active_tasks = {}
+        self.max_concurrent = 100
+    
+    def submit(self, task: Task):
+        """提交任务到调度队列"""
+        heapq.heappush(self.task_queue, task)
+        self._schedule()
+    
+    def _schedule(self):
+        """调度任务执行"""
+        while len(self.active_tasks) < self.max_concurrent and self.task_queue:
+            task = heapq.heappop(self.task_queue)
+            
+            # 检查是否过期
+            if task.deadline and time.time() > task.deadline:
+                continue  # 跳过过期任务
+            
+            # 执行任务
+            self.active_tasks[task.id] = task
+            self._execute_async(task)
+    
+    def _execute_async(self, task: Task):
+        """异步执行任务"""
+        import asyncio
+        asyncio.create_task(self._run_task(task))
+    
+    async def _run_task(self, task: Task):
+        """运行任务"""
+        try:
+            # 下发到数据平面执行
+            result = await self._dispatch_to_data_plane(task)
+            self._on_task_complete(task.id, result)
+        except Exception as e:
+            self._on_task_failed(task.id, e)
+    
+    def _dispatch_to_data_plane(self, task: Task):
+        """下发到数据平面"""
+        # 实际实现：通过 RPC/消息队列下发
+        pass
+    
+    def _on_task_complete(self, task_id: str, result):
+        """任务完成回调"""
+        del self.active_tasks[task_id]
+        self._schedule()  # 调度下一个任务
+    
+    def _on_task_failed(self, task_id: str, error):
+        """任务失败回调"""
+        del self.active_tasks[task_id]
+        # 重试逻辑或错误处理
+        self._schedule()
+
+# 使用示例
+scheduler = TaskScheduler()
+
+# 提交关键任务
+critical_task = Task(
+    id="task-001",
+    priority=Priority.CRITICAL,
+    created_at=time.time(),
+    payload={"type": "research", "query": "AI 趋势"},
+    deadline=time.time() + 300  # 5 分钟截止
+)
+scheduler.submit(critical_task)
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.4 状态管理器</h3>
+                
+                <div class="section">
+                    <h4>状态持久化策略</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>全量快照</strong>：定期保存完整状态快照，支持快速恢复</li>
+                        <li><strong>增量日志</strong>：记录状态变更日志，支持精确回放</li>
+                        <li><strong>混合策略</strong>：快照 + 日志，平衡恢复速度与存储成本</li>
+                        <li><strong>分布式存储</strong>：使用 Redis/数据库集群，支持高可用</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">4.5 策略引擎</h3>
+                
+                <div class="section">
+                    <h4>策略类型</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>安全策略</strong>：工具调用白名单、敏感操作审批</li>
+                        <li><strong>权限策略</strong>：基于角色的访问控制（RBAC）</li>
+                        <li><strong>资源策略</strong>：配额限制、优先级规则</li>
+                        <li><strong>合规策略</strong>：审计日志、数据保留策略</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">4.6 本章小结</h3>
+                <p>本章深入探讨了控制平面架构。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>控制平面原则：集中决策、分散执行、状态持久化、策略统一</li>
+                    <li>核心组件：API Gateway、任务调度器、状态管理器、策略引擎、资源管理器</li>
+                    <li>调度算法：优先级队列、截止时间感知、并发控制</li>
+                    <li>状态管理：全量快照、增量日志、混合策略、分布式存储</li>
+                    <li>策略引擎：安全、权限、资源、合规四类策略</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 7 章 -->
+        <div class="chapter" id="chapter7">
+            <h2 class="chapter-title">第 7 章 沙箱隔离机制</h2>
+            <div class="content">
+                <h3 class="section-title">7.1 沙箱概述</h3>
+                
+                <p>沙箱（Sandbox）是 Agent Harness 的安全基石，提供隔离的执行环境，确保工具调用和代码执行不会影响主系统或其他 Agent。</p>
+                
+                <div class="highlight">
+                    <p><strong>沙箱核心目标：</strong>安全隔离、资源限制、行为监控、快速恢复。</p>
+                </div>
+                
+                <h3 class="section-title">7.2 隔离技术</h3>
+                
+                <div class="section">
+                    <h4>隔离层级对比</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>隔离技术</th>
+                                <th>隔离级别</th>
+                                <th>启动速度</th>
+                                <th>资源开销</th>
+                                <th>适用场景</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>进程隔离</strong></td>
+                                <td>中等</td>
+                                <td>快 (ms 级)</td>
+                                <td>低</td>
+                                <td>简单工具调用</td>
+                            </tr>
+                            <tr>
+                                <td><strong>容器 (Docker)</strong></td>
+                                <td>高</td>
+                                <td>中 (s 级)</td>
+                                <td>中</td>
+                                <td>通用工具执行</td>
+                            </tr>
+                            <tr>
+                                <td><strong>微虚拟机 (Firecracker)</strong></td>
+                                <td>极高</td>
+                                <td>快 (100ms 级)</td>
+                                <td>低</td>
+                                <td>高安全要求场景</td>
+                            </tr>
+                            <tr>
+                                <td><strong>WebAssembly (Wasm)</strong></td>
+                                <td>高</td>
+                                <td>极快 (ms 级)</td>
+                                <td>极低</td>
+                                <td>代码执行、插件系统</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h3 class="section-title">7.3 容器沙箱实现</h3>
+                
+                <div class="section">
+                    <h4>Docker 沙箱示例</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">Docker 沙箱实现</div>
+                        <pre>
+import docker
+import json
+from typing import Dict, Any
+
+class DockerSandbox:
+    def __init__(self, image: str, timeout: int = 300):
+        self.client = docker.from_env()
+        self.image = image
+        self.timeout = timeout
+        self.container = None
+    
+    def create(self, resources: Dict[str, Any] = None):
+        """创建沙箱容器"""
+        if resources is None:
+            resources = {}
+        
+        self.container = self.client.containers.run(
+            self.image,
+            command="tail -f /dev/null",  # 保持运行
+            detach=True,
+            remove=True,
+            network_disabled=True,  # 默认禁用网络
+            mem_limit=resources.get("memory", "512m"),
+            cpu_quota=resources.get("cpu_quota", 50000),  # 50% CPU
+            pids_limit=resources.get("pids", 100),
+            read_only=True,  # 只读文件系统
+            tmpfs={"/tmp": "rw,noexec,nosuid,size=100m"},  # 临时目录
+            cap_drop=["ALL"],  # 删除所有能力
+            security_opt=["no-new-privileges"],  # 禁止提权
+        )
+        return self.container.id
+    
+    def execute(self, command: str, timeout: int = None):
+        """在沙箱中执行命令"""
+        if not self.container:
+            raise RuntimeError("沙箱未创建")
+        
+        result = self.container.exec_run(
+            command,
+            demux=True,
+            workdir="/tmp",
+            user="nobody",  # 非 root 用户
+        )
+        
+        stdout, stderr = result.output
+        return {
+            "exit_code": result.exit_code,
+            "stdout": stdout.decode() if stdout else "",
+            "stderr": stderr.decode() if stderr else "",
+        }
+    
+    def upload(self, content: str, path: str):
+        """上传文件到沙箱"""
+        import tarfile
+        import io
+        
+        tar_stream = io.BytesIO()
+        with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+            tarinfo = tarfile.TarInfo(name=path)
+            tarinfo.size = len(content)
+            tar.addfile(tarinfo, io.BytesIO(content.encode()))
+        
+        tar_stream.seek(0)
+        self.container.put_archive("/tmp", tar_stream)
+    
+    def destroy(self):
+        """销毁沙箱"""
+        if self.container:
+            self.container.stop(timeout=5)
+            self.container = None
+
+# 使用示例
+sandbox = DockerSandbox(image="python:3.11-slim", timeout=300)
+sandbox.create(resources={"memory": "256m", "cpu_quota": 25000})
+
+# 上传代码
+code = """
+print("Hello from sandbox!")
+result = 2 + 2
+print(f"Result: {result}")
+"""
+sandbox.upload(code, "script.py")
+
+# 执行代码
+result = sandbox.execute("python /tmp/script.py", timeout=10)
+print(result)
+
+# 销毁沙箱
+sandbox.destroy()
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">7.4 资源限制</h3>
+                
+                <div class="section">
+                    <h4>资源限制策略</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>CPU 限制</strong>：使用 cgroups 限制 CPU 使用率</li>
+                        <li><strong>内存限制</strong>：设置内存上限，防止 OOM</li>
+                        <li><strong>磁盘限制</strong>：限制磁盘空间和 I/O</li>
+                        <li><strong>进程限制</strong>：限制最大进程数，防止 fork 炸弹</li>
+                        <li><strong>时间限制</strong>：设置执行超时，自动终止</li>
+                        <li><strong>网络限制</strong>：禁用或限制网络访问</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">7.5 安全加固</h3>
+                
+                <div class="section">
+                    <h4>安全最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>最小权限原则</strong>：只授予必要权限，默认拒绝</li>
+                        <li><strong>只读文件系统</strong>：除临时目录外，文件系统只读</li>
+                        <li><strong>非 root 用户</strong>：使用非特权用户执行</li>
+                        <li><strong>能力删除</strong>：删除所有 Linux capabilities</li>
+                        <li><strong>Seccomp 过滤</strong>：限制系统调用</li>
+                        <li><strong>AppArmor/SELinux</strong>：强制访问控制</li>
+                        <li><strong>网络隔离</strong>：禁用或限制网络访问</li>
+                        <li><strong>镜像扫描</strong>：定期扫描基础镜像漏洞</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">7.6 本章小结</h3>
+                <p>本章探讨了沙箱隔离机制。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>沙箱目标：安全隔离、资源限制、行为监控、快速恢复</li>
+                    <li>隔离技术：进程隔离、容器、微虚拟机、WebAssembly</li>
+                    <li>容器沙箱：Docker 实现、资源限制、命令执行</li>
+                    <li>资源限制：CPU、内存、磁盘、进程、时间、网络</li>
+                    <li>安全加固：最小权限、只读文件系统、非 root、能力删除、Seccomp、AppArmor</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 12 章 -->
+        <div class="chapter" id="chapter12">
+            <h2 class="chapter-title">第 12 章 安全与权限控制</h2>
+            <div class="content">
+                <h3 class="section-title">12.1 安全威胁模型</h3>
+                
+                <p>Agent Harness 面临的安全威胁包括：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>注入攻击</strong>：Prompt 注入、代码注入、命令注入</li>
+                    <li><strong>权限提升</strong>：越权访问、特权升级</li>
+                    <li><strong>数据泄露</strong>：敏感信息泄露、训练数据窃取</li>
+                    <li><strong>拒绝服务</strong>：资源耗尽、无限循环</li>
+                    <li><strong>供应链攻击</strong>：恶意工具、污染依赖</li>
+                </ul>
+                
+                <h3 class="section-title">12.2 认证与授权</h3>
+                
+                <div class="section">
+                    <h4>RBAC 权限模型</h4>
+                    
+                    <div class="formal-diagram">
+                        <div class="formal-title">RBAC 权限模型实现</div>
+                        <pre>
+from enum import Enum
+from typing import Set, Dict
+
+class Role(Enum):
+    ADMIN = "admin"
+    DEVELOPER = "developer"
+    ANALYST = "analyst"
+    VIEWER = "viewer"
+
+class Permission(Enum):
+    # 工具调用权限
+    TOOL_SEARCH = "tool:search"
+    TOOL_CODE_EXEC = "tool:code_exec"
+    TOOL_FILE_READ = "tool:file_read"
+    TOOL_FILE_WRITE = "tool:file_write"
+    TOOL_NETWORK = "tool:network"
+    
+    # 管理权限
+    AGENT_CREATE = "agent:create"
+    AGENT_DELETE = "agent:delete"
+    POLICY_MANAGE = "policy:manage"
+
+# 角色 - 权限映射
+ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
+    Role.ADMIN: set(Permission),  # 所有权限
+    Role.DEVELOPER: {
+        Permission.TOOL_SEARCH,
+        Permission.TOOL_CODE_EXEC,
+        Permission.TOOL_FILE_READ,
+        Permission.TOOL_FILE_WRITE,
+        Permission.AGENT_CREATE,
+    },
+    Role.ANALYST: {
+        Permission.TOOL_SEARCH,
+        Permission.TOOL_FILE_READ,
+    },
+    Role.VIEWER: set(),  # 只读权限
+}
+
+class AuthorizationEngine:
+    def __init__(self):
+        self.user_roles: Dict[str, Role] = {}
+    
+    def assign_role(self, user_id: str, role: Role):
+        """分配角色给用户"""
+        self.user_roles[user_id] = role
+    
+    def check_permission(self, user_id: str, permission: Permission) -> bool:
+        """检查用户是否有权限"""
+        role = self.user_roles.get(user_id)
+        if not role:
+            return False
+        
+        allowed = ROLE_PERMISSIONS.get(role, set())
+        return permission in allowed
+    
+    def enforce(self, user_id: str, permission: Permission):
+        """强制权限检查"""
+        if not self.check_permission(user_id, permission):
+            raise PermissionError(
+                f"User {user_id} lacks permission {permission.value}"
+            )
+
+# 使用示例
+auth_engine = AuthorizationEngine()
+auth_engine.assign_role("user-001", Role.DEVELOPER)
+
+# 检查权限
+if auth_engine.check_permission("user-001", Permission.TOOL_CODE_EXEC):
+    print("允许执行代码")
+else:
+    print("拒绝执行代码")
+
+# 强制权限检查
+try:
+    auth_engine.enforce("user-001", Permission.TOOL_NETWORK)
+except PermissionError as e:
+    print(f"权限错误：{e}")
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.3 工具调用安全</h3>
+                
+                <div class="section">
+                    <h4>工具调用白名单</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>白名单机制</strong>：只允许调用预定义的工具</li>
+                        <li><strong>参数验证</strong>：严格验证工具调用参数</li>
+                        <li><strong>输出过滤</strong>：过滤敏感信息输出</li>
+                        <li><strong>审计日志</strong>：记录所有工具调用</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">12.4 数据保护</h3>
+                
+                <div class="section">
+                    <h4>数据保护策略</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>加密存储</strong>：敏感数据加密存储</li>
+                        <li><strong>传输加密</strong>：TLS 加密通信</li>
+                        <li><strong>数据脱敏</strong>：日志和监控中脱敏</li>
+                        <li><strong>访问审计</strong>：记录数据访问日志</li>
+                        <li><strong>数据保留</strong>：定义数据保留策略</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">12.5 本章小结</h3>
+                <p>本章探讨了安全与权限控制。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>威胁模型：注入攻击、权限提升、数据泄露、拒绝服务、供应链攻击</li>
+                    <li>认证授权：RBAC 模型、角色 - 权限映射、权限检查</li>
+                    <li>工具安全：白名单机制、参数验证、输出过滤、审计日志</li>
+                    <li>数据保护：加密存储、传输加密、数据脱敏、访问审计、数据保留</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 17 章 -->
+        <div class="chapter" id="chapter17">
+            <h2 class="chapter-title">第 17 章 未来趋势与演进方向</h2>
+            <div class="content">
+                <h3 class="section-title">17.1 技术趋势</h3>
+                
+                <div class="section">
+                    <h4>2026-2028 年技术趋势</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>Serverless Harness</strong>：无服务器架构，按需弹性扩缩容</li>
+                        <li><strong>边缘 Harness</strong>：边缘计算节点部署，降低延迟</li>
+                        <li><strong>AI 驱动调度</strong>：基于机器学习的智能调度优化</li>
+                        <li><strong>形式化验证</strong>：使用形式化方法验证 Harness 正确性</li>
+                        <li><strong>跨链 Harness</strong>：支持多链、多云、混合云部署</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">17.2 架构演进</h3>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>维度</th>
+                            <th>当前架构（2025）</th>
+                            <th>未来架构（2027）</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>部署模式</strong></td>
+                            <td>集中式控制平面</td>
+                            <td>分布式、边缘协同</td>
+                        </tr>
+                        <tr>
+                            <td><strong>沙箱技术</strong></td>
+                            <td>Docker 容器</td>
+                            <td>WebAssembly、微虚拟机</td>
+                        </tr>
+                        <tr>
+                            <td><strong>调度算法</strong></td>
+                            <td>规则-based 调度</td>
+                            <td>AI 驱动、自适应调度</td>
+                        </tr>
+                        <tr>
+                            <td><strong>安全模型</strong></td>
+                            <td>RBAC、白名单</td>
+                            <td>零信任、形式化验证</td>
+                        </tr>
+                        <tr>
+                            <td><strong>可观测性</strong></td>
+                            <td>指标、日志、追踪</td>
+                            <td>AI 异常检测、预测性维护</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3 class="section-title">17.3 最佳实践清单</h3>
+                
+                <div class="section">
+                    <h4>Harness 实施检查清单</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>架构设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 控制平面与数据平面分离</li>
+                                <li>✓ 编排引擎显式定义工作流</li>
+                                <li>✓ 运行时支持弹性扩缩容</li>
+                                <li>✓ 沙箱提供强隔离</li>
+                            </ul>
+                        </li>
+                        <li><strong>安全加固</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 实施 RBAC 权限模型</li>
+                                <li>✓ 工具调用白名单</li>
+                                <li>✓ 沙箱资源限制</li>
+                                <li>✓ 完整审计日志</li>
+                            </ul>
+                        </li>
+                        <li><strong>可观测性</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 关键指标监控</li>
+                                <li>✓ 分布式追踪</li>
+                                <li>✓ 日志聚合分析</li>
+                                <li>✓ 告警通知机制</li>
+                            </ul>
+                        </li>
+                        <li><strong>性能优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>✓ 任务调度优化</li>
+                                <li>✓ 缓存策略</li>
+                                <li>✓ 并发控制</li>
+                                <li>✓ 资源利用率优化</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 60px; border-left-color: var(--harness-blue);">
+                    "从 DeerFlow 的 SuperAgent Harness 到 Amazon Bedrock AgentCore Runtime，从控制平面集中管理到沙箱隔离执行，Harness 范式正在重塑 Agent 系统的架构设计。未来的 Harness 将更加智能、更加安全、更加普及。这不仅是技术的进步，更是工程哲学的演进。"
+                    <div class="quote-author">—— 全书结语</div>
+                </div>
+                
+                <h3 class="section-title">17.4 本章小结</h3>
+                <p>本章展望了未来趋势。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>技术趋势：Serverless、边缘计算、AI 调度、形式化验证、跨链部署</li>
+                    <li>架构演进：分布式部署、Wasm 沙箱、AI 调度、零信任安全、AI 可观测性</li>
+                    <li>最佳实践：架构设计、安全加固、可观测性、性能优化检查清单</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">Harness 架构与框架</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;">
+                    <li>ByteDance (2026). "DeerFlow 2.0: An Open-Source SuperAgent Harness." GitHub.</li>
+                    <li>AgentScope Team (2026). "AgentScope Runtime: Production-Ready Runtime Framework." GitHub.</li>
+                    <li>Amazon Web Services (2026). "Amazon Bedrock AgentCore Runtime Documentation." AWS Docs.</li>
+                </ol>
+                
+                <h3 class="section-title">控制平面与编排</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="4">
+                    <li>Microsoft (2025). "AutoGen Agent Runtime Framework." Microsoft GitHub.</li>
+                    <li>Kubernetes Community (2025). "Kubernetes Control Plane Architecture." Kubernetes Docs.</li>
+                </ol>
+                
+                <h3 class="section-title">沙箱与安全</h3>
+                <ol style="margin-left: 20px; line-height: 2.2;" start="6">
+                    <li>Docker Inc (2025). "Docker Security Best Practices." Docker Docs.</li>
+                    <li>Google (2024). "gVisor: Application Kernel for Containers." Google GitHub.</li>
+                    <li>Fastly (2025). "Compute@Edge: WebAssembly Sandbox Runtime." Fastly Docs.</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.5em; margin-bottom: 25px; color: var(--harness-blue); font-weight: 800; font-family: 'Georgia', serif;">Agent Harness 技术原理与应用</p>
+                <p style="font-size: 1.2em; margin-bottom: 15px; font-style: italic;">从控制平面到安全执行的完整架构</p>
+                <p>© 2026 超级代码智能体 | Harness 架构版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 35px; font-size: 1em; line-height: 2.0;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="harness-spectrum" style="margin-top: 50px;">
+                    <div class="spectrum-item spectrum-control">🔵 控制</div>
+                    <div class="spectrum-item spectrum-orchestration">🟣 编排</div>
+                    <div class="spectrum-item spectrum-runtime">🟡 运行时</div>
+                    <div class="spectrum-item spectrum-sandbox">🟢 沙箱</div>
+                </div>
+                <p style="margin-top: 50px; font-size: 0.95em; color: var(--text-secondary);">
+                    谨以此书献给所有在 Harness 架构前沿探索的工程师们<br>
+                    从 2024 年 DeerFlow 提出到 2026 年生产级平台成熟<br>
+                    2 年探索，Harness 范式——控制与执行的完美平衡
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢 Agent Harness Technology');
+        console.log('📚 From Control Plane to Secure Execution (2024-2026)');
+        console.log('✨ 2 Years of Harness Architecture Evolution');
+        console.log('🛡️ Control + Orchestration + Runtime + Sandbox = Safe Agents');
+    </script>
+</body>
+</html>

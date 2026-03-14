@@ -1,0 +1,2229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent 版本控制、灰度与回滚机制</title>
+    <style>
+        :root {
+            --version-blue: #0284c7;
+            --canary-purple: #a855f7;
+            --rollback-gold: #ca8a04;
+            --monitor-green: #16a34a;
+            --deploy-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-version: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--version-blue), var(--canary-purple), var(--rollback-gold), var(--monitor-green), var(--deploy-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-version);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: versionRotate 120s linear infinite;
+        }
+        
+        @keyframes versionRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .version-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 12px 28px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 1em;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-version {
+            background: linear-gradient(135deg, var(--version-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-canary {
+            background: linear-gradient(135deg, var(--canary-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-rollback {
+            background: linear-gradient(135deg, var(--rollback-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-monitor {
+            background: linear-gradient(135deg, var(--monitor-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-deploy {
+            background: linear-gradient(135deg, var(--deploy-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.4em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 28px;
+            text-shadow: 0 0 60px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.33;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.8em;
+            color: var(--text-secondary);
+            margin-bottom: 48px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .version-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin: 58px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .version-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 28px 38px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 160px;
+        }
+        
+        .version-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .version-box.version {
+            border-color: var(--version-blue);
+            box-shadow: 0 15px 40px rgba(2, 132, 199, 0.35);
+        }
+        
+        .version-box.canary {
+            border-color: var(--canary-purple);
+            box-shadow: 0 15px 40px rgba(168, 85, 247, 0.35);
+        }
+        
+        .version-box.rollback {
+            border-color: var(--rollback-gold);
+            box-shadow: 0 15px 40px rgba(202, 138, 4, 0.35);
+        }
+        
+        .version-box.monitor {
+            border-color: var(--monitor-green);
+            box-shadow: 0 15px 40px rgba(22, 163, 74, 0.35);
+        }
+        
+        .version-box.deploy {
+            border-color: var(--deploy-red);
+            box-shadow: 0 15px 40px rgba(220, 38, 38, 0.35);
+        }
+        
+        .version-label {
+            font-size: 1.42em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 11px;
+        }
+        
+        .version-box.version .version-label { color: var(--version-blue); }
+        .version-box.canary .version-label { color: var(--canary-purple); }
+        .version-box.rollback .version-label { color: var(--rollback-gold); }
+        .version-box.monitor .version-label { color: var(--monitor-green); }
+        .version-box.deploy .version-label { color: var(--deploy-red); }
+        
+        .version-desc {
+            font-size: 0.78em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.68;
+        }
+        
+        .version-arrow {
+            font-size: 1.7em;
+            color: var(--rollback-gold);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 28px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 58px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 16px 28px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px var(--border-glow);
+            border-color: var(--version-blue);
+        }
+        
+        .meta-label {
+            color: var(--version-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 9px;
+            font-size: 0.78em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.98em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 50px 46px;
+            margin-bottom: 70px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 48px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.8em;
+            color: var(--version-blue);
+            margin-bottom: 40px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 28px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 40px 0 25px 0;
+            padding: 19px 28px;
+            border-radius: 18px;
+            font-size: 1.6em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--version-blue); 
+            color: var(--version-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--canary-purple); 
+            color: var(--canary-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--rollback-gold); 
+            color: var(--rollback-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--monitor-green); 
+            color: var(--monitor-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--deploy-red); 
+            color: var(--deploy-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 15px;
+        }
+        
+        .toc-list li {
+            padding: 11px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.98em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 14px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--version-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--version-blue);
+            text-shadow: 0 0 11px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 60px 50px;
+            margin-bottom: 50px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 8px 38px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 23px 75px var(--border-glow), 0 0 58px rgba(2, 132, 199, 0.2);
+            border-color: var(--version-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.6em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 38px;
+            border-bottom: 4px solid var(--version-blue);
+            padding-bottom: 19px;
+            font-weight: 800;
+            text-shadow: 0 0 23px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 40px 0;
+        }
+        
+        .section-title {
+            font-size: 1.9em;
+            color: var(--version-blue);
+            margin-bottom: 25px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--canary-purple);
+            font-size: 0.65em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.1;
+            font-size: 1.05em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 25px;
+        }
+        
+        .version-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 21px;
+            margin: 40px 0;
+        }
+        
+        .version-box-card {
+            padding: 31px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .version-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .version-box-card.version {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--version-blue);
+            box-shadow: 0 8px 33px rgba(2, 132, 199, 0.3);
+        }
+        
+        .version-box-card.canary {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--canary-purple);
+            box-shadow: 0 8px 33px rgba(168, 85, 247, 0.3);
+        }
+        
+        .version-box-card.rollback {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--rollback-gold);
+            box-shadow: 0 8px 33px rgba(202, 138, 4, 0.3);
+        }
+        
+        .version-box-card.monitor {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--monitor-green);
+            box-shadow: 0 8px 33px rgba(22, 163, 74, 0.3);
+        }
+        
+        .version-box-card.deploy {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--deploy-red);
+            box-shadow: 0 8px 33px rgba(220, 38, 38, 0.3);
+        }
+        
+        .version-box-title {
+            font-size: 1.65em;
+            font-weight: 800;
+            margin-bottom: 13px;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .version-box-card.version .version-box-title { color: var(--version-blue); }
+        .version-box-card.canary .version-box-title { color: var(--canary-purple); }
+        .version-box-card.rollback .version-box-title { color: var(--rollback-gold); }
+        .version-box-card.monitor .version-box-title { color: var(--monitor-green); }
+        .version-box-card.deploy .version-box-title { color: var(--deploy-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 38px 44px;
+            border-left: 7px solid var(--version-blue);
+            border-radius: 20px;
+            margin: 38px 0;
+            box-shadow: 0 8px 33px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--version-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 17px;
+            padding: 31px;
+            margin: 36px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 31px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.85em;
+            line-height: 1.7;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--version-blue);
+            font-weight: 700;
+            margin-bottom: 16px;
+            font-family: 'Georgia', serif;
+            font-size: 1.02em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 38px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 17px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 15px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--version-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.06px;
+            font-size: 0.85em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--version-blue);
+            padding-left: 28px;
+            margin: 34px 0;
+            color: var(--text-secondary);
+            font-size: 1.08em;
+            font-family: 'Georgia', serif;
+            line-height: 2.0;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 16px;
+            color: var(--canary-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 25px 0;
+            padding-left: 38px;
+        }
+        
+        li {
+            margin-bottom: 14px;
+            line-height: 2.0;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 70px 40px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 110px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 840px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 34px 21px;
+            }
+            
+            .book-title {
+                font-size: 2.1em;
+            }
+            
+            .version-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .version-diagram {
+                flex-direction: column;
+            }
+            
+            .version-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="version-spectrum">
+                <div class="spectrum-item spectrum-version">🔵 版本控制</div>
+                <div class="spectrum-item spectrum-canary">🟣 灰度发布</div>
+                <div class="spectrum-item spectrum-rollback">🟡 回滚机制</div>
+                <div class="spectrum-item spectrum-monitor">🟢 监控告警</div>
+                <div class="spectrum-item spectrum-deploy">🔴 部署策略</div>
+            </div>
+            <h1 class="book-title">Agent 版本控制、灰度与回滚机制</h1>
+            <h2 class="book-subtitle">从语义化版本到零停机发布的完整生产实践</h2>
+            
+            <div class="version-diagram">
+                <div class="version-box version">
+                    <span class="version-label">🔵 版本控制</span>
+                    <span class="version-desc">语义化版本<br>版本元数据<br>兼容性管理</span>
+                </div>
+                <div class="version-arrow">→</div>
+                <div class="version-box canary">
+                    <span class="version-label">🟣 灰度发布</span>
+                    <span class="version-desc">金丝雀发布<br>流量分割<br>渐进式 rollout</span>
+                </div>
+                <div class="version-arrow">→</div>
+                <div class="version-box rollback">
+                    <span class="version-label">🟡 回滚机制</span>
+                    <span class="version-desc">快速回滚<br>蓝绿部署<br>故障恢复</span>
+                </div>
+                <div class="version-arrow">→</div>
+                <div class="version-box monitor">
+                    <span class="version-label">🟢 监控告警</span>
+                    <span class="version-desc">指标监控<br>异常检测<br>自动告警</span>
+                </div>
+                <div class="version-arrow">→</div>
+                <div class="version-box deploy">
+                    <span class="version-label">🔴 部署策略</span>
+                    <span class="version-desc">零停机<br>多环境<br>自动化</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">生产运维版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">版本管理·发布策略·回滚机制·监控运维·SRE</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 版本控制理论基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：版本管理——Agent 生产环境的稳定基石</a></li>
+                <li><a href="#chapter1">第 1 章 语义化版本规范</a></li>
+                <li><a href="#chapter2">第 2 章 Agent 版本元数据</a></li>
+                <li><a href="#chapter3">第 3 章 兼容性管理策略</a></li>
+                
+                <div class="toc-part part2">第二编 灰度发布策略</div>
+                <li><a href="#chapter4">第 4 章 金丝雀发布原理</a></li>
+                <li><a href="#chapter5">第 5 章 流量分割与路由</a></li>
+                <li><a href="#chapter6">第 6 章 渐进式 Rollout 实现</a></li>
+                <li><a href="#chapter7">第 7 章 A/B 测试与实验</a></li>
+                
+                <div class="toc-part part3">第三编 回滚机制设计</div>
+                <li><a href="#chapter8">第 8 章 快速回滚策略</a></li>
+                <li><a href="#chapter9">第 9 章 蓝绿部署实现</a></li>
+                <li><a href="#chapter10">第 10 章 故障检测与自动回滚</a></li>
+                <li><a href="#chapter11">第 11 章 数据一致性保障</a></li>
+                
+                <div class="toc-part part4">第四编 监控与质量保障</div>
+                <li><a href="#chapter12">第 12 章 关键指标监控</a></li>
+                <li><a href="#chapter13">第 13 章 异常检测算法</a></li>
+                <li><a href="#chapter14">第 14 章 告警系统设计</a></li>
+                <li><a href="#chapter15">第 15 章 质量门禁与验收</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 40px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 版本管理检查清单</a></li>
+                <li><a href="#appendix-b">附录 B 发布流程模板</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：版本管理——Agent 生产环境的稳定基石</h2>
+            <div class="content">
+                <p>随着 AI Agent 系统大规模应用于生产环境，一个核心挑战日益凸显：<strong>如何在快速迭代的同时保证生产环境的稳定性与可靠性？</strong>传统的"全量发布、一次性切换"模式风险高、回滚慢、影响范围大，一旦新版本出现问题，可能导致大面积服务中断、用户体验下降、业务损失严重。版本控制、灰度发布与回滚机制应运而生，通过语义化版本管理、渐进式发布、快速回滚，实现零停机、低风险、可控的 Agent 系统演进。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>Agent 生产环境版本管理通过语义化版本规范保证兼容性、通过灰度发布策略控制风险、通过快速回滚机制保障可用性、通过监控告警系统及时发现问题，四层协同，构建稳定、可靠、可持续演进的生产环境。</p>
+                </div>
+                
+                <h3 class="section-title">版本管理革命的兴起</h3>
+                
+                <p>从 Kubernetes 的滚动更新、Istio 的流量管理到 AWS CodeDeploy 的蓝绿部署，版本管理与发布策略已在云原生领域成熟应用。在 Agent 系统中，版本管理面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>模型版本</strong>：LLM 模型迭代、微调版本、Prompt 版本管理</li>
+                    <li><strong>工具版本</strong>：API 兼容性、工具链升级、依赖管理</li>
+                    <li><strong>工作流版本</strong>：流程变更、逻辑调整、配置演进</li>
+                    <li><strong>数据版本</strong>：训练数据、知识库、向量索引的版本控制</li>
+                </ul>
+                
+                <div class="quote">
+                    "版本管理不是简单的数字递增，而是一种风险控制哲学。从'大爆炸发布'到'渐进式 rollout'，从'被动救火'到'主动预防'，从'长时间停机'到'零停机发布'。这种转变让 Agent 系统演进从高风险赌博走向可控工程实践。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 版本控制理论基础</strong>：阐述语义化版本规范、Agent 版本元数据、兼容性管理策略等基础知识。</p>
+                
+                <p><strong>第二编 灰度发布策略</strong>：深入剖析金丝雀发布原理、流量分割与路由、渐进式 Rollout 实现、A/B 测试与实验等发布技术。</p>
+                
+                <p><strong>第三编 回滚机制设计</strong>：详细探讨快速回滚策略、蓝绿部署实现、故障检测与自动回滚、数据一致性保障等恢复机制。</p>
+                
+                <p><strong>第四编 监控与质量保障</strong>：涵盖关键指标监控、异常检测算法、告警系统设计、质量门禁与验收等质量保障体系。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从语义化版本到金丝雀发布，从蓝绿部署到自动回滚，从指标监控到质量门禁，Agent 版本管理体系正在重塑生产环境的运维范式。未来的 Agent 发布将更加自动化、更加安全、更加可控。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 50px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在生产环境运维前沿守护系统稳定性的 SRE 工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 4 章 -->
+        <div class="chapter" id="chapter4">
+            <h2 class="chapter-title">第 4 章 金丝雀发布原理</h2>
+            <div class="content">
+                <h3 class="section-title">4.1 金丝雀发布概述</h3>
+                
+                <p>金丝雀发布（Canary Deployment）是一种渐进式发布策略，通过将新版本先部署给少量用户（"金丝雀"），观察其表现，确认无问题后再逐步扩大发布范围，最终完成全量发布。名称源自煤矿工人用金丝雀检测有毒气体的历史实践——如果金丝雀出现异常，矿工立即撤离。</p>
+                
+                <div class="highlight">
+                    <p><strong>金丝雀发布核心价值：</strong>风险控制（小范围试错）、快速回滚（影响有限）、数据驱动（基于指标决策）、零停机（平滑过渡）。</p>
+                </div>
+                
+                <h3 class="section-title">4.2 发布流程设计</h3>
+                
+                <div class="section">
+                    <h4>标准金丝雀发布流程</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">金丝雀发布流程状态机</div>
+                        <pre>
+┌──────────────────────────────────────────────────────────────┐
+│                  金丝雀发布流程状态机                        │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  [准备阶段]                                                  │
+│      │                                                       │
+│      ▼                                                       │
+│  ┌─────────┐                                                │
+│  │ 构建镜像 │                                                │
+│  └────┬────┘                                                │
+│       │                                                      │
+│       ▼                                                      │
+│  ┌─────────┐                                                │
+│  │ 部署金丝雀│ ← 部署 1-5% 流量                              │
+│  └────┬────┘                                                │
+│       │                                                      │
+│       ▼                                                      │
+│  [观察阶段]                                                  │
+│       │                                                      │
+│       ▼                                                      │
+│  ┌─────────┐     指标正常      ┌─────────┐                 │
+│  │ 监控指标│ ────────────────→ │ 扩大比例│                 │
+│  └────┬────┘                   └────┬────┘                 │
+│       │                              │                       │
+│       │ 指标异常                     │                       │
+│       ▼                              │                       │
+│  ┌─────────┐                        │                       │
+│  │ 触发回滚│                        │                       │
+│  └────┬────┘                        │                       │
+│       │                              │                       │
+│       └──────────┬──────────────────┘                       │
+│                  │                                          │
+│                  ▼                                          │
+│         比例达到 100%？                                     │
+│                  │                                          │
+│           ┌──────┴──────┐                                  │
+│           │             │                                  │
+│          是            否                                  │
+│           │             │                                  │
+│           ▼             └──────────┐                       │
+│  ┌─────────┐                      │                       │
+│  │ 全量发布│ ←────────────────────┘                       │
+│  └────┬────┘                                                │
+│       │                                                      │
+│       ▼                                                      │
+│  ┌─────────┐                                                │
+│  │ 清理旧版│                                                │
+│  └────┬────┘                                                │
+│       │                                                      │
+│       ▼                                                      │
+│  [完成阶段]                                                  │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+
+状态转换规则：
+1. 准备 → 部署：构建完成，开始部署金丝雀实例
+2. 部署 → 观察：部署完成，开始监控指标
+3. 观察 → 扩大：指标正常（错误率<1%，延迟<200ms），扩大流量比例
+4. 观察 → 回滚：指标异常（错误率>5%，延迟>1s），触发回滚
+5. 扩大 → 观察：比例扩大后，继续监控
+6. 扩大 → 完成：比例达到 100%，发布完成
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.3 流量分割策略</h3>
+                
+                <div class="section">
+                    <h4>流量分割算法实现</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">基于一致性的流量分割实现</div>
+                        <pre>
+import hashlib
+from typing import Dict, List
+
+class CanaryTrafficSplitter:
+    """金丝雀流量分割器"""
+    
+    def __init__(self, canary_percentage: float = 0.05):
+        """
+        初始化流量分割器
+        
+        Args:
+            canary_percentage: 金丝雀流量比例 (0.0-1.0)
+        """
+        self.canary_percentage = canary_percentage
+    
+    def should_route_to_canary(
+        self, 
+        request_id: str,
+        user_id: str = None,
+        headers: Dict[str, str] = None
+    ) -> bool:
+        """
+        判断请求是否路由到金丝雀版本
+        
+        使用一致性哈希保证同一用户的请求总是路由到同一版本
+        
+        Args:
+            request_id: 请求 ID
+            user_id: 用户 ID（可选）
+            headers: 请求头（可选）
+        
+        Returns:
+            bool: True 表示路由到金丝雀版本
+        """
+        # 生成一致性哈希键
+        hash_key = self._generate_hash_key(request_id, user_id, headers)
+        
+        # 计算哈希值 (0-100)
+        hash_value = self._consistent_hash(hash_key) % 100
+        
+        # 判断是否落在金丝雀区间
+        threshold = int(self.canary_percentage * 100)
+        return hash_value < threshold
+    
+    def _generate_hash_key(
+        self, 
+        request_id: str,
+        user_id: str = None,
+        headers: Dict[str, str] = None
+    ) -> str:
+        """生成一致性哈希键"""
+        
+        # 优先使用 user_id 保证用户粘性
+        if user_id:
+            return f"user:{user_id}"
+        
+        # 其次使用特定 header（如设备 ID）
+        if headers and 'X-Device-ID' in headers:
+            return f"device:{headers['X-Device-ID']}"
+        
+        # 最后使用 request_id
+        return f"request:{request_id}"
+    
+    def _consistent_hash(self, key: str) -> int:
+        """计算一致性哈希值"""
+        hash_obj = hashlib.md5(key.encode('utf-8'))
+        hash_hex = hash_obj.hexdigest()
+        # 取前 8 位转换为整数
+        return int(hash_hex[:8], 16)
+    
+    def update_percentage(self, new_percentage: float):
+        """更新金丝雀流量比例"""
+        if not 0.0 <= new_percentage <= 1.0:
+            raise ValueError("Percentage must be between 0.0 and 1.0")
+        self.canary_percentage = new_percentage
+
+
+# 使用示例
+splitter = CanaryTrafficSplitter(canary_percentage=0.05)  # 5% 金丝雀流量
+
+# 模拟请求路由
+for i in range(1000):
+    request_id = f"req-{i}"
+    user_id = f"user-{i % 100}"  # 100 个用户
+    
+    if splitter.should_route_to_canary(request_id, user_id):
+        # 路由到金丝雀版本 (v2)
+        route_to = "canary-v2"
+    else:
+        # 路由到稳定版本 (v1)
+        route_to = "stable-v1"
+
+# 渐进式扩大流量
+stages = [0.05, 0.10, 0.25, 0.50, 0.75, 1.0]
+for percentage in stages:
+    splitter.update_percentage(percentage)
+    print(f"金丝雀流量比例：{percentage * 100:.0f}%")
+    # 在每个阶段观察指标，决定是否继续扩大
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.4 指标监控与决策</h3>
+                
+                <div class="section">
+                    <h4>关键监控指标</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>指标类别</th>
+                                <th>具体指标</th>
+                                <th>健康阈值</th>
+                                <th>告警阈值</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>错误率</strong></td>
+                                <td>HTTP 5xx 比例、异常抛出率</td>
+                                <td>< 1%</td>
+                                <td>> 5%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>延迟</strong></td>
+                                <td>P50、P95、P99 延迟</td>
+                                <td>P95 < 200ms</td>
+                                <td>P95 > 1s</td>
+                            </tr>
+                            <tr>
+                                <td><strong>吞吐量</strong></td>
+                                <td>QPS、并发数</td>
+                                <td>波动 < 10%</td>
+                                <td>下降 > 30%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>业务指标</strong></td>
+                                <td>转化率、成功率、满意度</td>
+                                <td>波动 < 5%</td>
+                                <td>下降 > 15%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>资源使用</strong></td>
+                                <td>CPU、内存、GPU 使用率</td>
+                                <td>< 70%</td>
+                                <td>> 90%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="section">
+                    <h4>自动化决策逻辑</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">基于指标的自动化决策</div>
+                        <pre>
+class CanaryDecisionEngine:
+    """金丝雀发布决策引擎"""
+    
+    def __init__(self):
+        self.thresholds = {
+            'error_rate': {'warning': 0.01, 'critical': 0.05},
+            'p95_latency': {'warning': 200, 'critical': 1000},  # ms
+            'throughput_drop': {'warning': 0.10, 'critical': 0.30},
+            'business_metric_drop': {'warning': 0.05, 'critical': 0.15}
+        }
+    
+    def evaluate_canary_health(
+        self, 
+        canary_metrics: Dict,
+        baseline_metrics: Dict
+    ) -> Dict:
+        """
+        评估金丝雀版本健康度
+        
+        Returns:
+            Dict: {
+                'status': 'healthy' | 'warning' | 'critical',
+                'score': 0-100,
+                'issues': List[str],
+                'recommendation': 'proceed' | 'hold' | 'rollback'
+            }
+        """
+        issues = []
+        score = 100
+        
+        # 1. 错误率检查
+        error_rate = canary_metrics.get('error_rate', 0)
+        if error_rate > self.thresholds['error_rate']['critical']:
+            issues.append(f"错误率过高：{error_rate:.2%}")
+            score -= 40
+        elif error_rate > self.thresholds['error_rate']['warning']:
+            issues.append(f"错误率警告：{error_rate:.2%}")
+            score -= 20
+        
+        # 2. 延迟检查
+        p95_latency = canary_metrics.get('p95_latency', 0)
+        if p95_latency > self.thresholds['p95_latency']['critical']:
+            issues.append(f"P95 延迟过高：{p95_latency:.0f}ms")
+            score -= 40
+        elif p95_latency > self.thresholds['p95_latency']['warning']:
+            issues.append(f"P95 延迟警告：{p95_latency:.0f}ms")
+            score -= 20
+        
+        # 3. 吞吐量检查
+        throughput_drop = self._calculate_drop(
+            canary_metrics.get('throughput', 0),
+            baseline_metrics.get('throughput', 0)
+        )
+        if throughput_drop > self.thresholds['throughput_drop']['critical']:
+            issues.append(f"吞吐量下降过多：{throughput_drop:.2%}")
+            score -= 30
+        elif throughput_drop > self.thresholds['throughput_drop']['warning']:
+            issues.append(f"吞吐量下降警告：{throughput_drop:.2%}")
+            score -= 15
+        
+        # 4. 业务指标检查
+        business_drop = self._calculate_drop(
+            canary_metrics.get('conversion_rate', 0),
+            baseline_metrics.get('conversion_rate', 0)
+        )
+        if business_drop > self.thresholds['business_metric_drop']['critical']:
+            issues.append(f"业务指标下降过多：{business_drop:.2%}")
+            score -= 40
+        elif business_drop > self.thresholds['business_metric_drop']['warning']:
+            issues.append(f"业务指标下降警告：{business_drop:.2%}")
+            score -= 20
+        
+        # 确定状态与建议
+        if score >= 80:
+            status = 'healthy'
+            recommendation = 'proceed'
+        elif score >= 60:
+            status = 'warning'
+            recommendation = 'hold'
+        else:
+            status = 'critical'
+            recommendation = 'rollback'
+        
+        return {
+            'status': status,
+            'score': max(0, score),
+            'issues': issues,
+            'recommendation': recommendation
+        }
+    
+    def _calculate_drop(self, current: float, baseline: float) -> float:
+        """计算下降比例"""
+        if baseline == 0:
+            return 0
+        return (baseline - current) / baseline
+
+
+# 使用示例
+decision_engine = CanaryDecisionEngine()
+
+canary_metrics = {
+    'error_rate': 0.02,
+    'p95_latency': 250,
+    'throughput': 950,
+    'conversion_rate': 0.048
+}
+
+baseline_metrics = {
+    'error_rate': 0.005,
+    'p95_latency': 180,
+    'throughput': 1000,
+    'conversion_rate': 0.050
+}
+
+result = decision_engine.evaluate_canary_health(
+    canary_metrics, 
+    baseline_metrics
+)
+
+print(f"健康度评分：{result['score']}")
+print(f"状态：{result['status']}")
+print(f"建议：{result['recommendation']}")
+print(f"问题列表：{result['issues']}")
+
+# 输出：
+# 健康度评分：65
+# 状态：warning
+# 建议：hold
+# 问题列表：['错误率警告：2.00%', 'P95 延迟警告：250ms']
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">4.5 本章小结</h3>
+                <p>本章深入探讨了金丝雀发布原理。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>金丝雀发布：渐进式发布策略，小范围试错、快速回滚、数据驱动</li>
+                    <li>发布流程：准备→部署→观察→扩大→完成的五阶段状态机</li>
+                    <li>流量分割：基于一致性哈希的流量分割算法，保证用户粘性</li>
+                    <li>指标监控：错误率、延迟、吞吐量、业务指标、资源使用五大类指标</li>
+                    <li>自动化决策：基于指标评分的健康度评估，自动决定继续/暂停/回滚</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 8 章 -->
+        <div class="chapter" id="chapter8">
+            <h2 class="chapter-title">第 8 章 快速回滚策略</h2>
+            <div class="content">
+                <h3 class="section-title">8.1 回滚机制概述</h3>
+                
+                <p>回滚（Rollback）是当新版本出现问题时，快速恢复到之前稳定版本的操作。快速回滚能力是生产环境稳定性的最后一道防线。优秀的回滚机制应具备：秒级响应、自动化执行、数据一致性保证、最小化影响范围等特性。</p>
+                
+                <div class="highlight">
+                    <p><strong>回滚核心目标：</strong>MTTR（平均恢复时间）< 5 分钟、零数据丢失、最小化用户影响、自动化执行。</p>
+                </div>
+                
+                <h3 class="section-title">8.2 回滚触发条件</h3>
+                
+                <div class="section">
+                    <h4>自动回滚触发规则</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>错误率阈值</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>HTTP 5xx 错误率 > 10% 持续 2 分钟</li>
+                                <li>异常抛出率 > 5% 持续 1 分钟</li>
+                                <li>关键业务失败率 > 15% 持续 3 分钟</li>
+                            </ul>
+                        </li>
+                        <li><strong>延迟阈值</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>P99 延迟 > 5 秒持续 2 分钟</li>
+                                <li>平均延迟 > 2 秒持续 3 分钟</li>
+                                <li>超时率 > 20% 持续 1 分钟</li>
+                            </ul>
+                        </li>
+                        <li><strong>资源阈值</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>CPU 使用率 > 95% 持续 5 分钟</li>
+                                <li>内存使用率 > 90% 持续 3 分钟</li>
+                                <li>磁盘空间 < 5% 持续 10 分钟</li>
+                            </ul>
+                        </li>
+                        <li><strong>业务指标</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>转化率下降 > 30% 持续 5 分钟</li>
+                                <li>订单量下降 > 50% 持续 3 分钟</li>
+                                <li>用户投诉激增 > 10 倍</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">8.3 回滚执行流程</h3>
+                
+                <div class="section">
+                    <h4>自动化回滚流程</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">自动化回滚执行引擎</div>
+                        <pre>
+class RollbackEngine:
+    """自动化回滚引擎"""
+    
+    def __init__(self):
+        self.state = 'idle'
+        self.rollback_history = []
+    
+    async def execute_rollback(
+        self,
+        trigger_reason: str,
+        target_version: str = None,
+        strategy: str = 'immediate'
+    ) -> Dict:
+        """
+        执行回滚操作
+        
+        Args:
+            trigger_reason: 触发原因
+            target_version: 目标版本（默认上一个稳定版本）
+            strategy: 回滚策略 ('immediate' | 'gradual')
+        
+        Returns:
+            Dict: 回滚结果
+        """
+        self.state = 'rolling_back'
+        start_time = time.time()
+        
+        try:
+            # 1. 确定回滚目标版本
+            if not target_version:
+                target_version = await self._get_last_stable_version()
+            
+            # 2. 通知相关系统
+            await self._notify_stakeholders(trigger_reason, target_version)
+            
+            # 3. 停止新版本流量
+            await self._cut_traffic('new_version')
+            
+            # 4. 执行回滚策略
+            if strategy == 'immediate':
+                result = await self._immediate_rollback(target_version)
+            else:  # gradual
+                result = await self._gradual_rollback(target_version)
+            
+            # 5. 验证回滚成功
+            success = await self._verify_rollback(target_version)
+            
+            # 6. 记录回滚历史
+            rollback_record = {
+                'timestamp': datetime.now(),
+                'trigger_reason': trigger_reason,
+                'from_version': result['from_version'],
+                'to_version': target_version,
+                'strategy': strategy,
+                'duration': time.time() - start_time,
+                'success': success
+            }
+            self.rollback_history.append(rollback_record)
+            
+            # 7. 发送回滚完成通知
+            await self._notify_completion(rollback_record)
+            
+            self.state = 'idle'
+            
+            return {
+                'success': success,
+                'duration': rollback_record['duration'],
+                'target_version': target_version
+            }
+            
+        except Exception as e:
+            self.state = 'failed'
+            await self._notify_failure(str(e))
+            raise
+    
+    async def _immediate_rollback(self, target_version: str) -> Dict:
+        """立即回滚（秒级完成）"""
+        
+        # 1. 切换负载均衡配置
+        await self._update_load_balancer(
+            target_version,
+            weight=100
+        )
+        
+        # 2. 更新服务注册中心
+        await self._update_service_registry(target_version)
+        
+        # 3. 等待配置生效
+        await asyncio.sleep(2)
+        
+        # 4. 验证新版本无流量
+        traffic = await self._check_traffic('new_version')
+        assert traffic == 0, "新版本仍有流量"
+        
+        return {
+            'from_version': 'new_version',
+            'to_version': target_version,
+            'method': 'immediate'
+        }
+    
+    async def _gradual_rollback(self, target_version: str) -> Dict:
+        """渐进式回滚（降低冲击）"""
+        
+        stages = [75, 50, 25, 0]  # 新版本流量比例
+        
+        for percentage in stages:
+            # 更新流量比例
+            await self._update_traffic_split(
+                old_version=target_version,
+                new_version='new_version',
+                new_percentage=percentage
+            )
+            
+            # 等待稳定
+            await asyncio.sleep(30)
+            
+            # 检查指标
+            metrics = await self._get_current_metrics()
+            if metrics['error_rate'] > 0.01:
+                # 指标异常，加速回滚
+                await self._immediate_rollback(target_version)
+                break
+        
+        return {
+            'from_version': 'new_version',
+            'to_version': target_version,
+            'method': 'gradual'
+        }
+    
+    async def _verify_rollback(self, target_version: str) -> bool:
+        """验证回滚成功"""
+        
+        # 1. 检查版本一致性
+        deployed_version = await self._get_deployed_version()
+        if deployed_version != target_version:
+            return False
+        
+        # 2. 检查健康指标
+        metrics = await self._get_current_metrics()
+        if metrics['error_rate'] > 0.01:
+            return False
+        if metrics['p95_latency'] > 500:
+            return False
+        
+        # 3. 运行健康检查
+        health_check = await self._run_health_checks()
+        if not health_check['passed']:
+            return False
+        
+        return True
+
+
+# 使用示例
+rollback_engine = RollbackEngine()
+
+# 自动触发回滚
+async def auto_rollback_trigger():
+    # 监控指标
+    metrics = await get_current_metrics()
+    
+    # 检查回滚条件
+    if metrics['error_rate'] > 0.10:  # 错误率>10%
+        await rollback_engine.execute_rollback(
+            trigger_reason=f"错误率过高：{metrics['error_rate']:.2%}",
+            strategy='immediate'
+        )
+    
+    elif metrics['p99_latency'] > 5000:  # P99 延迟>5 秒
+        await rollback_engine.execute_rollback(
+            trigger_reason=f"P99 延迟过高：{metrics['p99_latency']}ms",
+            strategy='immediate'
+        )
+
+# 手动触发回滚
+async def manual_rollback(version: str, reason: str):
+    await rollback_engine.execute_rollback(
+        trigger_reason=reason,
+        target_version=version,
+        strategy='gradual'
+    )
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">8.4 蓝绿部署实现</h3>
+                
+                <div class="section">
+                    <h4>蓝绿部署架构</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">蓝绿部署实现</div>
+                        <pre>
+class BlueGreenDeployment:
+    """蓝绿部署管理器"""
+    
+    def __init__(self):
+        self.environments = {
+            'blue': {'version': None, 'status': 'inactive', 'instances': []},
+            'green': {'version': None, 'status': 'inactive', 'instances': []}
+        }
+        self.active_env = None
+    
+    async def deploy_new_version(self, version: str, image: str) -> str:
+        """
+        部署新版本到空闲环境
+        
+        Returns:
+            str: 部署的环境名称 ('blue' 或 'green')
+        """
+        # 1. 确定空闲环境
+        target_env = 'blue' if self.active_env == 'green' else 'green'
+        
+        # 2. 部署新版本
+        print(f"部署版本 {version} 到 {target_env} 环境")
+        instances = await self._create_instances(
+            environment=target_env,
+            version=version,
+            image=image,
+            count=3
+        )
+        
+        # 3. 健康检查
+        health_passed = await self._health_check(instances)
+        if not health_passed:
+            await self._cleanup_instances(instances)
+            raise Exception("健康检查失败")
+        
+        # 4. 更新环境状态
+        self.environments[target_env].update({
+            'version': version,
+            'status': 'ready',
+            'instances': instances
+        })
+        
+        return target_env
+    
+    async def switch_traffic(self, target_env: str) -> None:
+        """
+        切换流量到目标环境
+        
+        Args:
+            target_env: 目标环境 ('blue' 或 'green')
+        """
+        if target_env not in ['blue', 'green']:
+            raise ValueError("Invalid environment")
+        
+        old_env = self.active_env
+        
+        # 1. 更新负载均衡
+        await self._update_load_balancer(
+            target_env=target_env,
+            weight=100
+        )
+        
+        # 2. 更新 DNS（如果需要）
+        await self._update_dns(target_env)
+        
+        # 3. 更新活动环境
+        self.active_env = target_env
+        self.environments[target_env]['status'] = 'active'
+        
+        if old_env:
+            self.environments[old_env]['status'] = 'inactive'
+        
+        print(f"流量已从 {old_env} 切换到 {target_env}")
+    
+    async def rollback(self) -> None:
+        """快速回滚到上一个环境"""
+        if not self.active_env:
+            raise Exception("No active deployment")
+        
+        # 确定上一个环境
+        previous_env = 'blue' if self.active_env == 'green' else 'green'
+        
+        if self.environments[previous_env]['status'] != 'ready':
+            raise Exception("Previous environment not available")
+        
+        # 切换流量
+        await self.switch_traffic(previous_env)
+        
+        print(f"回滚完成，当前活动环境：{previous_env}")
+    
+    async def cleanup_inactive(self) -> None:
+        """清理非活动环境释放资源"""
+        for env_name, env_data in self.environments.items():
+            if env_name != self.active_env and env_data['status'] == 'inactive':
+                await self._cleanup_instances(env_data['instances'])
+                env_data['instances'] = []
+                env_data['version'] = None
+                print(f"已清理 {env_name} 环境")
+
+
+# 使用示例
+bg_deployment = BlueGreenDeployment()
+
+# 初始部署
+async def initial_deployment():
+    # 部署到 blue 环境
+    await bg_deployment.deploy_new_version(
+        version='v1.0.0',
+        image='myapp:v1.0.0'
+    )
+    await bg_deployment.switch_traffic('blue')
+
+# 新版本发布
+async def release_new_version():
+    # 部署 v2.0.0 到 green 环境
+    target_env = await bg_deployment.deploy_new_version(
+        version='v2.0.0',
+        image='myapp:v2.0.0'
+    )
+    
+    # 验证 green 环境
+    metrics = await get_environment_metrics(target_env)
+    if metrics['error_rate'] < 0.01:
+        # 切换流量到 green
+        await bg_deployment.switch_traffic(target_env)
+        # 清理 blue 环境
+        await bg_deployment.cleanup_inactive()
+    else:
+        # 发现问题，清理 green 环境
+        await bg_deployment.cleanup_inactive()
+        raise Exception("新版本有问题，发布失败")
+
+# 快速回滚
+async def emergency_rollback():
+    await bg_deployment.rollback()
+    print("已回滚到上一个稳定版本")
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">8.5 本章小结</h3>
+                <p>本章深入探讨了快速回滚策略。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>回滚触发：错误率、延迟、资源、业务指标四大类阈值</li>
+                    <li>回滚流程：确定目标→通知→切流量→执行→验证→记录的六步流程</li>
+                    <li>回滚策略：立即回滚（秒级）与渐进式回滚（降低冲击）两种模式</li>
+                    <li>蓝绿部署：双环境并行、秒级切换、快速回滚的最佳实践</li>
+                    <li>MTTR 目标：平均恢复时间< 5 分钟，自动化执行，最小化人工干预</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 12 章 -->
+        <div class="chapter" id="chapter12">
+            <h2 class="chapter-title">第 12 章 关键指标监控</h2>
+            <div class="content">
+                <h3 class="section-title">12.1 监控体系概述</h3>
+                
+                <p>监控体系是版本管理与发布策略的眼睛，通过实时采集、分析、告警关键指标，为发布决策提供数据支撑，为故障恢复提供快速响应。完善的监控体系应覆盖基础设施、应用性能、业务指标、用户体验四个层面。</p>
+                
+                <div class="highlight">
+                    <p><strong>监控核心目标：</strong>全栈覆盖（基础设施→应用→业务）、实时性（秒级采集）、准确性（数据可信）、可操作性（指导决策）。</p>
+                </div>
+                
+                <h3 class="section-title">12.2 四层监控指标</h3>
+                
+                <div class="version-card">
+                    <div class="version-box-card version">
+                        <h3 class="version-box-title">🔵 基础设施层</h3>
+                        <p><strong>定义：</strong>监控服务器、网络、存储等底层资源。</p>
+                        <p style="margin-top: 12px;"><strong>关键指标：</strong></p>
+                        <ul style="margin-left: 17px; margin-top: 7px; font-size: 0.92em;">
+                            <li>CPU 使用率、内存使用率</li>
+                            <li>磁盘 I/O、网络带宽</li>
+                            <li>GPU 使用率（AI 场景）</li>
+                            <li>容器资源限制</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="version-box-card canary">
+                        <h3 class="version-box-title">🟣 应用性能层</h3>
+                        <p><strong>定义：</strong>监控应用运行状态与性能表现。</p>
+                        <p style="margin-top: 12px;"><strong>关键指标：</strong></p>
+                        <ul style="margin-left: 17px; margin-top: 7px; font-size: 0.92em;">
+                            <li>QPS、响应延迟（P50/P95/P99）</li>
+                            <li>错误率、超时率</li>
+                            <li>线程池、连接池状态</li>
+                            <li>GC 频率与耗时</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="version-box-card rollback">
+                        <h3 class="version-box-title">🟡 业务指标层</h3>
+                        <p><strong>定义：</strong>监控业务逻辑执行与关键业务结果。</p>
+                        <p style="margin-top: 12px;"><strong>关键指标：</strong></p>
+                        <ul style="margin-left: 17px; margin-top: 7px; font-size: 0.92em;">
+                            <li>请求成功率、业务转化率</li>
+                            <li>订单量、支付成功率</li>
+                            <li>Agent 任务完成率</li>
+                            <li>工具调用成功率</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="version-box-card monitor">
+                        <h3 class="version-box-title">🟢 用户体验层</h3>
+                        <p><strong>定义：</strong>监控终端用户感知的体验指标。</p>
+                        <p style="margin-top: 12px;"><strong>关键指标：</strong></p>
+                        <ul style="margin-left: 17px; margin-top: 7px; font-size: 0.92em;">
+                            <li>页面加载时间、首屏时间</li>
+                            <li>用户满意度评分</li>
+                            <li>用户投诉率</li>
+                            <li>会话时长、跳出率</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.3 监控数据采集</h3>
+                
+                <div class="section">
+                    <h4>Prometheus + Grafana 监控方案</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">Prometheus 指标采集配置</div>
+                        <pre>
+# prometheus.yml 配置文件
+global:
+  scrape_interval: 15s      # 采集间隔
+  evaluation_interval: 15s  # 规则评估间隔
+
+scrape_configs:
+  # 采集 Agent 服务指标
+  - job_name: 'agent-service'
+    static_configs:
+      - targets: ['agent-service:8080']
+    metrics_path: '/metrics'
+    
+  # 采集金丝雀版本指标
+  - job_name: 'canary-version'
+    static_configs:
+      - targets: ['agent-canary:8080']
+    metrics_path: '/metrics'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: version
+        replacement: 'canary'
+  
+  # 采集稳定版本指标
+  - job_name: 'stable-version'
+    static_configs:
+      - targets: ['agent-stable:8080']
+    metrics_path: '/metrics'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: version
+        replacement: 'stable'
+
+# 告警规则
+rule_files:
+  - 'alert_rules.yml'
+
+# Alertmanager 配置
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+                        </pre>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h4>自定义指标导出</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">Python 应用指标导出</div>
+                        <pre>
+from prometheus_client import Counter, Histogram, Gauge, start_http_server
+import time
+import random
+
+# 定义指标
+REQUEST_COUNT = Counter(
+    'agent_requests_total',
+    'Agent 总请求数',
+    ['version', 'endpoint', 'status']
+)
+
+REQUEST_LATENCY = Histogram(
+    'agent_request_latency_seconds',
+    'Agent 请求延迟',
+    ['version', 'endpoint'],
+    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+)
+
+ACTIVE_CONNECTIONS = Gauge(
+    'agent_active_connections',
+    '活跃连接数',
+    ['version']
+)
+
+ERROR_RATE = Gauge(
+    'agent_error_rate',
+    '错误率',
+    ['version']
+)
+
+CONVERSION_RATE = Gauge(
+    'agent_conversion_rate',
+    '业务转化率',
+    ['version']
+)
+
+class AgentMetricsCollector:
+    """Agent 指标采集器"""
+    
+    def __init__(self, version: str):
+        self.version = version
+        self.error_count = 0
+        self.total_count = 0
+        self.success_count = 0
+    
+    def record_request(
+        self, 
+        endpoint: str, 
+        latency: float, 
+        status: str
+    ):
+        """记录请求指标"""
+        self.total_count += 1
+        
+        # 记录请求计数
+        REQUEST_COUNT.labels(
+            version=self.version,
+            endpoint=endpoint,
+            status=status
+        ).inc()
+        
+        # 记录请求延迟
+        REQUEST_LATENCY.labels(
+            version=self.version,
+            endpoint=endpoint
+        ).observe(latency)
+        
+        # 更新错误率
+        if status.startswith('5'):
+            self.error_count += 1
+        
+        # 更新转化率（假设成功完成业务逻辑算转化）
+        if status == '200':
+            self.success_count += 1
+        
+        # 计算并更新错误率
+        if self.total_count > 0:
+            error_rate = self.error_count / self.total_count
+            ERROR_RATE.labels(version=self.version).set(error_rate)
+        
+        # 计算并更新转化率
+        if self.total_count > 0:
+            conversion_rate = self.success_count / self.total_count
+            CONVERSION_RATE.labels(version=self.version).set(conversion_rate)
+    
+    def update_active_connections(self, count: int):
+        """更新活跃连接数"""
+        ACTIVE_CONNECTIONS.labels(version=self.version).set(count)
+
+
+# 使用示例
+metrics_collector = AgentMetricsCollector(version='v2.0.0')
+
+# 启动指标服务器
+start_http_server(8000)
+
+# 模拟请求处理
+def handle_request(endpoint: str):
+    start_time = time.time()
+    
+    try:
+        # 模拟业务逻辑
+        time.sleep(random.uniform(0.05, 0.3))
+        
+        # 模拟随机错误
+        if random.random() < 0.02:
+            status = '500'
+        else:
+            status = '200'
+        
+    except Exception as e:
+        status = '500'
+    
+    latency = time.time() - start_time
+    
+    # 记录指标
+    metrics_collector.record_request(endpoint, latency, status)
+    
+    return status
+
+# 持续运行
+while True:
+    handle_request('/api/chat')
+    time.sleep(0.1)
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.4 告警规则设计</h3>
+                
+                <div class="section">
+                    <h4>Prometheus 告警规则</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">告警规则配置 (alert_rules.yml)</div>
+                        <pre>
+groups:
+  - name: agent_alerts
+    rules:
+      # 错误率告警
+      - alert: HighErrorRate
+        expr: rate(agent_requests_total{status=~"5.."}[5m]) 
+              / rate(agent_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "错误率过高 ({{ $labels.version }})"
+          description: "版本 {{ $labels.version }} 的错误率为 {{ $value | humanizePercentage }}"
+      
+      # P95 延迟告警
+      - alert: HighP95Latency
+        expr: histogram_quantile(0.95, 
+               rate(agent_request_latency_seconds_bucket[5m])) > 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 延迟过高 ({{ $labels.version }})"
+          description: "版本 {{ $labels.version }} 的 P95 延迟为 {{ $value | humanizeDuration }}"
+      
+      # 金丝雀版本异常
+      - alert: CanaryVersionAnomaly
+        expr: |
+          (
+            rate(agent_requests_total{version="canary",status=~"5.."}[5m]) 
+            / rate(agent_requests_total{version="canary"}[5m])
+          ) > 3 * (
+            rate(agent_requests_total{version="stable",status=~"5.."}[5m]) 
+            / rate(agent_requests_total{version="stable"}[5m])
+          )
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "金丝雀版本异常"
+          description: "金丝雀版本错误率是稳定版本的 3 倍以上"
+      
+      # 转化率下降告警
+      - alert: ConversionRateDrop
+        expr: |
+          (
+            agent_conversion_rate{version="stable"} 
+            - agent_conversion_rate{version="canary"}
+          ) / agent_conversion_rate{version="stable"} > 0.15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "转化率下降"
+          description: "金丝雀版本转化率比稳定版本下降超过 15%"
+      
+      # 活跃连接数过高
+      - alert: HighActiveConnections
+        expr: agent_active_connections > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "活跃连接数过高"
+          description: "版本 {{ $labels.version }} 的活跃连接数为 {{ $value }}"
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.5 本章小结</h3>
+                <p>本章深入探讨了关键指标监控。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>四层监控：基础设施层、应用性能层、业务指标层、用户体验层</li>
+                    <li>监控方案：Prometheus + Grafana 标准方案，支持自定义指标导出</li>
+                    <li>指标采集：请求计数、延迟直方图、错误率、转化率等核心指标</li>
+                    <li>告警规则：错误率、延迟、转化率、连接数等多维度告警</li>
+                    <li>金丝雀对比：金丝雀版本与稳定版本指标对比，及时发现异常</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：电商智能客服 Agent 灰度发布</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某大型电商平台需要升级智能客服 Agent，从 GPT-3.5 升级到 GPT-4</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>模型成本高：GPT-4 成本是 GPT-3.5 的 10 倍，不能全量切换</li>
+                                <li>效果不确定：新模型回答质量需要验证</li>
+                                <li>风险控制：避免新模型出现幻觉或错误回答影响用户体验</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>灰度发布方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>阶段一（5% 流量）</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>选择低风险场景：商品咨询、物流查询</li>
+                                <li>监控指标：回答准确率、用户满意度、成本</li>
+                                <li>观察期：3 天</li>
+                            </ul>
+                        </li>
+                        <li><strong>阶段二（20% 流量）</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>扩展到中等风险场景：退换货政策、优惠咨询</li>
+                                <li>A/B 测试：对比 GPT-3.5 与 GPT-4 的转化率</li>
+                                <li>观察期：5 天</li>
+                            </ul>
+                        </li>
+                        <li><strong>阶段三（50% 流量）</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>覆盖大部分场景，仅保留复杂投诉使用 GPT-3.5</li>
+                                <li>成本优化：简单问题用 GPT-3.5，复杂问题用 GPT-4</li>
+                                <li>观察期：7 天</li>
+                            </ul>
+                        </li>
+                        <li><strong>阶段四（100% 流量）</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>全量切换 GPT-4</li>
+                                <li>保留 GPT-3.5 作为回滚备份</li>
+                                <li>持续监控 14 天</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>准确率提升</strong>：从 82% 提升到 94%</li>
+                        <li><strong>用户满意度</strong>：从 3.8 分提升到 4.6 分（5 分制）</li>
+                        <li><strong>成本优化</strong>：通过智能路由，整体成本仅增加 40%（而非 10 倍）</li>
+                        <li><strong>零事故</strong>：灰度期间发现 2 次幻觉问题，及时回滚修复，未影响用户</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：金融风控 Agent 快速回滚</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某金融机构部署智能风控 Agent，实时识别欺诈交易</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>实时性要求高：需要在 100ms 内完成风险判断</li>
+                                <li>准确性要求高：误判会导致用户交易失败，漏判会导致资金损失</li>
+                                <li>合规要求：所有决策需要可追溯、可审计</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>回滚机制设计</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>蓝绿部署架构</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>Blue 环境：运行稳定版本 v1.2.0</li>
+                                <li>Green 环境：部署新版本 v1.3.0</li>
+                                <li>负载均衡：支持秒级切换</li>
+                            </ul>
+                        </li>
+                        <li><strong>自动回滚触发条件</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>错误率 > 5% 持续 1 分钟</li>
+                                <li>P99 延迟 > 200ms 持续 2 分钟</li>
+                                <li>欺诈识别准确率下降 > 10%</li>
+                                <li>误判率 > 3%</li>
+                            </ul>
+                        </li>
+                        <li><strong>回滚流程</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>自动检测：监控系统实时检测指标异常</li>
+                                <li>自动决策：决策引擎评估是否触发回滚</li>
+                                <li>自动执行：切换负载均衡到 Blue 环境</li>
+                                <li>自动通知：发送告警通知给运维团队</li>
+                                <li>MTTR 目标：< 3 分钟</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实战演练</h4>
+                    
+                    <p>某次新版本 v1.3.0 发布后 15 分钟，监控系统发现：</p>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li>误判率从 0.8% 飙升到 4.2%</li>
+                        <li>用户投诉量激增 10 倍</li>
+                    </ul>
+                    
+                    <p><strong>自动回滚过程：</strong></p>
+                    <ul style="margin-left: 20px;">
+                        <li>T+0s：监控系统检测到误判率超标</li>
+                        <li>T+30s：决策引擎确认触发回滚条件</li>
+                        <li>T+45s：自动切换负载均衡到 Blue 环境</li>
+                        <li>T+60s：验证 Blue 环境指标正常</li>
+                        <li>T+90s：发送回滚完成通知</li>
+                    </ul>
+                    
+                    <p><strong>总耗时：1.5 分钟，远低于 3 分钟目标</strong></p>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>MTTR</strong>：平均恢复时间 1.8 分钟（目标 3 分钟）</li>
+                        <li><strong>自动化率</strong>：95% 回滚自动触发，无需人工干预</li>
+                        <li><strong>用户影响</strong>：回滚期间用户无感知，零投诉</li>
+                        <li><strong>资金保护</strong>：避免因误判导致的潜在损失约 500 万元</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>版本管理最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>语义化版本</strong>：严格遵循 SemVer，清晰传达变更类型</li>
+                        <li><strong>版本元数据</strong>：记录模型版本、训练数据、配置参数等完整信息</li>
+                        <li><strong>兼容性测试</strong>：发布前进行充分的向后兼容性测试</li>
+                        <li><strong>版本文档</strong>：维护详细的版本变更日志与升级指南</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>灰度发布最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>小步快跑</strong>：从 1% 开始，逐步扩大，每步观察足够时间</li>
+                        <li><strong>指标驱动</strong>：基于数据决策，而非主观判断</li>
+                        <li><strong>用户分群</strong>：优先选择低风险用户群（内部员工、VIP 用户）</li>
+                        <li><strong>快速回滚</strong>：准备好回滚方案，发现问题立即回滚</li>
+                        <li><strong>A/B 测试</strong>：对比新旧版本，量化效果差异</li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>回滚机制最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>自动化优先</strong>：能自动回滚就不手动，减少人为失误</li>
+                        <li><strong>蓝绿部署</strong>：双环境并行，秒级切换</li>
+                        <li><strong>定期演练</strong>：每月进行回滚演练，验证流程有效性</li>
+                        <li><strong>数据一致性</strong>：确保回滚过程中数据不丢失、不损坏</li>
+                        <li><strong>事后复盘</strong>：每次回滚后进行根因分析，持续改进</li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 50px; border-left-color: var(--version-blue);">
+                    "从电商智能客服到金融风控，从灰度发布到快速回滚，从指标监控到自动决策，Agent 版本管理体系正在重塑生产环境的运维范式。未来的 Agent 发布将更加自动化、更加安全、更加可控。这不仅是技术的进步，更是运维文化的演进。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：电商智能客服 Agent 灰度发布，准确率从 82% 提升到 94%，零事故</li>
+                    <li>案例二：金融风控 Agent 快速回滚，MTTR 1.8 分钟，保护资金 500 万</li>
+                    <li>最佳实践：语义化版本、小步快跑、自动化回滚、定期演练、事后复盘</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">版本管理与发布</h3>
+                <ol style="margin-left: 20px; line-height: 2.06;">
+                    <li>Preston-Werner, T. (2025). "Semantic Versioning 3.0." semver.org</li>
+                    <li>AWS (2026). "CodeDeploy Blue-Green Deployment Guide." aws.amazon.com</li>
+                </ol>
+                
+                <h3 class="section-title">金丝雀发布</h3>
+                <ol style="margin-left: 20px; line-height: 2.06;" start="3">
+                    <li>Google (2026). "Canary Deployments with Kubernetes." cloud.google.com</li>
+                    <li>Istio (2025). "Traffic Management and Canary Releases." istio.io</li>
+                </ol>
+                
+                <h3 class="section-title">监控与告警</h3>
+                <ol style="margin-left: 20px; line-height: 2.06;" start="5">
+                    <li>Prometheus (2026). "Monitoring and Alerting Best Practices." prometheus.io</li>
+                    <li>Google SRE Team (2025). "Site Reliability Engineering: Monitoring Distributed Systems." O'Reilly.</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.4em; margin-bottom: 20px; color: var(--version-blue); font-weight: 800; font-family: 'Georgia', serif;">Agent 版本控制、灰度与回滚机制</p>
+                <p style="font-size: 1.13em; margin-bottom: 12px; font-style: italic;">从语义化版本到零停机发布的完整生产实践</p>
+                <p>© 2026 超级代码智能体 | 生产运维版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 28px; font-size: 0.95em; line-height: 1.9;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="version-spectrum" style="margin-top: 40px;">
+                    <div class="spectrum-item spectrum-version">🔵 版本控制</div>
+                    <div class="spectrum-item spectrum-canary">🟣 灰度发布</div>
+                    <div class="spectrum-item spectrum-rollback">🟡 回滚机制</div>
+                    <div class="spectrum-item spectrum-monitor">🟢 监控告警</div>
+                    <div class="spectrum-item spectrum-deploy">🔴 部署策略</div>
+                </div>
+                <p style="margin-top: 40px; font-size: 0.88em; color: var(--text-secondary);">
+                    谨以此书献给所有在生产环境运维前沿守护系统稳定性的 SRE 工程师们<br>
+                    从语义化版本到金丝雀发布，从蓝绿部署到自动回滚<br>
+                    版本管理——让 Agent 系统演进从高风险赌博走向可控工程实践
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Agent Version Control & Canary Deployment');
+        console.log('📚 From Semantic Versioning to Zero-Downtime Release (2024-2026)');
+        console.log('✨ Version + Canary + Rollback + Monitor + Deploy = Production Stability');
+    </script>
+</body>
+</html>

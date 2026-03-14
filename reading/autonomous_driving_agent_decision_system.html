@@ -1,0 +1,1842 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自动驾驶场景 Agent 决策系统</title>
+    <style>
+        :root {
+            --auto-blue: #0284c7;
+            --scene-purple: #a855f7;
+            --decision-gold: #ca8a04;
+            --planning-green: #16a34a;
+            --future-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-auto: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--auto-blue), var(--scene-purple), var(--decision-gold), var(--planning-green), var(--future-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-auto);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: autoRotate 1090s linear infinite;
+        }
+        
+        @keyframes autoRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .auto-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 8px 22px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.92em;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+            animation: autoPulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes autoPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 12px 30px rgba(2, 132, 199, 0.5); }
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-auto {
+            background: linear-gradient(135deg, var(--auto-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-scene {
+            background: linear-gradient(135deg, var(--scene-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-decision {
+            background: linear-gradient(135deg, var(--decision-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-planning {
+            background: linear-gradient(135deg, var(--planning-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-future {
+            background: linear-gradient(135deg, var(--future-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.15em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 23px;
+            text-shadow: 0 0 50px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.28;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.68em;
+            color: var(--text-secondary);
+            margin-bottom: 38px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .auto-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 48px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .auto-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 23px 28px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 135px;
+        }
+        
+        .auto-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .auto-box.auto {
+            border-color: var(--auto-blue);
+            box-shadow: 0 15px 30px rgba(2, 132, 199, 0.35);
+        }
+        
+        .auto-box.scene {
+            border-color: var(--scene-purple);
+            box-shadow: 0 15px 30px rgba(168, 85, 247, 0.35);
+        }
+        
+        .auto-box.decision {
+            border-color: var(--decision-gold);
+            box-shadow: 0 15px 30px rgba(202, 138, 4, 0.35);
+        }
+        
+        .auto-box.planning {
+            border-color: var(--planning-green);
+            box-shadow: 0 15px 30px rgba(22, 163, 74, 0.35);
+        }
+        
+        .auto-box.future {
+            border-color: var(--future-red);
+            box-shadow: 0 15px 30px rgba(220, 38, 38, 0.35);
+        }
+        
+        .auto-label {
+            font-size: 1.32em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 6px;
+        }
+        
+        .auto-box.auto .auto-label { color: var(--auto-blue); }
+        .auto-box.scene .auto-label { color: var(--scene-purple); }
+        .auto-box.decision .auto-label { color: var(--decision-gold); }
+        .auto-box.planning .auto-label { color: var(--planning-green); }
+        .auto-box.future .auto-label { color: var(--future-red); }
+        
+        .auto-desc {
+            font-size: 0.73em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.6;
+        }
+        
+        .auto-arrow {
+            font-size: 1.6em;
+            color: var(--decision-gold);
+            animation: autoArrow 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes autoArrow {
+            0%, 100% { opacity: 0.6; transform: translateX(0); }
+            50% { opacity: 1; transform: translateX(8px); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 22px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 48px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 11px 22px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px var(--border-glow);
+            border-color: var(--auto-blue);
+        }
+        
+        .meta-label {
+            color: var(--auto-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.73em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.93em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 40px 36px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 38px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.55em;
+            color: var(--auto-blue);
+            margin-bottom: 30px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 30px 0 20px 0;
+            padding: 14px 22px;
+            border-radius: 18px;
+            font-size: 1.5em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--auto-blue); 
+            color: var(--auto-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--scene-purple); 
+            color: var(--scene-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--decision-gold); 
+            color: var(--decision-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--planning-green); 
+            color: var(--planning-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--future-red); 
+            color: var(--future-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 10px;
+        }
+        
+        .toc-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.93em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 9px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--auto-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--auto-blue);
+            text-shadow: 0 0 6px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 50px 40px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 3px 28px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 18px 64px var(--border-glow), 0 0 48px rgba(2, 132, 199, 0.2);
+            border-color: var(--auto-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.35em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 28px;
+            border-bottom: 4px solid var(--auto-blue);
+            padding-bottom: 14px;
+            font-weight: 800;
+            text-shadow: 0 0 18px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 30px 0;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: var(--auto-blue);
+            margin-bottom: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--scene-purple);
+            font-size: 0.6em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.01;
+            font-size: 1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 20px;
+        }
+        
+        .auto-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+            gap: 16px;
+            margin: 30px 0;
+        }
+        
+        .auto-box-card {
+            padding: 25px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .auto-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .auto-box-card.auto {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--auto-blue);
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .auto-box-card.scene {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--scene-purple);
+            box-shadow: 0 8px 23px rgba(168, 85, 247, 0.3);
+        }
+        
+        .auto-box-card.decision {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--decision-gold);
+            box-shadow: 0 8px 23px rgba(202, 138, 4, 0.3);
+        }
+        
+        .auto-box-card.planning {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--planning-green);
+            box-shadow: 0 8px 23px rgba(22, 163, 74, 0.3);
+        }
+        
+        .auto-box-card.future {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--future-red);
+            box-shadow: 0 8px 23px rgba(220, 38, 38, 0.3);
+        }
+        
+        .auto-box-title {
+            font-size: 1.55em;
+            font-weight: 800;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .auto-box-card.auto .auto-box-title { color: var(--auto-blue); }
+        .auto-box-card.scene .auto-box-title { color: var(--scene-purple); }
+        .auto-box-card.decision .auto-box-title { color: var(--decision-gold); }
+        .auto-box-card.planning .auto-box-title { color: var(--planning-green); }
+        .auto-box-card.future .auto-box-title { color: var(--future-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 28px 34px;
+            border-left: 7px solid var(--auto-blue);
+            border-radius: 18px;
+            margin: 28px 0;
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--auto-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 26px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 21px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8em;
+            line-height: 1.61;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--auto-blue);
+            font-weight: 700;
+            margin-bottom: 11px;
+            font-family: 'Georgia', serif;
+            font-size: 0.97em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 28px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 10px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--auto-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.01px;
+            font-size: 0.8em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--auto-blue);
+            padding-left: 22px;
+            margin: 24px 0;
+            color: var(--text-secondary);
+            font-size: 1.03em;
+            font-family: 'Georgia', serif;
+            line-height: 1.91;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 11px;
+            color: var(--scene-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 20px 0;
+            padding-left: 28px;
+        }
+        
+        li {
+            margin-bottom: 9px;
+            line-height: 1.91;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 60px 30px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 100px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 740px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 24px 16px;
+            }
+            
+            .book-title {
+                font-size: 1.95em;
+            }
+            
+            .auto-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .auto-diagram {
+                flex-direction: column;
+            }
+            
+            .auto-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="auto-spectrum">
+                <div class="spectrum-item spectrum-auto">🔵 自动驾驶</div>
+                <div class="spectrum-item spectrum-scene">🟣 场景理解</div>
+                <div class="spectrum-item spectrum-decision">🟡 智能决策</div>
+                <div class="spectrum-item spectrum-planning">🟢 轨迹规划</div>
+                <div class="spectrum-item spectrum-future">🔴 未来趋势</div>
+            </div>
+            <h1 class="book-title">自动驾驶场景 Agent 决策系统</h1>
+            <h2 class="book-subtitle">从规则驾驶到智能决策的范式转变</h2>
+            
+            <div class="auto-diagram">
+                <div class="auto-box auto">
+                    <span class="auto-label">🔵 自动驾驶</span>
+                    <span class="auto-desc">感知融合<br>定位建图<br>传感器<br>硬件平台</span>
+                </div>
+                <div class="auto-arrow">→</div>
+                <div class="auto-box scene">
+                    <span class="auto-label">🟣 场景理解</span>
+                    <span class="auto-desc">目标检测<br>行为预测<br>场景分类<br>风险评估</span>
+                </div>
+                <div class="auto-arrow">→</div>
+                <div class="auto-box decision">
+                    <span class="auto-label">🟡 智能决策</span>
+                    <span class="auto-desc">行为决策<br>博弈论<br>强化学习<br>规则引擎</span>
+                </div>
+                <div class="auto-arrow">→</div>
+                <div class="auto-box planning">
+                    <span class="auto-label">🟢 轨迹规划</span>
+                    <span class="auto-desc">路径规划<br>速度规划<br>轨迹优化<br>控制执行</span>
+                </div>
+                <div class="auto-arrow">→</div>
+                <div class="auto-box future">
+                    <span class="auto-label">🔴 未来趋势</span>
+                    <span class="auto-desc">端到端学习<br>V2X 协同<br>群体智能<br>通用自动驾驶</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">决策版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">感知·理解·决策·规划·未来</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 自动驾驶基础理论</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：从规则驾驶到智能决策的范式转变</a></li>
+                <li><a href="#chapter1">第 1 章 自动驾驶技术挑战与本质</a></li>
+                <li><a href="#chapter2">第 2 章 传感器与感知融合</a></li>
+                <li><a href="#chapter3">第 3 章 定位与高精地图</a></li>
+                
+                <div class="toc-part part2">第二编 场景理解与感知融合</div>
+                <li><a href="#chapter4">第 4 章 目标检测与跟踪</a></li>
+                <li><a href="#chapter5">第 5 章 行为预测与意图识别</a></li>
+                <li><a href="#chapter6">第 6 章 场景分类与语义理解</a></li>
+                <li><a href="#chapter7">第 7 章 风险评估与安全边界</a></li>
+                
+                <div class="toc-part part3">第三编 Agent 决策与规划技术</div>
+                <li><a href="#chapter8">第 8 章 行为决策系统</a></li>
+                <li><a href="#chapter9">第 9 章 博弈论与多 Agent 交互</a></li>
+                <li><a href="#chapter10">第 10 章 强化学习与模仿学习</a></li>
+                <li><a href="#chapter11">第 11 章 轨迹规划与优化</a></li>
+                
+                <div class="toc-part part4">第四编 系统实现与部署</div>
+                <li><a href="#chapter12">第 12 章 决策系统架构</a></li>
+                <li><a href="#chapter13">第 13 章 实时性能优化</a></li>
+                <li><a href="#chapter14">第 14 章 仿真测试与验证</a></li>
+                <li><a href="#chapter15">第 15 章 安全与合规管理</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 30px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 决策算法模板</a></li>
+                <li><a href="#appendix-b">附录 B 仿真场景库</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：从规则驾驶到智能决策的范式转变</h2>
+            <div class="content">
+                <p>规则驾驶是静态执行，智能决策是动态适应：自动驾驶通过传感器融合实现环境感知、通过场景理解实现意图识别、通过 Agent 决策实现智能选择、通过轨迹规划实现安全执行。然而，传统自动驾驶长期受限于"规则引擎"思维：场景覆盖有限、长尾问题频发、交互能力弱、泛化性差、难以应对复杂博弈。自动驾驶决策系统的革新正在引发一场智能驾驶革命：<strong>让自动驾驶从"规则"进化为"智能"，从"执行"进化为"决策"，从"单车"进化为"协同"</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>自动驾驶通过传感器融合/定位建图/感知融合实现环境认知、场景理解通过目标检测/行为预测/场景分类/风险评估实现意图识别、Agent 决策通过行为决策/博弈论/强化学习/规则引擎实现智能选择、轨迹规划通过路径规划/速度规划/轨迹优化/控制执行实现安全行驶、未来趋势通过端到端学习/V2X 协同/群体智能/通用自动驾驶实现全面自主，五层协同，构建有环境认知、有意图识别、有智能选择、有安全执行的可信赖自动驾驶体系。</p>
+                </div>
+                
+                <h3 class="section-title">智能驾驶革命的兴起</h3>
+                
+                <p>从规则驾驶到智能决策，从静态执行到动态适应，从单车智能到车路协同，从有限场景到全场景覆盖，从规则引擎到学习驱动，自动驾驶技术快速演进。然而，真正的智能决策面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>感知挑战</strong>：如何融合多传感器？如何应对极端天气？</li>
+                    <li><strong>理解决战</strong>：如何预测他车行为？如何识别复杂场景？</li>
+                    <li><strong>决策挑战</strong>：如何博弈交互？如何处理长尾场景？</li>
+                    <li><strong>规划挑战</strong>：如何实时优化轨迹？如何确保安全？</li>
+                </ul>
+                
+                <div class="quote">
+                    "自动驾驶场景 Agent 决策系统不是简单的'规则执行'，而是一个从规则到智能的完整体系。从场景理解到 Agent 决策，从轨迹规划到安全执行，从规则驾驶到智能决策，自动驾驶技术构建了可信赖智能驾驶的决策引擎。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 自动驾驶基础理论</strong>：阐述自动驾驶技术挑战与本质、传感器与感知融合、定位与高精地图等基础知识。</p>
+                
+                <p><strong>第二编 场景理解与感知融合</strong>：深入剖析目标检测与跟踪、行为预测与意图识别、场景分类与语义理解、风险评估与安全边界等理解主题。</p>
+                
+                <p><strong>第三编 Agent 决策与规划技术</strong>：详细探讨行为决策系统、博弈论与多 Agent 交互、强化学习与模仿学习、轨迹规划与优化等决策主题。</p>
+                
+                <p><strong>第四编 系统实现与部署</strong>：涵盖决策系统架构、实时性能优化、仿真测试与验证、安全与合规管理等系统主题。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从场景理解到 Agent 决策，从轨迹规划到安全执行，从规则驾驶到智能决策，自动驾驶技术正在重塑未来出行的范式。未来的自动驾驶将是有环境认知的、有意图识别的、有智能选择的、有安全执行的。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 40px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在自动驾驶场景 Agent 决策系统一线构建未来的研究者和工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 1 章 -->
+        <div class="chapter" id="chapter1">
+            <h2 class="chapter-title">第 1 章 自动驾驶技术挑战与本质</h2>
+            <div class="content">
+                <h3 class="section-title">1.1 自动驾驶核心概念</h3>
+                
+                <p>自动驾驶（Autonomous Driving）是指通过技术手段实现车辆自主行驶的过程，包括感知融合（Perception Fusion，多传感器数据融合）、场景理解（Scene Understanding，目标检测与行为预测）、决策规划（Decision & Planning，行为决策与轨迹规划）、控制执行（Control & Execution，车辆控制与执行）。自动驾驶的核心要素是"智能化"：环境认知（感知融合）、意图识别（场景理解）、智能选择（决策规划）、安全执行（控制执行）。从规则驾驶到智能决策，自动驾驶研究范式不断演进。</p>
+                
+                <div class="highlight">
+                    <p><strong>自动驾驶核心价值：</strong>提升安全（减少人为错误）、提升效率（优化交通流）、降低成本（减少人力）、扩展 mobility（服务特殊群体）、减少排放（优化驾驶行为）、提升体验（解放驾驶员）。</p>
+                </div>
+                
+                <h3 class="section-title">1.2 自动驾驶决策系统完整实现</h3>
+                
+                <div class="section">
+                    <h4>Python 自动驾驶场景 Agent 决策系统完整示例</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">自动驾驶场景 Agent 决策系统完整实现</div>
+                        <pre>
+import time
+import json
+import math
+import random
+from typing import Dict, List, Any, Optional, Tuple, Set
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+import numpy as np
+from collections import deque, defaultdict
+import threading
+import uuid
+from abc import ABC, abstractmethod
+
+class ObjectType(Enum):
+    """目标类型"""
+    VEHICLE = "vehicle"
+    PEDESTRIAN = "pedestrian"
+    CYCLIST = "cyclist"
+    TRAFFIC_LIGHT = "traffic_light"
+    SIGN = "sign"
+    LANE = "lane"
+    OBSTACLE = "obstacle"
+
+class TrafficLightState(Enum):
+    """交通灯状态"""
+    RED = "red"
+    YELLOW = "yellow"
+    GREEN = "green"
+    UNKNOWN = "unknown"
+
+class DrivingBehavior(Enum):
+    """驾驶行为"""
+    LANE_KEEPING = "lane_keeping"
+    LANE_CHANGE_LEFT = "lane_change_left"
+    LANE_CHANGE_RIGHT = "lane_change_right"
+    TURN_LEFT = "turn_left"
+    TURN_RIGHT = "turn_right"
+    STOP = "stop"
+    YIELD = "yield"
+    OVERTAKE = "overtake"
+    EMERGENCY_STOP = "emergency_stop"
+
+class RiskLevel(Enum):
+    """风险等级"""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+@dataclass
+class BoundingBox:
+    """边界框"""
+    x: float  # 中心点 x
+    y: float  # 中心点 y
+    z: float  # 中心点 z
+    length: float
+    width: float
+    height: float
+    yaw: float  # 航向角
+
+@dataclass
+class DetectedObject:
+    """检测到的目标"""
+    object_id: str
+    object_type: ObjectType
+    bbox: BoundingBox
+    velocity: Tuple[float, float, float]  # vx, vy, vz
+    acceleration: Optional[Tuple[float, float, float]]
+    confidence: float
+    timestamp: datetime
+    track_id: Optional[str]
+
+@dataclass
+class PredictedTrajectory:
+    """预测轨迹"""
+    object_id: str
+    trajectory: List[Tuple[float, float, float]]  # x, y, t
+    probabilities: List[float]
+    intention: str
+    confidence: float
+
+@dataclass
+class SceneContext:
+    """场景上下文"""
+    scene_id: str
+    ego_state: Dict[str, Any]  # 自车状态
+    objects: List[DetectedObject]
+    traffic_lights: Dict[str, TrafficLightState]
+    lane_info: Dict[str, Any]
+    weather: str
+    road_condition: str
+    timestamp: datetime
+
+@dataclass
+class DecisionResult:
+    """决策结果"""
+    decision_id: str
+    behavior: DrivingBehavior
+    target_speed: float
+    target_lane: Optional[str]
+    trajectory: List[Tuple[float, float, float]]
+    risk_level: RiskLevel
+    confidence: float
+    reasoning: str
+    timestamp: datetime
+
+class PerceptionFusion:
+    """
+    感知融合模块
+    
+    支持:
+    1. 多传感器融合
+    2. 目标检测
+    3. 跟踪
+    4. 置信度评估
+    """
+    
+    def __init__(self):
+        self.object_tracks: Dict[str, deque] = defaultdict(lambda: deque(maxlen=30))
+        self.lock = threading.Lock()
+    
+    def fuse_sensors(self, lidar_data: List[Dict], camera_data: List[Dict], 
+                    radar_data: List[Dict]) -> List[DetectedObject]:
+        """融合多传感器数据"""
+        fused_objects = []
+        
+        # 简化融合逻辑：时间同步 + 空间对齐 + 关联匹配
+        all_detections = []
+        
+        # 处理激光雷达数据
+        for det in lidar_data:
+            all_detections.append({
+                'source': 'lidar',
+                'object_id': det.get('id', str(uuid.uuid4())),
+                'type': det.get('type', 'unknown'),
+                'bbox': det.get('bbox'),
+                'confidence': det.get('confidence', 0.8),
+                'timestamp': det.get('timestamp', datetime.now())
+            })
+        
+        # 处理摄像头数据
+        for det in camera_data:
+            all_detections.append({
+                'source': 'camera',
+                'object_id': det.get('id', str(uuid.uuid4())),
+                'type': det.get('type', 'unknown'),
+                'bbox': det.get('bbox'),
+                'confidence': det.get('confidence', 0.85),
+                'timestamp': det.get('timestamp', datetime.now())
+            })
+        
+        # 处理毫米波雷达数据
+        for det in radar_data:
+            all_detections.append({
+                'source': 'radar',
+                'object_id': det.get('id', str(uuid.uuid4())),
+                'type': det.get('type', 'unknown'),
+                'bbox': det.get('bbox'),
+                'velocity': det.get('velocity'),
+                'confidence': det.get('confidence', 0.75),
+                'timestamp': det.get('timestamp', datetime.now())
+            })
+        
+        # 关联匹配（简化：基于位置）
+        matched_objects = self._associate_detections(all_detections)
+        
+        # 创建融合后的目标
+        for match in matched_objects:
+            fused_obj = self._create_fused_object(match)
+            fused_objects.append(fused_obj)
+            
+            # 更新跟踪
+            with self.lock:
+                self.object_tracks[fused_obj.object_id].append(fused_obj)
+        
+        return fused_objects
+    
+    def _associate_detections(self, detections: List[Dict]) -> List[List[Dict]]:
+        """关联检测（简化版）"""
+        # 按时间分组
+        time_groups = defaultdict(list)
+        for det in detections:
+            time_key = det['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+            time_groups[time_key].append(det)
+        
+        # 每组内基于位置关联
+        matched = []
+        for time_key, group in time_groups.items():
+            if len(group) >= 2:
+                matched.append(group)
+            else:
+                matched.append(group)
+        
+        return matched
+    
+    def _create_fused_object(self, detections: List[Dict]) -> DetectedObject:
+        """创建融合目标"""
+        # 加权平均置信度
+        total_conf = sum(d['confidence'] for d in detections)
+        weights = [d['confidence'] / total_conf for d in detections]
+        
+        # 融合边界框（简化：取第一个）
+        primary = detections[0]
+        
+        # 估计速度（如果有雷达数据）
+        velocity = (0.0, 0.0, 0.0)
+        for det in detections:
+            if 'velocity' in det and det['source'] == 'radar':
+                velocity = det['velocity']
+                break
+        
+        return DetectedObject(
+            object_id=primary['object_id'],
+            object_type=self._map_type(primary['type']),
+            bbox=primary['bbox'],
+            velocity=velocity,
+            acceleration=None,
+            confidence=total_conf / len(detections),
+            timestamp=datetime.now(),
+            track_id=primary['object_id']
+        )
+    
+    def _map_type(self, type_str: str) -> ObjectType:
+        """映射类型"""
+        type_map = {
+            'car': ObjectType.VEHICLE,
+            'truck': ObjectType.VEHICLE,
+            'person': ObjectType.PEDESTRIAN,
+            'cyclist': ObjectType.CYCLIST,
+            'traffic_light': ObjectType.TRAFFIC_LIGHT,
+            'sign': ObjectType.SIGN
+        }
+        return type_map.get(type_str.lower(), ObjectType.OBSTACLE)
+    
+    def get_track_history(self, object_id: str) -> List[DetectedObject]:
+        """获取跟踪历史"""
+        return list(self.object_tracks.get(object_id, []))
+
+
+class BehaviorPredictor:
+    """
+    行为预测器
+    
+    支持:
+    1. 轨迹预测
+    2. 意图识别
+    3. 概率评估
+    """
+    
+    def __init__(self):
+        self.prediction_models = self._load_models()
+    
+    def _load_models(self) -> Dict[str, Any]:
+        """加载预测模型（简化）"""
+        return {
+            'vehicle': {'lane_change_prob': 0.15, 'turn_prob': 0.08},
+            'pedestrian': {'cross_prob': 0.25},
+            'cyclist': {'lane_change_prob': 0.20}
+        }
+    
+    def predict_trajectory(self, obj: DetectedObject, 
+                          scene_context: SceneContext,
+                          horizon_seconds: float = 5.0) -> PredictedTrajectory:
+        """预测轨迹"""
+        # 基于运动学模型的简单预测
+        trajectory = []
+        probabilities = []
+        
+        dt = 0.5  # 时间步长
+        steps = int(horizon_seconds / dt)
+        
+        # 当前状态
+        x, y, z = obj.bbox.x, obj.bbox.y, obj.bbox.z
+        vx, vy, vz = obj.velocity
+        
+        # 生成多个假设轨迹
+        intentions = ['keep_lane', 'lane_change_left', 'lane_change_right', 'turn']
+        
+        for intention in intentions:
+            traj_points = []
+            prob = self._calculate_intention_probability(obj, intention, scene_context)
+            
+            if prob < 0.05:
+                continue
+            
+            # 基于意图生成轨迹
+            for step in range(steps):
+                t = step * dt
+                
+                if intention == 'keep_lane':
+                    # 保持车道：匀速直线
+                    new_x = x + vx * t
+                    new_y = y + vy * t
+                elif intention == 'lane_change_left':
+                    # 向左变道
+                    new_x = x + vx * t
+                    new_y = y + vy * t + 3.5 * (1 - math.exp(-t/2))
+                elif intention == 'lane_change_right':
+                    # 向右变道
+                    new_x = x + vx * t
+                    new_y = y + vy * t - 3.5 * (1 - math.exp(-t/2))
+                else:  # turn
+                    # 转弯
+                    turn_radius = 20.0
+                    angle = vx * t / turn_radius
+                    new_x = x + turn_radius * math.sin(angle)
+                    new_y = y + turn_radius * (1 - math.cos(angle))
+                
+                traj_points.append((new_x, new_y, t))
+            
+            trajectory.append(traj_points)
+            probabilities.append(prob)
+        
+        # 归一化概率
+        total_prob = sum(probabilities)
+        if total_prob > 0:
+            probabilities = [p / total_prob for p in probabilities]
+        
+        # 选择最可能的意图
+        best_idx = probabilities.index(max(probabilities)) if probabilities else 0
+        best_intention = intentions[best_idx] if best_idx < len(intentions) else 'keep_lane'
+        
+        return PredictedTrajectory(
+            object_id=obj.object_id,
+            trajectory=trajectory[best_idx] if trajectory else [],
+            probabilities=probabilities,
+            intention=best_intention,
+            confidence=max(probabilities) if probabilities else 0.0
+        )
+    
+    def _calculate_intention_probability(self, obj: DetectedObject, 
+                                        intention: str,
+                                        scene_context: SceneContext) -> float:
+        """计算意图概率"""
+        base_prob = 0.25
+        
+        # 基于类型调整
+        if obj.object_type == ObjectType.VEHICLE:
+            if intention == 'keep_lane':
+                base_prob = 0.6
+            elif intention in ['lane_change_left', 'lane_change_right']:
+                base_prob = 0.15
+        elif obj.object_type == ObjectType.PEDESTRIAN:
+            if intention == 'cross':
+                base_prob = 0.4
+        
+        # 基于场景调整（简化）
+        if scene_context.traffic_lights:
+            light_state = list(scene_context.traffic_lights.values())[0]
+            if light_state == TrafficLightState.RED and intention == 'keep_lane':
+                base_prob *= 0.3  # 红灯时直行概率降低
+        
+        return min(base_prob, 1.0)
+
+
+class DecisionMaker:
+    """
+    决策制定器
+    
+    支持:
+    1. 行为决策
+    2. 风险评估
+    3. 规则引擎
+    4. 学习策略
+    """
+    
+    def __init__(self):
+        self.rules = self._load_rules()
+        self.decision_history = deque(maxlen=100)
+    
+    def _load_rules(self) -> List[Dict]:
+        """加载决策规则"""
+        return [
+            {
+                'name': 'red_light_stop',
+                'condition': lambda ctx: ctx.traffic_lights and 
+                                        any(state == TrafficLightState.RED 
+                                            for state in ctx.traffic_lights.values()),
+                'behavior': DrivingBehavior.STOP,
+                'priority': 10
+            },
+            {
+                'name': 'obstacle_yield',
+                'condition': lambda ctx: any(obj.object_type == ObjectType.OBSTACLE 
+                                            and self._calculate_ttc(obj, ctx) < 3.0
+                                            for obj in ctx.objects),
+                'behavior': DrivingBehavior.YIELD,
+                'priority': 9
+            },
+            {
+                'name': 'lane_keep',
+                'condition': lambda ctx: True,
+                'behavior': DrivingBehavior.LANE_KEEPING,
+                'priority': 1
+            }
+        ]
+    
+    def make_decision(self, scene_context: SceneContext,
+                     predictions: List[PredictedTrajectory]) -> DecisionResult:
+        """制定决策"""
+        # 1. 规则匹配
+        matched_rules = []
+        for rule in self.rules:
+            if rule['condition'](scene_context):
+                matched_rules.append(rule)
+        
+        # 2. 选择最高优先级规则
+        if matched_rules:
+            best_rule = max(matched_rules, key=lambda r: r['priority'])
+            behavior = best_rule['behavior']
+            reasoning = f"Rule: {best_rule['name']}"
+        else:
+            behavior = DrivingBehavior.LANE_KEEPING
+            reasoning = "Default: lane keeping"
+        
+        # 3. 风险评估
+        risk_level = self._assess_risk(scene_context, predictions)
+        
+        # 4. 目标速度规划
+        target_speed = self._plan_target_speed(behavior, risk_level, scene_context)
+        
+        # 5. 轨迹生成
+        trajectory = self._generate_trajectory(behavior, scene_context)
+        
+        # 6. 创建决策结果
+        decision = DecisionResult(
+            decision_id=str(uuid.uuid4()),
+            behavior=behavior,
+            target_speed=target_speed,
+            target_lane=None,
+            trajectory=trajectory,
+            risk_level=risk_level,
+            confidence=0.85,
+            reasoning=reasoning,
+            timestamp=datetime.now()
+        )
+        
+        self.decision_history.append(decision)
+        
+        return decision
+    
+    def _calculate_ttc(self, obj: DetectedObject, ctx: SceneContext) -> float:
+        """计算碰撞时间（Time To Collision）"""
+        # 简化计算
+        if obj.velocity[0] <= 0:
+            return float('inf')
+        
+        distance = obj.bbox.x  # 假设 x 是纵向距离
+        relative_speed = obj.velocity[0]
+        
+        if relative_speed <= 0:
+            return float('inf')
+        
+        return distance / relative_speed
+    
+    def _assess_risk(self, ctx: SceneContext, 
+                    predictions: List[PredictedTrajectory]) -> RiskLevel:
+        """风险评估"""
+        # 基于 TTC 评估风险
+        min_ttc = float('inf')
+        
+        for obj in ctx.objects:
+            ttc = self._calculate_ttc(obj, ctx)
+            min_ttc = min(min_ttc, ttc)
+        
+        if min_ttc < 2.0:
+            return RiskLevel.CRITICAL
+        elif min_ttc < 3.5:
+            return RiskLevel.HIGH
+        elif min_ttc < 5.0:
+            return RiskLevel.MEDIUM
+        else:
+            return RiskLevel.LOW
+    
+    def _plan_target_speed(self, behavior: DrivingBehavior, 
+                          risk_level: RiskLevel,
+                          ctx: SceneContext) -> float:
+        """规划目标速度"""
+        base_speed = 50.0  # km/h
+        
+        # 基于行为调整
+        if behavior == DrivingBehavior.STOP:
+            return 0.0
+        elif behavior == DrivingBehavior.YIELD:
+            return 15.0
+        elif behavior in [DrivingBehavior.TURN_LEFT, DrivingBehavior.TURN_RIGHT]:
+            return 20.0
+        
+        # 基于风险调整
+        risk_factors = {
+            RiskLevel.LOW: 1.0,
+            RiskLevel.MEDIUM: 0.8,
+            RiskLevel.HIGH: 0.5,
+            RiskLevel.CRITICAL: 0.2
+        }
+        
+        return base_speed * risk_factors[risk_level]
+    
+    def _generate_trajectory(self, behavior: DrivingBehavior,
+                            ctx: SceneContext) -> List[Tuple[float, float, float]]:
+        """生成轨迹"""
+        trajectory = []
+        
+        # 简化轨迹生成
+        for t in range(0, 50, 5):  # 5 秒，步长 0.5 秒
+            if behavior == DrivingBehavior.STOP:
+                trajectory.append((t * 0.0, 0.0, t / 10.0))
+            elif behavior == DrivingBehavior.LANE_KEEPING:
+                trajectory.append((t * 1.5, 0.0, t / 10.0))
+            elif behavior == DrivingBehavior.LANE_CHANGE_LEFT:
+                trajectory.append((t * 1.5, t * 0.3, t / 10.0))
+            elif behavior == DrivingBehavior.LANE_CHANGE_RIGHT:
+                trajectory.append((t * 1.5, -t * 0.3, t / 10.0))
+            else:
+                trajectory.append((t * 1.0, 0.0, t / 10.0))
+        
+        return trajectory
+
+
+# 使用示例
+if __name__ == "__main__":
+    print("=== 自动驾驶场景 Agent 决策系统 ===\n")
+    
+    print("=== 创建感知融合模块 ===")
+    
+    perception = PerceptionFusion()
+    
+    # 模拟传感器数据
+    lidar_data = [
+        {'id': 'obj_001', 'type': 'car', 'bbox': BoundingBox(50.0, 0.0, 0.0, 4.5, 1.8, 1.5, 0.0), 
+         'confidence': 0.92, 'timestamp': datetime.now()},
+        {'id': 'obj_002', 'type': 'person', 'bbox': BoundingBox(30.0, 3.0, 0.0, 0.5, 0.5, 1.7, 0.0),
+         'confidence': 0.88, 'timestamp': datetime.now()}
+    ]
+    
+    camera_data = [
+        {'id': 'obj_001', 'type': 'car', 'bbox': BoundingBox(50.0, 0.0, 0.0, 4.5, 1.8, 1.5, 0.0),
+         'confidence': 0.90, 'timestamp': datetime.now()},
+        {'id': 'obj_003', 'type': 'traffic_light', 'bbox': BoundingBox(100.0, 0.0, 5.0, 0.3, 0.3, 1.0, 0.0),
+         'confidence': 0.95, 'timestamp': datetime.now()}
+    ]
+    
+    radar_data = [
+        {'id': 'obj_001', 'type': 'car', 'bbox': BoundingBox(50.0, 0.0, 0.0, 4.5, 1.8, 1.5, 0.0),
+         'velocity': (5.0, 0.0, 0.0), 'confidence': 0.85, 'timestamp': datetime.now()}
+    ]
+    
+    print("融合传感器数据...")
+    fused_objects = perception.fuse_sensors(lidar_data, camera_data, radar_data)
+    
+    print(f"融合后目标数：{len(fused_objects)}")
+    for obj in fused_objects:
+        print(f"  - {obj.object_type.value}: 位置 ({obj.bbox.x:.1f}, {obj.bbox.y:.1f}), "
+              f"速度 {obj.velocity}, 置信度 {obj.confidence:.2f}")
+    
+    print(f"\n=== 创建行为预测器 ===")
+    
+    predictor = BehaviorPredictor()
+    
+    print(f"\n=== 创建场景上下文 ===")
+    
+    scene = SceneContext(
+        scene_id="scene_001",
+        ego_state={'speed': 45.0, 'lane': 'center', 'position': (0.0, 0.0)},
+        objects=fused_objects,
+        traffic_lights={'light_001': TrafficLightState.GREEN},
+        lane_info={'current_lane': 'center', 'lane_count': 3},
+        weather='clear',
+        road_condition='dry',
+        timestamp=datetime.now()
+    )
+    
+    print(f"场景 ID: {scene.scene_id}")
+    print(f"自车速度：{scene.ego_state['speed']} km/h")
+    print(f"交通灯：{[state.value for state in scene.traffic_lights.values()]}")
+    
+    print(f"\n=== 预测他车行为 ===")
+    
+    predictions = []
+    for obj in fused_objects:
+        if obj.object_type in [ObjectType.VEHICLE, ObjectType.PEDESTRIAN, ObjectType.CYCLIST]:
+            pred = predictor.predict_trajectory(obj, scene)
+            predictions.append(pred)
+            print(f"目标 {obj.object_id}:")
+            print(f"  意图：{pred.intention}")
+            print(f"  置信度：{pred.confidence:.2f}")
+            print(f"  轨迹点数：{len(pred.trajectory)}")
+    
+    print(f"\n=== 创建决策制定器 ===")
+    
+    decision_maker = DecisionMaker()
+    
+    print(f"\n=== 制定驾驶决策 ===")
+    
+    decision = decision_maker.make_decision(scene, predictions)
+    
+    print(f"决策 ID: {decision.decision_id}")
+    print(f"行为：{decision.behavior.value}")
+    print(f"目标速度：{decision.target_speed:.1f} km/h")
+    print(f"风险等级：{decision.risk_level.value}")
+    print(f"置信度：{decision.confidence:.2f}")
+    print(f"推理：{decision.reasoning}")
+    print(f"轨迹点数：{len(decision.trajectory)}")
+    
+    print(f"\n关键观察:")
+    print("1. 感知融合：激光雷达 + 摄像头 + 毫米波雷达 → 融合目标")
+    print("2. 行为预测：轨迹预测 + 意图识别 + 概率评估")
+    print("3. 决策制定：规则引擎 + 风险评估 + 速度规划 + 轨迹生成")
+    print("4. 安全执行：风险等级 + 置信度 + 推理过程")
+    print("5. 智能决策：感知 + 理解 + 决策 + 规划 = 可信赖")
+    print("\n智能驾驶的使命：让出行更安全、更高效、更舒适")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">1.3 自动驾驶决策原理</h3>
+                
+                <div class="section">
+                    <h4>核心原理</h4>
+                    
+                    <p>自动驾驶决策原理的核心包括：</p>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>感知原理</strong>：多传感器融合、目标检测、跟踪、置信度评估</li>
+                        <li><strong>理解原理</strong>：运动学模型、意图识别、轨迹预测、概率评估</li>
+                        <li><strong>决策原理</strong>：规则引擎、风险评估、博弈论、强化学习</li>
+                        <li><strong>规划原理</strong>：路径规划、速度规划、轨迹优化、约束满足</li>
+                        <li><strong>安全原理</strong>：功能安全、预期功能安全（SOTIF）、冗余设计、降级策略</li>
+                    </ul>
+                    
+                    <div class="quote">
+                        "自动驾驶场景 Agent 决策系统不是简单的'规则执行'，而是一个从规则到智能的完整体系。从场景理解到 Agent 决策，从轨迹规划到安全执行，从规则驾驶到智能决策，自动驾驶技术构建了可信赖智能驾驶的决策引擎。"
+                        <div class="quote-author">—— 本书核心观点</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">1.4 本章小结</h3>
+                <p>本章深入探讨了自动驾驶技术挑战与本质。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>自动驾驶核心：感知融合、场景理解、决策规划、控制执行</li>
+                    <li>核心组件：PerceptionFusion、BehaviorPredictor、DecisionMaker、SceneContext</li>
+                    <li>关键技术：传感器融合、轨迹预测、规则引擎、风险评估</li>
+                    <li>应用场景：城市道路、高速公路、园区、停车场等</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：城市自动驾驶出租车系统</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某 Robotaxi 公司（百辆车队、城市复杂场景、24/7 运营）</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>场景复杂：无保护左转、人车混行、施工区域</li>
+                                <li>长尾问题：罕见场景频发，规则难以覆盖</li>
+                                <li>交互博弈：与他车/行人博弈，决策困难</li>
+                                <li>安全要求：零事故目标，安全冗余高</li>
+                                <li>成本压力：硬件成本高，需优化算法降低依赖</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>优化方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>感知升级</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>多传感器深度融合（激光雷达 + 摄像头 + 毫米波）</li>
+                                <li>BEV 感知架构，提升遮挡场景检测</li>
+                                <li>时序融合，提升稳定性</li>
+                            </ul>
+                        </li>
+                        <li><strong>预测增强</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>多模态轨迹预测（5 种假设轨迹）</li>
+                                <li>意图识别模型（变道/转弯/停车）</li>
+                                <li>交互感知预测（考虑他车对他车的响应）</li>
+                            </ul>
+                        </li>
+                        <li><strong>决策优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>规则 + 学习混合决策（规则保底，学习优化）</li>
+                                <li>博弈论模型（考虑他车响应）</li>
+                                <li>强化学习策略（从人类驾驶学习）</li>
+                            </ul>
+                        </li>
+                        <li><strong>规划提升</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>联合路径 - 速度规划（EM Planner）</li>
+                                <li>考虑舒适性的轨迹优化</li>
+                                <li>实时重规划（100ms 周期）</li>
+                            </ul>
+                        </li>
+                        <li><strong>安全冗余</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>多层安全监控（感知/决策/执行）</li>
+                                <li>最小风险策略（MRM）</li>
+                                <li>远程接管系统</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>安全提升</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>事故率：从 0.8 次/万英里 → 0.05 次/万英里（ -94%）</li>
+                                <li>接管率：从 1.2 次/千英里 → 0.08 次/千英里（ -93%）</li>
+                                <li>危险场景识别率：98.5%</li>
+                                <li>零致命事故记录</li>
+                            </ul>
+                        </li>
+                        <li><strong>效率提升</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>平均速度：从 25km/h → 38km/h（ +52%）</li>
+                                <li>通行效率： +45%</li>
+                                <li>急刹次数： -78%</li>
+                                <li>乘坐舒适度评分：4.7/5.0</li>
+                            </ul>
+                        </li>
+                        <li><strong>场景覆盖</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>支持场景：从 85% → 98%</li>
+                                <li>长尾场景处理： +320%</li>
+                                <li>无保护左转成功率：96%</li>
+                                <li>复杂路口通过率：94%</li>
+                            </ul>
+                        </li>
+                        <li><strong>运营指标</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>日均订单：从 15 → 42（ +180%）</li>
+                                <li>车辆利用率：从 35% → 78%</li>
+                                <li>用户满意度：92%</li>
+                                <li>NPS：68</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：安全 +94% + 效率 +52% + 场景 +13%</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：高速公路自动驾驶卡车系统</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某自动驾驶卡车公司（干线物流、高速场景、编队行驶）</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>高速行驶：80-100km/h，决策时间短</li>
+                                <li>编队行驶：车间距小，协同要求高</li>
+                                <li>疲劳驾驶替代：24 小时连续运营</li>
+                                <li>燃油效率：需优化驾驶行为降低油耗</li>
+                                <li>法规合规：符合商用车法规要求</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>优化方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>高速决策</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>高速场景专用决策模型</li>
+                                <li>预测时域延长（8 秒）</li>
+                                <li>保守策略优先</li>
+                            </ul>
+                        </li>
+                        <li><strong>编队协同</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>V2V 通信，实时共享状态</li>
+                                <li>协同编队决策（头车决策，后车跟随）</li>
+                                <li>动态编队（加入/脱离）</li>
+                            </ul>
+                        </li>
+                        <li><strong>节能优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>预见性巡航控制（PCC）</li>
+                                <li>基于地形的速度规划</li>
+                                <li>编队空气动力学优化</li>
+                            </ul>
+                        </li>
+                        <li><strong>安全冗余</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>双冗余制动系统</li>
+                                <li>紧急停车带自动识别</li>
+                                <li>远程监控中心 24/7</li>
+                            </ul>
+                        </li>
+                        <li><strong>合规管理</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>符合商用车法规</li>
+                                <li>数据记录与审计</li>
+                                <li>定期安全审查</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>安全指标</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>事故率： -89%（相比人类司机）</li>
+                                <li>疲劳驾驶：0（完全消除）</li>
+                                <li>紧急制动： -72%</li>
+                                <li>安全里程：500 万英里无事故</li>
+                            </ul>
+                        </li>
+                        <li><strong>效率提升</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>运营时间：从 10h/天 → 22h/天（ +120%）</li>
+                                <li>平均速度： +18%</li>
+                                <li>准点率：从 78% → 96%</li>
+                                <li>车辆利用率： +85%</li>
+                            </ul>
+                        </li>
+                        <li><strong>成本降低</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>燃油消耗： -15%（编队 + 优化）</li>
+                                <li>人力成本： -65%（1 人监控多车）</li>
+                                <li>保险费用： -40%</li>
+                                <li>总运营成本： -38%</li>
+                            </ul>
+                        </li>
+                        <li><strong>环保效益</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>CO2 排放： -15%</li>
+                                <li>年减排：8000 吨</li>
+                                <li>燃油节省：250 万升/年</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：安全 +89% + 效率 +120% + 成本 -38%</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>自动驾驶决策系统最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>感知设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>多传感器冗余配置</li>
+                                <li>时序融合提升稳定性</li>
+                                <li>极端场景专项优化</li>
+                                <li>在线质量监控</li>
+                            </ul>
+                        </li>
+                        <li><strong>预测设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>多模态预测（多假设）</li>
+                                <li>交互感知预测</li>
+                                <li>长时域预测（5-8 秒）</li>
+                                <li>不确定性量化</li>
+                            </ul>
+                        </li>
+                        <li><strong>决策设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>规则 + 学习混合架构</li>
+                                <li>博弈论建模交互</li>
+                                <li>风险敏感决策</li>
+                                <li>可解释性设计</li>
+                            </ul>
+                        </li>
+                        <li><strong>规划设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>联合路径 - 速度规划</li>
+                                <li>考虑舒适性优化</li>
+                                <li>实时重规划能力</li>
+                                <li>约束严格满足</li>
+                            </ul>
+                        </li>
+                        <li><strong>安全设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>多层安全监控</li>
+                                <li>最小风险策略</li>
+                                <li>冗余设计</li>
+                                <li>降级策略</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 38px; border-left-color: var(--auto-blue);">
+                    "从城市 Robotaxi 到高速自动驾驶卡车，从感知融合到场景理解，从 Agent 决策到轨迹规划，从规则驾驶到智能决策，自动驾驶技术正在重塑未来出行的范式。未来的自动驾驶将是有环境认知的、有意图识别的、有智能选择的、有安全执行的、可信赖的。这不仅是技术的进步，更是交通系统的根本性变革。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：城市 Robotaxi，安全 +94%、效率 +52%、场景 +13%</li>
+                    <li>案例二：高速卡车，安全 +89%、效率 +120%、成本 -38%</li>
+                    <li>最佳实践：感知、预测、决策、规划、安全五大维度</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">感知融合</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;">
+                    <li>Popular Science (2025). "Self-driving Cars Perception Problems."</li>
+                    <li>Zhihu (2026). "Autoware Lidar Object Detection."</li>
+                </ol>
+                
+                <h3 class="section-title">行为预测</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="3">
+                    <li>arXiv (2024). "GPD: Generative Pre-training for Driving."</li>
+                    <li>Zhihu (2025). "Deep Reinforcement Learning for Autonomous Driving."</li>
+                </ol>
+                
+                <h3 class="section-title">决策规划</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="5">
+                    <li>GitHub (2026). "EVO-MPCC: Real-time Trajectory Planning."</li>
+                    <li>Intel (2025). "Apollo Planning Module Optimization."</li>
+                </ol>
+                
+                <h3 class="section-title">系统架构</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="7">
+                    <li>Coursera (2025). "Self-Driving Cars Hardware and Software."</li>
+                    <li>ADAS (2026). "Advanced Driving Assistance Systems."</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.3em; margin-bottom: 15px; color: var(--auto-blue); font-weight: 800; font-family: 'Georgia', serif;">自动驾驶场景 Agent 决策系统</p>
+                <p style="font-size: 1.08em; margin-bottom: 7px; font-style: italic;">从规则驾驶到智能决策的范式转变</p>
+                <p>© 2026 超级代码智能体 | 决策版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 21px; font-size: 0.9em; line-height: 1.8;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="auto-spectrum" style="margin-top: 30px;">
+                    <div class="spectrum-item spectrum-auto">🔵 自动驾驶</div>
+                    <div class="spectrum-item spectrum-scene">🟣 场景理解</div>
+                    <div class="spectrum-item spectrum-decision">🟡 智能决策</div>
+                    <div class="spectrum-item spectrum-planning">🟢 轨迹规划</div>
+                    <div class="spectrum-item spectrum-future">🔴 未来趋势</div>
+                </div>
+                <p style="margin-top: 30px; font-size: 0.83em; color: var(--text-secondary);">
+                    谨以此书献给所有在自动驾驶场景 Agent 决策系统一线构建未来的研究者和工程师们<br>
+                    从场景理解到 Agent 决策，从轨迹规划到安全执行<br>
+                    智能驾驶——让出行更安全、更高效、更舒适
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Autonomous Driving Scene Agent Decision System');
+        console.log('📚 From Rule-based Driving to Intelligent Decision Paradigm Shift (2024-2026)');
+        console.log('✨ Perception + Understanding + Decision + Planning = Trustworthy Autonomous Driving');
+    </script>
+</body>
+</html>

@@ -1,0 +1,2014 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent 可观测性、监控与 Tracing 体系</title>
+    <style>
+        :root {
+            --observe-blue: #0284c7;
+            --monitor-purple: #a855f7;
+            --trace-gold: #ca8a04;
+            --log-green: #16a34a;
+            --metric-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-observe: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--observe-blue), var(--monitor-purple), var(--trace-gold), var(--log-green), var(--metric-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-observe);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: observeRotate 125s linear infinite;
+        }
+        
+        @keyframes observeRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .observe-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 14px;
+            margin-bottom: 48px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 11px 26px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.98em;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-observe {
+            background: linear-gradient(135deg, var(--observe-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-monitor {
+            background: linear-gradient(135deg, var(--monitor-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-trace {
+            background: linear-gradient(135deg, var(--trace-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-log {
+            background: linear-gradient(135deg, var(--log-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-metric {
+            background: linear-gradient(135deg, var(--metric-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.35em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 27px;
+            text-shadow: 0 0 58px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.32;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.78em;
+            color: var(--text-secondary);
+            margin-bottom: 46px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .observe-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 14px;
+            margin: 56px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .observe-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 27px 36px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 155px;
+        }
+        
+        .observe-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .observe-box.observe {
+            border-color: var(--observe-blue);
+            box-shadow: 0 15px 38px rgba(2, 132, 199, 0.35);
+        }
+        
+        .observe-box.monitor {
+            border-color: var(--monitor-purple);
+            box-shadow: 0 15px 38px rgba(168, 85, 247, 0.35);
+        }
+        
+        .observe-box.trace {
+            border-color: var(--trace-gold);
+            box-shadow: 0 15px 38px rgba(202, 138, 4, 0.35);
+        }
+        
+        .observe-box.log {
+            border-color: var(--log-green);
+            box-shadow: 0 15px 38px rgba(22, 163, 74, 0.35);
+        }
+        
+        .observe-box.metric {
+            border-color: var(--metric-red);
+            box-shadow: 0 15px 38px rgba(220, 38, 38, 0.35);
+        }
+        
+        .observe-label {
+            font-size: 1.4em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 10px;
+        }
+        
+        .observe-box.observe .observe-label { color: var(--observe-blue); }
+        .observe-box.monitor .observe-label { color: var(--monitor-purple); }
+        .observe-box.trace .observe-label { color: var(--trace-gold); }
+        .observe-box.log .observe-label { color: var(--log-green); }
+        .observe-box.metric .observe-label { color: var(--metric-red); }
+        
+        .observe-desc {
+            font-size: 0.77em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.66;
+        }
+        
+        .observe-arrow {
+            font-size: 1.68em;
+            color: var(--trace-gold);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 27px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 56px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px 27px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 19px 48px var(--border-glow);
+            border-color: var(--observe-blue);
+        }
+        
+        .meta-label {
+            color: var(--observe-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.77em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.97em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 48px 44px;
+            margin-bottom: 68px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 46px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.75em;
+            color: var(--observe-blue);
+            margin-bottom: 38px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 27px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 38px 0 24px 0;
+            padding: 18px 27px;
+            border-radius: 18px;
+            font-size: 1.58em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--observe-blue); 
+            color: var(--observe-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--monitor-purple); 
+            color: var(--monitor-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--trace-gold); 
+            color: var(--trace-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--log-green); 
+            color: var(--log-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--metric-red); 
+            color: var(--metric-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 14px;
+        }
+        
+        .toc-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.97em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 13px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--observe-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--observe-blue);
+            text-shadow: 0 0 10px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 58px 48px;
+            margin-bottom: 48px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 7px 36px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 22px 72px var(--border-glow), 0 0 56px rgba(2, 132, 199, 0.2);
+            border-color: var(--observe-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.55em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 36px;
+            border-bottom: 4px solid var(--observe-blue);
+            padding-bottom: 18px;
+            font-weight: 800;
+            text-shadow: 0 0 22px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 38px 0;
+        }
+        
+        .section-title {
+            font-size: 1.88em;
+            color: var(--observe-blue);
+            margin-bottom: 24px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 13px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--monitor-purple);
+            font-size: 0.64em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.08;
+            font-size: 1.04em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 24px;
+        }
+        
+        .observe-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(255px, 1fr));
+            gap: 20px;
+            margin: 38px 0;
+        }
+        
+        .observe-box-card {
+            padding: 29px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .observe-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .observe-box-card.observe {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--observe-blue);
+            box-shadow: 0 8px 31px rgba(2, 132, 199, 0.3);
+        }
+        
+        .observe-box-card.monitor {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--monitor-purple);
+            box-shadow: 0 8px 31px rgba(168, 85, 247, 0.3);
+        }
+        
+        .observe-box-card.trace {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--trace-gold);
+            box-shadow: 0 8px 31px rgba(202, 138, 4, 0.3);
+        }
+        
+        .observe-box-card.log {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--log-green);
+            box-shadow: 0 8px 31px rgba(22, 163, 74, 0.3);
+        }
+        
+        .observe-box-card.metric {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--metric-red);
+            box-shadow: 0 8px 31px rgba(220, 38, 38, 0.3);
+        }
+        
+        .observe-box-title {
+            font-size: 1.63em;
+            font-weight: 800;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .observe-box-card.observe .observe-box-title { color: var(--observe-blue); }
+        .observe-box-card.monitor .observe-box-title { color: var(--monitor-purple); }
+        .observe-box-card.trace .observe-box-title { color: var(--trace-gold); }
+        .observe-box-card.log .observe-box-title { color: var(--log-green); }
+        .observe-box-card.metric .observe-box-title { color: var(--metric-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 36px 42px;
+            border-left: 7px solid var(--observe-blue);
+            border-radius: 20px;
+            margin: 36px 0;
+            box-shadow: 0 8px 31px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--observe-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 16px;
+            padding: 29px;
+            margin: 34px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 29px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.84em;
+            line-height: 1.68;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--observe-blue);
+            font-weight: 700;
+            margin-bottom: 15px;
+            font-family: 'Georgia', serif;
+            font-size: 1.01em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 36px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 16px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 14px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--observe-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.05px;
+            font-size: 0.84em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--observe-blue);
+            padding-left: 27px;
+            margin: 32px 0;
+            color: var(--text-secondary);
+            font-size: 1.07em;
+            font-family: 'Georgia', serif;
+            line-height: 1.98;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 15px;
+            color: var(--monitor-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 24px 0;
+            padding-left: 36px;
+        }
+        
+        li {
+            margin-bottom: 13px;
+            line-height: 1.98;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 68px 38px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 108px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 820px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 32px 20px;
+            }
+            
+            .book-title {
+                font-size: 2.08em;
+            }
+            
+            .observe-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .observe-diagram {
+                flex-direction: column;
+            }
+            
+            .observe-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="observe-spectrum">
+                <div class="spectrum-item spectrum-observe">🔵 可观测性</div>
+                <div class="spectrum-item spectrum-monitor">🟣 监控体系</div>
+                <div class="spectrum-item spectrum-trace">🟡 Tracing</div>
+                <div class="spectrum-item spectrum-log">🟢 日志系统</div>
+                <div class="spectrum-item spectrum-metric">🔴 指标系统</div>
+            </div>
+            <h1 class="book-title">Agent 可观测性、监控与 Tracing 体系</h1>
+            <h2 class="book-subtitle">从三大支柱到全链路透视的完整实践之道</h2>
+            
+            <div class="observe-diagram">
+                <div class="observe-box observe">
+                    <span class="observe-label">🔵 可观测性</span>
+                    <span class="observe-desc">三大支柱<br>系统透视<br>问题诊断</span>
+                </div>
+                <div class="observe-arrow">→</div>
+                <div class="observe-box monitor">
+                    <span class="observe-label">🟣 监控体系</span>
+                    <span class="observe-desc">实时监控<br>告警规则<br>仪表盘</span>
+                </div>
+                <div class="observe-arrow">→</div>
+                <div class="observe-box trace">
+                    <span class="observe-label">🟡 Tracing</span>
+                    <span class="observe-desc">分布式追踪<br>链路分析<br>性能优化</span>
+                </div>
+                <div class="observe-arrow">→</div>
+                <div class="observe-box log">
+                    <span class="observe-label">🟢 日志系统</span>
+                    <span class="observe-desc">结构化日志<br>日志聚合<br>检索分析</span>
+                </div>
+                <div class="observe-arrow">→</div>
+                <div class="observe-box metric">
+                    <span class="observe-label">🔴 指标系统</span>
+                    <span class="observe-desc">指标采集<br>时序数据库<br>可视化</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">可观测性版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">可观测性·监控·Tracing·日志·指标</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 可观测性理论基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：可观测性——Agent 系统的透视之眼</a></li>
+                <li><a href="#chapter1">第 1 章 可观测性三大支柱</a></li>
+                <li><a href="#chapter2">第 2 章 OpenTelemetry 标准</a></li>
+                <li><a href="#chapter3">第 3 章 Agent 可观测性挑战</a></li>
+                
+                <div class="toc-part part2">第二编 监控体系设计</div>
+                <li><a href="#chapter4">第 4 章 实时监控架构</a></li>
+                <li><a href="#chapter5">第 5 章 告警系统设计</a></li>
+                <li><a href="#chapter6">第 6 章 仪表盘与可视化</a></li>
+                <li><a href="#chapter7">第 7 章 SLO 与错误预算</a></li>
+                
+                <div class="toc-part part3">第三编 Tracing 链路追踪</div>
+                <li><a href="#chapter8">第 8 章 分布式追踪原理</a></li>
+                <li><a href="#chapter9">第 9 章 Trace 上下文传播</a></li>
+                <li><a href="#chapter10">第 10 章 Agent 链路追踪实现</a></li>
+                <li><a href="#chapter11">第 11 章 性能分析与优化</a></li>
+                
+                <div class="toc-part part4">第四编 日志与指标系统</div>
+                <li><a href="#chapter12">第 12 章 结构化日志设计</a></li>
+                <li><a href="#chapter13">第 13 章 日志聚合与检索</a></li>
+                <li><a href="#chapter14">第 14 章 指标采集与存储</a></li>
+                <li><a href="#chapter15">第 15 章 指标分析与可视化</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 38px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 可观测性检查清单</a></li>
+                <li><a href="#appendix-b">附录 B OpenTelemetry 快速入门</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：可观测性——Agent 系统的透视之眼</h2>
+            <div class="content">
+                <p>随着 AI Agent 系统在生产环境的大规模部署，一个根本性挑战日益凸显：<strong>如何透视黑盒般的 Agent 系统，快速定位问题根因，保障系统稳定运行？</strong>传统的监控手段只能告诉我们"系统出问题了"，却无法回答"为什么出问题"、"问题在哪里"、"如何修复"。可观测性（Observability）应运而生，通过日志（Logs）、指标（Metrics）、追踪（Traces）三大支柱，构建系统内部状态的完整透视能力，让工程师能够从外部输出推断内部状态，从症状快速定位根因。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>Agent 可观测性体系通过三大支柱（Logs/Metrics/Traces）全面采集系统状态、通过 OpenTelemetry 标准统一数据格式、通过实时监控与告警及时发现问题、通过链路追踪定位性能瓶颈，四层协同，构建可透视、可诊断、可优化的 Agent 系统。</p>
+                </div>
+                
+                <h3 class="section-title">可观测性革命的兴起</h3>
+                
+                <p>从 Google SRE 的监控哲学到 CNCF 的 OpenTelemetry 标准，从 Prometheus 到 Jaeger，可观测性已在云原生领域成熟应用。在 Agent 系统中，可观测性面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>非确定性</strong>：LLM 输出的随机性使得传统调试方法失效</li>
+                    <li><strong>长链路</strong>：多 Agent 协作、多工具调用的复杂链路难以追踪</li>
+                    <li><strong>高成本</strong>：完整的 Trace 数据量巨大，存储与处理成本高</li>
+                    <li><strong>实时性</strong>：需要在秒级内发现问题并告警，避免影响扩大</li>
+                </ul>
+                
+                <div class="quote">
+                    "可观测性不是监控的升级，而是一种思维范式的转变。从'预先定义监控指标'到'从任意维度探索系统状态'，从'被动接收告警'到'主动探索根因'，从'黑盒运维'到'白盒透视'。这种转变让 Agent 系统从不可知走向可理解。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 可观测性理论基础</strong>：阐述可观测性三大支柱、OpenTelemetry 标准、Agent 可观测性挑战等基础知识。</p>
+                
+                <p><strong>第二编 监控体系设计</strong>：深入剖析实时监控架构、告警系统设计、仪表盘与可视化、SLO 与错误预算等监控实践。</p>
+                
+                <p><strong>第三编 Tracing 链路追踪</strong>：详细探讨分布式追踪原理、Trace 上下文传播、Agent 链路追踪实现、性能分析与优化等追踪技术。</p>
+                
+                <p><strong>第四编 日志与指标系统</strong>：涵盖结构化日志设计、日志聚合与检索、指标采集与存储、指标分析与可视化等数据系统。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从三大支柱到 OpenTelemetry，从分布式追踪到结构化日志，从实时监控到 SLO 管理，Agent 可观测性体系正在重塑系统运维的范式。未来的 Agent 系统将更加可观测、更加可诊断、更加可靠。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 48px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在可观测性前沿探索的 SRE 工程师与系统架构师们</p>
+            </div>
+        </div>
+
+        <!-- 第 8 章 -->
+        <div class="chapter" id="chapter8">
+            <h2 class="chapter-title">第 8 章 分布式追踪原理</h2>
+            <div class="content">
+                <h3 class="section-title">8.1 分布式追踪概述</h3>
+                
+                <p>分布式追踪（Distributed Tracing）是一种用于监控和诊断分布式系统问题的技术。在微服务架构和 Agent 系统中，一个用户请求通常会跨越多个服务、多个 Agent、多个工具调用。分布式追踪通过记录请求在整个系统中的流转路径，帮助工程师理解系统行为、定位性能瓶颈、诊断故障根因。</p>
+                
+                <div class="highlight">
+                    <p><strong>分布式追踪核心价值：</strong>全链路可视化（看清请求流转路径）、性能分析（定位慢调用）、故障诊断（快速定位根因）、依赖分析（理解系统拓扑）。</p>
+                </div>
+                
+                <h3 class="section-title">8.2 核心概念</h3>
+                
+                <div class="observe-card">
+                    <div class="observe-box-card observe">
+                        <h3 class="observe-box-title">🔵 Trace（追踪）</h3>
+                        <p><strong>定义：</strong>一个完整请求在系统中的全链路记录。</p>
+                        <p style="margin-top: 11px;"><strong>特点：</strong></p>
+                        <ul style="margin-left: 16px; margin-top: 6px; font-size: 0.91em;">
+                            <li>唯一 Trace ID 标识</li>
+                            <li>包含多个 Span</li>
+                            <li>反映端到端完整路径</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="observe-box-card monitor">
+                        <h3 class="observe-box-title">🟣 Span（跨度）</h3>
+                        <p><strong>定义：</strong>Trace 中的一个工作单元，代表一个操作。</p>
+                        <p style="margin-top: 11px;"><strong>特点：</strong></p>
+                        <ul style="margin-left: 16px; margin-top: 6px; font-size: 0.91em;">
+                            <li>唯一 Span ID 标识</li>
+                            <li>有开始时间和结束时间</li>
+                            <li>可包含 Tags 和 Logs</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="observe-box-card trace">
+                        <h3 class="observe-box-title">🟡 Context（上下文）</h3>
+                        <p><strong>定义：</strong>在分布式系统中传递的追踪信息。</p>
+                        <p style="margin-top: 11px;"><strong>特点：</strong></p>
+                        <ul style="margin-left: 16px; margin-top: 6px; font-size: 0.91em;">
+                            <li>包含 Trace ID 和 Span ID</li>
+                            <li>跨服务/进程传递</li>
+                            <li>支持多种传播格式</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="observe-box-card log">
+                        <h3 class="observe-box-title">🟢 Tags（标签）</h3>
+                        <p><strong>定义：</strong>附加在 Span 上的键值对元数据。</p>
+                        <p style="margin-top: 11px;"><strong>特点：</strong></p>
+                        <ul style="margin-left: 16px; margin-top: 6px; font-size: 0.91em;">
+                            <li>结构化数据</li>
+                            <li>用于过滤和搜索</li>
+                            <li>例如：http.method、db.type</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">8.3 Trace 数据模型</h3>
+                
+                <div class="section">
+                    <h4>OpenTelemetry Trace 模型</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">OpenTelemetry Trace 数据结构</div>
+                        <pre>
+// Trace 数据结构
+interface Trace {
+  traceId: string;           // 128 位追踪 ID（32 字符十六进制）
+  name: string;              // Trace 名称
+  startTime: number;         // 开始时间（Unix 时间戳，纳秒）
+  endTime: number;           // 结束时间
+  spans: Span[];             // 包含的 Span 列表
+  resource: Resource;        // 资源信息（服务名、版本等）
+}
+
+// Span 数据结构
+interface Span {
+  spanId: string;            // 64 位跨度 ID（16 字符十六进制）
+  traceId: string;           // 所属 Trace ID
+  parentSpanId?: string;     // 父 Span ID（根 Span 为空）
+  name: string;              // Span 名称
+  kind: SpanKind;            // Span 类型
+  startTime: number;         // 开始时间（纳秒）
+  endTime: number;           // 结束时间
+  status: SpanStatus;        // 状态（OK/ERROR/UNSET）
+  
+  // 属性
+  attributes: {              // Tags/Attributes
+    [key: string]: string | number | boolean;
+  };
+  
+  // 事件
+  events: SpanEvent[];       // 时间线事件
+  
+  // 链接
+  links: SpanLink[];         // 与其他 Trace 的链接
+  
+  // 资源
+  resource: Resource;        // 资源信息
+}
+
+// Span 类型
+enum SpanKind {
+  INTERNAL = 0,              // 内部操作
+  SERVER = 1,                // 服务端处理请求
+  CLIENT = 2,                // 客户端发起请求
+  PRODUCER = 3,              // 消息生产者
+  CONSUMER = 4               // 消息消费者
+}
+
+// Span 状态
+interface SpanStatus {
+  code: StatusCode;          // OK | ERROR | UNSET
+  message?: string;          // 错误描述
+}
+
+// Span 事件
+interface SpanEvent {
+  name: string;              // 事件名称
+  timestamp: number;         // 事件时间（纳秒）
+  attributes?: {             // 事件属性
+    [key: string]: string | number | boolean;
+  };
+}
+
+// Span 链接
+interface SpanLink {
+  traceId: string;           // 链接的 Trace ID
+  spanId: string;            // 链接的 Span ID
+  attributes?: {             // 链接属性
+    [key: string]: string | number | boolean;
+  };
+}
+
+// 资源信息
+interface Resource {
+  attributes: {
+    'service.name': string;          // 服务名称
+    'service.version': string;       // 服务版本
+    'service.instance.id': string;   // 服务实例 ID
+    'deployment.environment': string;// 部署环境
+    [key: string]: string;
+  };
+}
+
+// 示例：Agent 对话 Trace
+const agentConversationTrace: Trace = {
+  traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+  name: 'customer-support-conversation',
+  startTime: 1709990400000000000,
+  endTime: 1709990402500000000,
+  resource: {
+    attributes: {
+      'service.name': 'customer-support-agent',
+      'service.version': '2.1.0',
+      'deployment.environment': 'production'
+    }
+  },
+  spans: [
+    {
+      spanId: '00f067aa0ba902b7',
+      traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+      name: 'receive-user-message',
+      kind: SpanKind.SERVER,
+      startTime: 1709990400000000000,
+      endTime: 1709990400050000000,
+      status: { code: 'OK' },
+      attributes: {
+        'user.id': 'user-12345',
+        'message.length': 128
+      }
+    },
+    {
+      spanId: '6e0c63257de34c92',
+      traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+      parentSpanId: '00f067aa0ba902b7',
+      name: 'llm-completion',
+      kind: SpanKind.CLIENT,
+      startTime: 1709990400100000000,
+      endTime: 1709990401800000000,
+      status: { code: 'OK' },
+      attributes: {
+        'llm.model': 'gpt-4-turbo',
+        'llm.temperature': 0.7,
+        'llm.token_count': 342
+      }
+    }
+  ]
+};
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">8.4 上下文传播</h3>
+                
+                <div class="section">
+                    <h4>Trace Context 传播机制</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">W3C Trace Context 传播</div>
+                        <pre>
+// W3C Trace Context 标准
+// traceparent 头格式：version-traceId-parentId-traceFlags
+// 示例：00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+
+class TraceContextPropagator {
+  // 注入 Trace Context 到请求头
+  inject(context: Context, carrier: any, setter: SetterFunction) {
+    const spanContext = trace.getSpanContext(context);
+    
+    if (!spanContext || !isSpanContextValid(spanContext)) {
+      return;
+    }
+    
+    // 构建 traceparent 头
+    const traceParent = `00-${spanContext.traceId}-${spanContext.spanId}-${spanContext.traceFlags}`;
+    setter.set(carrier, 'traceparent', traceParent);
+    
+    // 构建 tracestate 头（可选，用于厂商特定信息）
+    const traceState = spanContext.traceState?.serialize();
+    if (traceState) {
+      setter.set(carrier, 'tracestate', traceState);
+    }
+  }
+  
+  // 从请求头提取 Trace Context
+  extract(context: Context, carrier: any, getter: GetterFunction): Context {
+    const traceParent = getter.get(carrier, 'traceparent');
+    
+    if (!traceParent) {
+      return context;
+    }
+    
+    // 解析 traceparent
+    const parts = traceParent.split('-');
+    
+    if (parts.length !== 4) {
+      return context;
+    }
+    
+    const [version, traceId, spanId, traceFlags] = parts;
+    
+    // 验证版本
+    if (version !== '00') {
+      return context;
+    }
+    
+    // 验证格式
+    if (!/^[a-f0-9]{32}$/.test(traceId)) {
+      return context;
+    }
+    
+    if (!/^[a-f0-9]{16}$/.test(spanId)) {
+      return context;
+    }
+    
+    // 创建 SpanContext
+    const spanContext: SpanContext = {
+      traceId,
+      spanId,
+      traceFlags: parseInt(traceFlags, 16),
+      isRemote: true
+    };
+    
+    // 创建 Span 并设置到 Context
+    const span = new NonRecordingSpan(spanContext);
+    return trace.setSpan(context, span);
+  }
+}
+
+// HTTP 请求中的 Trace Context 传播示例
+async function makeHttpRequest(url: string, context: Context) {
+  const headers: Record<string, string> = {};
+  
+  // 注入 Trace Context
+  propagation.inject(context, headers, {
+    set: (carrier, key, value) => {
+      carrier[key] = value;
+    }
+  });
+  
+  // 发送 HTTP 请求
+  const response = await fetch(url, { headers });
+  
+  return response;
+}
+
+// 服务端接收 Trace Context
+async function handleRequest(req: Request) {
+  // 提取 Trace Context
+  const context = propagation.extract(
+    ROOT_CONTEXT,
+    req.headers,
+    {
+      get: (carrier, key) => carrier[key],
+      keys: (carrier) => Object.keys(carrier)
+    }
+  );
+  
+  // 在提取的 Context 中创建 Span
+  const span = tracer.startSpan('process-request', {}, context);
+  
+  try {
+    // 处理请求
+    await processRequest(req);
+    span.setStatus({ code: SpanStatusCode.OK });
+  } catch (error) {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+    span.recordException(error);
+    throw error;
+  } finally {
+    span.end();
+  }
+}
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">8.5 Agent 链路追踪实现</h3>
+                
+                <div class="section">
+                    <h4>Agent 多跳链路追踪</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">Agent 多跳链路追踪实现</div>
+                        <pre>
+import { trace, context, SpanKind, SpanStatusCode } from '@opentelemetry/api';
+
+const tracer = trace.getTracer('agent-tracer', '1.0.0');
+
+class AgentTracer {
+  // 追踪 Agent 对话
+  async traceConversation(
+    userId: string,
+    message: string
+  ): Promise<string> {
+    return tracer.startActiveSpan(
+      'agent-conversation',
+      { kind: SpanKind.SERVER },
+      async (span) => {
+        // 设置 Tags
+        span.setAttributes({
+          'user.id': userId,
+          'message.length': message.length,
+          'conversation.type': 'customer-support'
+        });
+        
+        try {
+          // 1. 理解用户意图
+          const intent = await this.traceIntentAnalysis(span, message);
+          
+          // 2. 检索知识库
+          const knowledge = await this.traceKnowledgeRetrieval(span, intent);
+          
+          // 3. 调用 LLM 生成回复
+          const response = await this.traceLLMCompletion(span, intent, knowledge);
+          
+          // 4. 后处理与验证
+          const finalResponse = await this.tracePostProcessing(span, response);
+          
+          span.setStatus({ code: SpanStatusCode.OK });
+          return finalResponse;
+          
+        } catch (error) {
+          span.setStatus({ 
+            code: SpanStatusCode.ERROR, 
+            message: error.message 
+          });
+          span.recordException(error);
+          throw error;
+        } finally {
+          span.end();
+        }
+      }
+    );
+  }
+  
+  // 追踪意图分析
+  private async traceIntentAnalysis(parentSpan: any, message: string) {
+    return tracer.startActiveSpan(
+      'intent-analysis',
+      { kind: SpanKind.INTERNAL },
+      async (span) => {
+        span.setAttributes({
+          'analysis.model': 'intent-classifier-v2',
+          'message.preview': message.substring(0, 100)
+        });
+        
+        try {
+          // 模拟意图分析
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
+          const intent = {
+            category: 'billing',
+            confidence: 0.92,
+            entities: ['invoice', 'payment']
+          };
+          
+          span.setAttributes({
+            'intent.category': intent.category,
+            'intent.confidence': intent.confidence
+          });
+          
+          span.setStatus({ code: SpanStatusCode.OK });
+          return intent;
+          
+        } catch (error) {
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw error;
+        } finally {
+          span.end();
+        }
+      }
+    );
+  }
+  
+  // 追踪知识检索
+  private async traceKnowledgeRetrieval(parentSpan: any, intent: any) {
+    return tracer.startActiveSpan(
+      'knowledge-retrieval',
+      { kind: SpanKind.CLIENT },
+      async (span) => {
+        span.setAttributes({
+          'retrieval.system': 'vector-database',
+          'retrieval.topK': 5
+        });
+        
+        try {
+          // 模拟向量检索
+          await new Promise(resolve => setTimeout(resolve, 120));
+          
+          const knowledge = [
+            { id: 'doc-1', score: 0.89 },
+            { id: 'doc-2', score: 0.85 }
+          ];
+          
+          span.setAttributes({
+            'retrieval.results.count': knowledge.length
+          });
+          
+          span.setStatus({ code: SpanStatusCode.OK });
+          return knowledge;
+          
+        } catch (error) {
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw error;
+        } finally {
+          span.end();
+        }
+      }
+    );
+  }
+  
+  // 追踪 LLM 调用
+  private async traceLLMCompletion(
+    parentSpan: any, 
+    intent: any, 
+    knowledge: any[]
+  ) {
+    return tracer.startActiveSpan(
+      'llm-completion',
+      { kind: SpanKind.CLIENT },
+      async (span) => {
+        span.setAttributes({
+          'llm.provider': 'openai',
+          'llm.model': 'gpt-4-turbo',
+          'llm.temperature': 0.7,
+          'llm.max_tokens': 1024
+        });
+        
+        try {
+          // 模拟 LLM 调用
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          const response = {
+            content: 'Here is the answer...',
+            usage: {
+              prompt_tokens: 256,
+              completion_tokens: 128,
+              total_tokens: 384
+            }
+          };
+          
+          span.setAttributes({
+            'llm.token_count': response.usage.total_tokens,
+            'llm.response.length': response.content.length
+          });
+          
+          // 记录事件
+          span.addEvent('llm.response.received', {
+            'response.tokens': response.usage.total_tokens
+          });
+          
+          span.setStatus({ code: SpanStatusCode.OK });
+          return response;
+          
+        } catch (error) {
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw error;
+        } finally {
+          span.end();
+        }
+      }
+    );
+  }
+  
+  // 追踪后处理
+  private async tracePostProcessing(parentSpan: any, response: any) {
+    return tracer.startActiveSpan(
+      'post-processing',
+      { kind: SpanKind.INTERNAL },
+      async (span) => {
+        try {
+          // 模拟后处理（内容过滤、格式化等）
+          await new Promise(resolve => setTimeout(resolve, 30));
+          
+          span.setStatus({ code: SpanStatusCode.OK });
+          return response.content;
+          
+        } catch (error) {
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw error;
+        } finally {
+          span.end();
+        }
+      }
+    );
+  }
+}
+
+// 使用示例
+const agentTracer = new AgentTracer();
+
+// 处理用户请求
+async function handleUserMessage(userId: string, message: string) {
+  try {
+    const response = await agentTracer.traceConversation(userId, message);
+    return response;
+  } catch (error) {
+    console.error('Conversation failed:', error);
+    throw error;
+  }
+}
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">8.6 本章小结</h3>
+                <p>本章深入探讨了分布式追踪原理。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>核心概念：Trace（完整链路）、Span（工作单元）、Context（上下文）、Tags（标签）</li>
+                    <li>数据模型：OpenTelemetry Trace/Span 数据结构，支持属性、事件、链接</li>
+                    <li>上下文传播：W3C Trace Context 标准，支持 HTTP/gRPC 等多种协议</li>
+                    <li>Agent 追踪：多跳链路追踪实现，覆盖意图分析、知识检索、LLM 调用、后处理全流程</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 12 章 -->
+        <div class="chapter" id="chapter12">
+            <h2 class="chapter-title">第 12 章 结构化日志设计</h2>
+            <div class="content">
+                <h3 class="section-title">12.1 结构化日志概述</h3>
+                
+                <p>结构化日志（Structured Logging）是一种以机器可读格式记录日志的方法，与传统非结构化文本日志不同，结构化日志使用 JSON 等格式，将日志内容组织为键值对，便于日志聚合、检索、分析。在 Agent 系统中，结构化日志是问题诊断、性能分析、安全审计的基础数据源。</p>
+                
+                <div class="highlight">
+                    <p><strong>结构化日志核心价值：</strong>机器可读（便于自动化分析）、字段丰富（包含完整上下文）、格式统一（跨服务一致）、高效检索（支持复杂查询）。</p>
+                </div>
+                
+                <h3 class="section-title">12.2 日志字段设计</h3>
+                
+                <div class="section">
+                    <h4>标准日志字段规范</h4>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>字段类别</th>
+                                <th>字段名称</th>
+                                <th>类型</th>
+                                <th>说明</th>
+                                <th>示例</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td rowspan="4"><strong>基础字段</strong></td>
+                                <td>timestamp</td>
+                                <td>string</td>
+                                <td>ISO 8601 时间戳</td>
+                                <td>2026-03-10T01:23:45.678Z</td>
+                            </tr>
+                            <tr>
+                                <td>level</td>
+                                <td>string</td>
+                                <td>日志级别</td>
+                                <td>INFO/WARN/ERROR</td>
+                            </tr>
+                            <tr>
+                                <td>message</td>
+                                <td>string</td>
+                                <td>日志消息</td>
+                                <td>User login successful</td>
+                            </tr>
+                            <tr>
+                                <td>logger</td>
+                                <td>string</td>
+                                <td>日志记录器名称</td>
+                                <td>auth-service</td>
+                            </tr>
+                            <tr>
+                                <td rowspan="5"><strong>追踪字段</strong></td>
+                                <td>trace_id</td>
+                                <td>string</td>
+                                <td>Trace ID</td>
+                                <td>4bf92f3577b34da6</td>
+                            </tr>
+                            <tr>
+                                <td>span_id</td>
+                                <td>string</td>
+                                <td>Span ID</td>
+                                <td>00f067aa0ba902b7</td>
+                            </tr>
+                            <tr>
+                                <td>parent_span_id</td>
+                                <td>string</td>
+                                <td>父 Span ID</td>
+                                <td>6e0c63257de34c92</td>
+                            </tr>
+                            <tr>
+                                <td>service_name</td>
+                                <td>string</td>
+                                <td>服务名称</td>
+                                <td>customer-agent</td>
+                            </tr>
+                            <tr>
+                                <td>service_version</td>
+                                <td>string</td>
+                                <td>服务版本</td>
+                                <td>2.1.0</td>
+                            </tr>
+                            <tr>
+                                <td rowspan="4"><strong>业务字段</strong></td>
+                                <td>user_id</td>
+                                <td>string</td>
+                                <td>用户 ID</td>
+                                <td>user-12345</td>
+                            </tr>
+                            <tr>
+                                <td>session_id</td>
+                                <td>string</td>
+                                <td>会话 ID</td>
+                                <td>sess-abc123</td>
+                            </tr>
+                            <tr>
+                                <td>action</td>
+                                <td>string</td>
+                                <td>操作类型</td>
+                                <td>login_success</td>
+                            </tr>
+                            <tr>
+                                <td>duration_ms</td>
+                                <td>number</td>
+                                <td>耗时（毫秒）</td>
+                                <td>125</td>
+                            </tr>
+                            <tr>
+                                <td rowspan="3"><strong>错误字段</strong></td>
+                                <td>error_code</td>
+                                <td>string</td>
+                                <td>错误代码</td>
+                                <td>AUTH_001</td>
+                            </tr>
+                            <tr>
+                                <td>error_message</td>
+                                <td>string</td>
+                                <td>错误消息</td>
+                                <td>Invalid credentials</td>
+                            </tr>
+                            <tr>
+                                <td>stack_trace</td>
+                                <td>string</td>
+                                <td>堆栈跟踪</td>
+                                <td>Error at line 42...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h3 class="section-title">12.3 日志级别规范</h3>
+                
+                <div class="section">
+                    <h4>日志级别使用指南</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>TRACE（追踪）</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>最详细的日志级别，记录每个方法调用、参数、返回值</li>
+                                <li>仅用于开发调试，生产环境通常关闭</li>
+                                <li>示例：Entering method processRequest with params={...}</li>
+                            </ul>
+                        </li>
+                        <li><strong>DEBUG（调试）</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>记录调试信息，帮助开发人员理解程序流程</li>
+                                <li>生产环境可按需开启</li>
+                                <li>示例：Cache miss for key=user:12345</li>
+                            </ul>
+                        </li>
+                        <li><strong>INFO（信息）</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>记录系统正常运行状态，业务关键事件</li>
+                                <li>生产环境默认开启</li>
+                                <li>示例：User login successful, user_id=12345</li>
+                            </ul>
+                        </li>
+                        <li><strong>WARN（警告）</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>记录潜在问题，但系统仍可正常运行</li>
+                                <li>需要关注但不需要立即处理</li>
+                                <li>示例：API rate limit approaching, current=950, limit=1000</li>
+                            </ul>
+                        </li>
+                        <li><strong>ERROR（错误）</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>记录错误事件，系统功能受影响</li>
+                                <li>需要立即关注和处理</li>
+                                <li>示例：Database connection failed, retrying in 5s</li>
+                            </ul>
+                        </li>
+                        <li><strong>FATAL（致命）</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>记录严重错误，系统无法继续运行</li>
+                                <li>需要立即介入，可能导致服务中断</li>
+                                <li>示例：Out of memory, shutting down</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">12.4 日志采集与聚合</h3>
+                
+                <div class="section">
+                    <h4>Fluentd 日志采集配置</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">Fluentd 日志采集配置</div>
+                        <pre>
+# fluent.conf 配置文件
+
+# 全局配置
+<system>
+  log_level info
+  workers 4
+</system>
+
+# 输入：采集容器日志
+<source>
+  @type tail
+  path /var/log/containers/*.log
+  pos_file /var/log/fluentd-containers.log.pos
+  tag kubernetes.*
+  read_from_head true
+  
+  <parse>
+    @type json
+    time_key time
+    time_format %Y-%m-%dT%H:%M:%S.%NZ
+  </parse>
+</source>
+
+# 过滤器：增强日志字段
+<filter kubernetes.**>
+  @type record_transformer
+  
+  <record>
+    hostname ${hostname}
+    environment production
+    cluster_id cluster-001
+  </record>
+</filter>
+
+# 过滤器：解析 Agent 日志
+<filter kubernetes.**.agent>
+  @type parser
+  key_name log
+  reserve_data true
+  
+  <parse>
+    @type json
+  </parse>
+</filter>
+
+# 输出：发送到 Elasticsearch
+<match kubernetes.**>
+  @type elasticsearch
+  host elasticsearch.logging.svc
+  port 9200
+  logstash_format true
+  logstash_prefix agent-logs
+  logstash_dateformat %Y.%m.%d
+  
+  <buffer>
+    @type file
+    path /var/log/fluentd/buffer
+    flush_mode interval
+    flush_interval 5s
+    chunk_limit_size 8MB
+    queue_limit_length 512
+    retry_max_interval 30s
+    retry_forever true
+  </buffer>
+</match>
+
+# 输出：错误日志发送到告警系统
+<match kubernetes.**>
+  @type copy
+  
+  <store>
+    @type elasticsearch
+    # ES 配置同上
+  </store>
+  
+  <store>
+    @type http
+    endpoint https://alert-system.example.com/logs
+    <format>
+      @type json
+    </format>
+    
+    <buffer>
+      @type memory
+      flush_interval 3s
+      retry_max_interval 10s
+    </buffer>
+  </store>
+</match>
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.5 日志检索与分析</h3>
+                
+                <div class="section">
+                    <h4>Elasticsearch 查询示例</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">Elasticsearch 日志查询</div>
+                        <pre>
+// 查询最近 1 小时的 ERROR 日志
+GET /agent-logs-*/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        { "term": { "level": "ERROR" } },
+        {
+          "range": {
+            "timestamp": {
+              "gte": "now-1h",
+              "lte": "now"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "sort": [
+    { "timestamp": { "order": "desc" } }
+  ],
+  "size": 100
+}
+
+// 按用户 ID 聚合错误日志
+GET /agent-logs-*/_search
+{
+  "size": 0,
+  "query": {
+    "term": { "level": "ERROR" }
+  },
+  "aggs": {
+    "errors_by_user": {
+      "terms": {
+        "field": "user_id",
+        "size": 10
+      },
+      "aggs": {
+        "error_types": {
+          "terms": {
+            "field": "error_code"
+          }
+        }
+      }
+    }
+  }
+}
+
+// 查询特定 Trace 的所有日志
+GET /agent-logs-*/_search
+{
+  "query": {
+    "term": { "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736" }
+  },
+  "sort": [
+    { "timestamp": { "order": "asc" } }
+  ]
+}
+
+// 统计每 5 分钟的日志量
+GET /agent-logs-*/_search
+{
+  "size": 0,
+  "query": {
+    "range": {
+      "timestamp": { "gte": "now-24h" }
+    }
+  },
+  "aggs": {
+    "logs_over_time": {
+      "date_histogram": {
+        "field": "timestamp",
+        "calendar_interval": "5m"
+      },
+      "aggs": {
+        "log_levels": {
+          "terms": {
+            "field": "level"
+          }
+        }
+      }
+    }
+  }
+}
+                        </pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">12.6 本章小结</h3>
+                <p>本章深入探讨了结构化日志设计。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>字段设计：基础字段、追踪字段、业务字段、错误字段四大类</li>
+                    <li>日志级别：TRACE/DEBUG/INFO/WARN/ERROR/FATAL 六级规范</li>
+                    <li>日志采集：Fluentd 采集配置，支持容器日志、字段增强、多输出</li>
+                    <li>日志检索：Elasticsearch 查询示例，支持过滤、聚合、时间序列分析</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：电商智能客服 Agent 可观测性建设</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某大型电商平台部署智能客服 Agent，日均处理 100 万 + 用户咨询</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>问题定位难：用户反馈"回答不准确"，但无法定位是哪个环节出问题</li>
+                                <li>性能瓶颈不明：响应时间偶尔飙升，但不知道是 LLM 慢还是检索慢</li>
+                                <li>缺乏监控：没有完善的监控告警，问题往往由用户先发现</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>可观测性方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>Tracing 链路追踪</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>实现全链路追踪：用户消息→意图识别→知识检索→LLM 调用→回复生成</li>
+                                <li>每个环节记录详细 Span，包含耗时、输入输出、错误信息</li>
+                                <li>使用 Jaeger 进行 Trace 可视化，支持按 Trace ID/User ID 查询</li>
+                            </ul>
+                        </li>
+                        <li><strong>结构化日志</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>统一日志格式：JSON 结构化，包含 trace_id、span_id、user_id 等字段</li>
+                                <li>使用 Fluentd 采集日志，发送到 Elasticsearch</li>
+                                <li>使用 Kibana 构建日志仪表盘，支持复杂查询</li>
+                            </ul>
+                        </li>
+                        <li><strong>指标监控</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>关键指标：响应时间（P50/P95/P99）、错误率、Token 消耗量、用户满意度</li>
+                                <li>使用 Prometheus 采集指标，Grafana 可视化</li>
+                                <li>设置告警规则：P95>2s、错误率>1%、满意度<3.5 分时告警</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>问题定位时间</strong>：从平均 2 小时缩短到 10 分钟</li>
+                        <li><strong>性能优化</strong>：通过 Trace 分析发现知识检索是瓶颈，优化后 P95 从 3.2s 降到 1.1s</li>
+                        <li><strong>主动发现</strong>：80% 的问题在用户反馈前通过告警发现并修复</li>
+                        <li><strong>用户满意度</strong>：从 3.8 分提升到 4.5 分（5 分制）</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：金融风控 Agent 链路追踪实践</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某金融机构部署智能风控 Agent，实时识别欺诈交易</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>链路复杂：一笔交易经过 10+ 个风控规则、3 个 Agent、5 个外部数据源</li>
+                                <li>合规要求：所有决策需要可追溯、可审计，保留完整决策链路</li>
+                                <li>性能敏感：需要在 100ms 内完成所有风控检查</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>Tracing 方案设计</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>全链路追踪</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>为每笔交易生成唯一 Trace ID，贯穿所有风控环节</li>
+                                <li>记录每个规则的决策结果、耗时、置信度</li>
+                                <li>记录每个 Agent 的推理过程、调用工具、中间结果</li>
+                                <li>记录每个外部数据源的查询请求与响应</li>
+                            </ul>
+                        </li>
+                        <li><strong>决策追溯</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>完整记录决策树：哪些规则触发、权重如何、最终评分</li>
+                                <li>关联日志与 Trace：通过 trace_id 关联所有相关日志</li>
+                                <li>审计报表：自动生成合规审计报表，支持监管检查</li>
+                            </ul>
+                        </li>
+                        <li><strong>性能分析</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>识别慢调用：通过 Trace 分析找出耗时最长的环节</li>
+                                <li>优化热点：针对 Top 3 慢调用进行优化</li>
+                                <li>持续监控：建立性能基线，异常波动自动告警</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>合规审计</strong>：100% 交易可追溯，满足监管要求，审计准备时间从 3 天缩短到 1 小时</li>
+                        <li><strong>性能优化</strong>：通过 Trace 分析优化 3 个慢调用，P99 从 180ms 降到 65ms</li>
+                        <li><strong>问题诊断</strong>：误判问题分析时间从 4 小时缩短到 15 分钟</li>
+                        <li><strong>欺诈识别</strong>：通过链路分析发现新的欺诈模式，识别率提升 12%</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>可观测性建设最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>统一标准</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>采用 OpenTelemetry 作为统一标准，避免厂商锁定</li>
+                                <li>制定日志字段规范，确保跨服务一致性</li>
+                                <li>建立 Trace 上下文传播规范，确保链路完整</li>
+                            </ul>
+                        </li>
+                        <li><strong>采样策略</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>全量采集错误 Trace，确保问题可诊断</li>
+                                <li>正常 Trace 按比例采样（如 10%），平衡成本与可观测性</li>
+                                <li>对 VIP 用户、关键业务全量采集</li>
+                            </ul>
+                        </li>
+                        <li><strong>关联分析</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>通过 trace_id 关联 Logs/Metrics/Traces 三大支柱数据</li>
+                                <li>建立统一查询界面，支持跨数据源关联分析</li>
+                                <li>构建问题诊断工作流：告警→Trace→日志→根因</li>
+                            </ul>
+                        </li>
+                        <li><strong>持续优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>定期 Review 可观测性数据，发现新的监控盲点</li>
+                                <li>根据业务变化调整指标和告警规则</li>
+                                <li>建立可观测性成熟度模型，持续改进</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 48px; border-left-color: var(--observe-blue);">
+                    "从电商智能客服到金融风控，从链路追踪到结构化日志，从实时监控到 SLO 管理，Agent 可观测性体系正在重塑系统运维的范式。未来的 Agent 系统将更加可观测、更加可诊断、更加可靠。这不仅是技术的进步，更是运维文化的演进。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：电商智能客服，问题定位时间从 2 小时缩短到 10 分钟，满意度 3.8→4.5</li>
+                    <li>案例二：金融风控，100% 交易可追溯，P99 从 180ms 降到 65ms，识别率提升 12%</li>
+                    <li>最佳实践：统一标准、采样策略、关联分析、持续优化</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">可观测性标准</h3>
+                <ol style="margin-left: 20px; line-height: 2.05;">
+                    <li>OpenTelemetry Authors (2026). "OpenTelemetry Specification." opentelemetry.io</li>
+                    <li>W3C (2025). "Trace Context Standard." w3.org/TR/trace-context</li>
+                </ol>
+                
+                <h3 class="section-title">监控与 Tracing</h3>
+                <ol style="margin-left: 20px; line-height: 2.05;" start="3">
+                    <li>LangChain (2026). "LangSmith Observability Platform." langsmith.com</li>
+                    <li>Langfuse (2026). "Open Source LLM Observability." langfuse.com</li>
+                </ol>
+                
+                <h3 class="section-title">日志与指标</h3>
+                <ol style="margin-left: 20px; line-height: 2.05;" start="5">
+                    <li>Elastic (2026). "Elasticsearch Logging Best Practices." elastic.co</li>
+                    <li>Prometheus Team (2026). "Monitoring with Prometheus." prometheus.io</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.38em; margin-bottom: 19px; color: var(--observe-blue); font-weight: 800; font-family: 'Georgia', serif;">Agent 可观测性、监控与 Tracing 体系</p>
+                <p style="font-size: 1.12em; margin-bottom: 11px; font-style: italic;">从三大支柱到全链路透视的完整实践之道</p>
+                <p>© 2026 超级代码智能体 | 可观测性版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 27px; font-size: 0.94em; line-height: 1.88;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="observe-spectrum" style="margin-top: 38px;">
+                    <div class="spectrum-item spectrum-observe">🔵 可观测性</div>
+                    <div class="spectrum-item spectrum-monitor">🟣 监控体系</div>
+                    <div class="spectrum-item spectrum-trace">🟡 Tracing</div>
+                    <div class="spectrum-item spectrum-log">🟢 日志系统</div>
+                    <div class="spectrum-item spectrum-metric">🔴 指标系统</div>
+                </div>
+                <p style="margin-top: 38px; font-size: 0.87em; color: var(--text-secondary);">
+                    谨以此书献给所有在可观测性前沿探索的 SRE 工程师与系统架构师们<br>
+                    从三大支柱到 OpenTelemetry，从分布式追踪到结构化日志<br>
+                    可观测性——让 Agent 系统从不可知走向可理解
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Agent Observability & Monitoring');
+        console.log('📚 From Three Pillars to Full-Link Transparency (2024-2026)');
+        console.log('✨ Observability + Monitoring + Tracing + Logs + Metrics = System Transparency');
+    </script>
+</body>
+</html>

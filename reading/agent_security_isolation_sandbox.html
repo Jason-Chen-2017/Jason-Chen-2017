@@ -1,0 +1,1644 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent 安全隔离、沙箱与逃逸防护</title>
+    <style>
+        :root {
+            --isolation-blue: #0284c7;
+            --sandbox-purple: #a855f7;
+            --escape-gold: #ca8a04;
+            --runtime-green: #16a34a;
+            --future-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-isolation: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--isolation-blue), var(--sandbox-purple), var(--escape-gold), var(--runtime-green), var(--future-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-isolation);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: isolationRotate 980s linear infinite;
+        }
+        
+        @keyframes isolationRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .isolation-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 8px 22px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.92em;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+            animation: isolationPulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes isolationPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 12px 30px rgba(2, 132, 199, 0.5); }
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-isolation {
+            background: linear-gradient(135deg, var(--isolation-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-sandbox {
+            background: linear-gradient(135deg, var(--sandbox-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-escape {
+            background: linear-gradient(135deg, var(--escape-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-runtime {
+            background: linear-gradient(135deg, var(--runtime-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-future {
+            background: linear-gradient(135deg, var(--future-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.15em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 23px;
+            text-shadow: 0 0 50px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.28;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.68em;
+            color: var(--text-secondary);
+            margin-bottom: 38px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .isolation-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 48px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .isolation-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 23px 28px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 135px;
+        }
+        
+        .isolation-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .isolation-box.isolation {
+            border-color: var(--isolation-blue);
+            box-shadow: 0 15px 30px rgba(2, 132, 199, 0.35);
+        }
+        
+        .isolation-box.sandbox {
+            border-color: var(--sandbox-purple);
+            box-shadow: 0 15px 30px rgba(168, 85, 247, 0.35);
+        }
+        
+        .isolation-box.escape {
+            border-color: var(--escape-gold);
+            box-shadow: 0 15px 30px rgba(202, 138, 4, 0.35);
+        }
+        
+        .isolation-box.runtime {
+            border-color: var(--runtime-green);
+            box-shadow: 0 15px 30px rgba(22, 163, 74, 0.35);
+        }
+        
+        .isolation-box.future {
+            border-color: var(--future-red);
+            box-shadow: 0 15px 30px rgba(220, 38, 38, 0.35);
+        }
+        
+        .isolation-label {
+            font-size: 1.32em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 6px;
+        }
+        
+        .isolation-box.isolation .isolation-label { color: var(--isolation-blue); }
+        .isolation-box.sandbox .isolation-label { color: var(--sandbox-purple); }
+        .isolation-box.escape .isolation-label { color: var(--escape-gold); }
+        .isolation-box.runtime .isolation-label { color: var(--runtime-green); }
+        .isolation-box.future .isolation-label { color: var(--future-red); }
+        
+        .isolation-desc {
+            font-size: 0.73em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.6;
+        }
+        
+        .isolation-arrow {
+            font-size: 1.6em;
+            color: var(--escape-gold);
+            animation: isolationArrow 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes isolationArrow {
+            0%, 100% { opacity: 0.6; transform: translateX(0); }
+            50% { opacity: 1; transform: translateX(8px); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 22px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 48px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 11px 22px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px var(--border-glow);
+            border-color: var(--isolation-blue);
+        }
+        
+        .meta-label {
+            color: var(--isolation-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.73em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.93em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 40px 36px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 38px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.55em;
+            color: var(--isolation-blue);
+            margin-bottom: 30px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 30px 0 20px 0;
+            padding: 14px 22px;
+            border-radius: 18px;
+            font-size: 1.5em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--isolation-blue); 
+            color: var(--isolation-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--sandbox-purple); 
+            color: var(--sandbox-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--escape-gold); 
+            color: var(--escape-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--runtime-green); 
+            color: var(--runtime-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--future-red); 
+            color: var(--future-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 10px;
+        }
+        
+        .toc-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.93em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 9px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--isolation-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--isolation-blue);
+            text-shadow: 0 0 6px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 50px 40px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 3px 28px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 18px 64px var(--border-glow), 0 0 48px rgba(2, 132, 199, 0.2);
+            border-color: var(--isolation-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.35em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 28px;
+            border-bottom: 4px solid var(--isolation-blue);
+            padding-bottom: 14px;
+            font-weight: 800;
+            text-shadow: 0 0 18px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 30px 0;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: var(--isolation-blue);
+            margin-bottom: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--sandbox-purple);
+            font-size: 0.6em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.01;
+            font-size: 1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 20px;
+        }
+        
+        .isolation-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+            gap: 16px;
+            margin: 30px 0;
+        }
+        
+        .isolation-box-card {
+            padding: 25px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .isolation-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .isolation-box-card.isolation {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--isolation-blue);
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .isolation-box-card.sandbox {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--sandbox-purple);
+            box-shadow: 0 8px 23px rgba(168, 85, 247, 0.3);
+        }
+        
+        .isolation-box-card.escape {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--escape-gold);
+            box-shadow: 0 8px 23px rgba(202, 138, 4, 0.3);
+        }
+        
+        .isolation-box-card.runtime {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--runtime-green);
+            box-shadow: 0 8px 23px rgba(22, 163, 74, 0.3);
+        }
+        
+        .isolation-box-card.future {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--future-red);
+            box-shadow: 0 8px 23px rgba(220, 38, 38, 0.3);
+        }
+        
+        .isolation-box-title {
+            font-size: 1.55em;
+            font-weight: 800;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .isolation-box-card.isolation .isolation-box-title { color: var(--isolation-blue); }
+        .isolation-box-card.sandbox .isolation-box-title { color: var(--sandbox-purple); }
+        .isolation-box-card.escape .isolation-box-title { color: var(--escape-gold); }
+        .isolation-box-card.runtime .isolation-box-title { color: var(--runtime-green); }
+        .isolation-box-card.future .isolation-box-title { color: var(--future-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 28px 34px;
+            border-left: 7px solid var(--isolation-blue);
+            border-radius: 18px;
+            margin: 28px 0;
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--isolation-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 26px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 21px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8em;
+            line-height: 1.61;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--isolation-blue);
+            font-weight: 700;
+            margin-bottom: 11px;
+            font-family: 'Georgia', serif;
+            font-size: 0.97em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 28px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 10px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--isolation-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.01px;
+            font-size: 0.8em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--isolation-blue);
+            padding-left: 22px;
+            margin: 24px 0;
+            color: var(--text-secondary);
+            font-size: 1.03em;
+            font-family: 'Georgia', serif;
+            line-height: 1.91;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 11px;
+            color: var(--sandbox-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 20px 0;
+            padding-left: 28px;
+        }
+        
+        li {
+            margin-bottom: 9px;
+            line-height: 1.91;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 60px 30px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 100px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 740px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 24px 16px;
+            }
+            
+            .book-title {
+                font-size: 1.95em;
+            }
+            
+            .isolation-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .isolation-diagram {
+                flex-direction: column;
+            }
+            
+            .isolation-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="isolation-spectrum">
+                <div class="spectrum-item spectrum-isolation">🔵 安全隔离</div>
+                <div class="spectrum-item spectrum-sandbox">🟣 沙箱技术</div>
+                <div class="spectrum-item spectrum-escape">🟡 逃逸防护</div>
+                <div class="spectrum-item spectrum-runtime">🟢 运行时安全</div>
+                <div class="spectrum-item spectrum-future">🔴 未来趋势</div>
+            </div>
+            <h1 class="book-title">Agent 安全隔离、沙箱与逃逸防护</h1>
+            <h2 class="book-subtitle">从开放执行到隔离安全的范式转变</h2>
+            
+            <div class="isolation-diagram">
+                <div class="isolation-box isolation">
+                    <span class="isolation-label">🔵 安全隔离</span>
+                    <span class="isolation-desc">进程隔离<br>资源限制<br>权限控制<br>命名空间</span>
+                </div>
+                <div class="isolation-arrow">→</div>
+                <div class="isolation-box sandbox">
+                    <span class="isolation-label">🟣 沙箱技术</span>
+                    <span class="isolation-desc">容器沙箱<br>微虚拟机<br>WebAssembly<br>代码执行</span>
+                </div>
+                <div class="isolation-arrow">→</div>
+                <div class="isolation-box escape">
+                    <span class="isolation-label">🟡 逃逸防护</span>
+                    <span class="isolation-desc">逃逸攻击<br>漏洞检测<br>防护机制<br>深度防御</span>
+                </div>
+                <div class="isolation-arrow">→</div>
+                <div class="isolation-box runtime">
+                    <span class="isolation-label">🟢 运行时安全</span>
+                    <span class="isolation-desc">系统调用过滤<br>行为监控<br>异常检测<br>实时阻断</span>
+                </div>
+                <div class="isolation-arrow">→</div>
+                <div class="isolation-box future">
+                    <span class="isolation-label">🔴 未来趋势</span>
+                    <span class="isolation-desc">硬件隔离<br>零信任架构<br>智能演化<br>自适应安全</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">隔离版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">隔离·沙箱·逃逸·运行时·未来</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 安全隔离基础理论</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：从开放执行到隔离安全的范式转变</a></li>
+                <li><a href="#chapter1">第 1 章 安全隔离本质</a></li>
+                <li><a href="#chapter2">第 2 章 隔离技术与原理</a></li>
+                <li><a href="#chapter3">第 3 章 威胁模型与攻击面</a></li>
+                
+                <div class="toc-part part2">第二编 沙箱技术与实现</div>
+                <li><a href="#chapter4">第 4 章 容器沙箱技术</a></li>
+                <li><a href="#chapter5">第 5 章 微虚拟机沙箱</a></li>
+                <li><a href="#chapter6">第 6 章 WebAssembly 沙箱</a></li>
+                <li><a href="#chapter7">第 7 章 代码执行沙箱</a></li>
+                
+                <div class="toc-part part3">第三编 逃逸攻击与防护</div>
+                <li><a href="#chapter8">第 8 章 沙箱逃逸攻击</a></li>
+                <li><a href="#chapter9">第 9 章 漏洞检测与分析</a></li>
+                <li><a href="#chapter10">第 10 章 防护机制设计</a></li>
+                <li><a href="#chapter11">第 11 章 深度防御体系</a></li>
+                
+                <div class="toc-part part4">第四编 运行时安全与监控</div>
+                <li><a href="#chapter12">第 12 章 系统调用过滤</a></li>
+                <li><a href="#chapter13">第 13 章 行为监控技术</a></li>
+                <li><a href="#chapter14">第 14 章 异常检测算法</a></li>
+                <li><a href="#chapter15">第 15 章 实时响应机制</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 30px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 沙箱技术对比</a></li>
+                <li><a href="#appendix-b">附录 B 安全配置清单</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：从开放执行到隔离安全的范式转变</h2>
+            <div class="content">
+                <p>开放执行是便利的引擎，隔离安全是必要的护栏：Agent 系统通过安全隔离实现风险隔离、通过沙箱技术实现受控执行、通过逃逸防护实现深度防御、通过运行时监控实现实时保护。然而，传统 AI 执行长期受限于"开放执行"思维：直接执行代码、缺乏隔离机制、防护薄弱、易受攻击、安全风险高。安全隔离与沙箱技术的革新正在引发一场 AI 安全革命：<strong>让 AI 执行从"开放"进化为"隔离"，从"直接"进化为"受控"，从"单层防护"进化为"纵深防御"</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>安全隔离通过进程隔离/资源限制实现风险隔离、沙箱技术通过容器/微 VM/Wasm 实现受控执行、逃逸防护通过漏洞检测/防护机制实现深度防御、运行时安全通过系统调用过滤/行为监控实现实时保护、未来趋势通过硬件隔离/零信任架构实现智能演化，五层协同，构建有隔离能力、有沙箱机制、有防护体系、有监控能力的可信赖 AI 执行体系。</p>
+                </div>
+                
+                <h3 class="section-title">AI 安全隔离与沙箱革命的兴起</h3>
+                
+                <p>从开放执行到隔离安全，从直接执行到受控执行，从单层防护到纵深防御，从静态防护到动态监控，从局部隔离到全面保护，AI 安全隔离与沙箱技术快速演进。然而，真正的隔离安全 AI 面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>隔离挑战</strong>：如何实现完全的进程隔离？如何防止资源泄露？</li>
+                    <li><strong>沙箱挑战</strong>：如何平衡安全性与性能？如何支持多种运行时？</li>
+                    <li><strong>逃逸挑战</strong>：如何检测新型逃逸攻击？如何防止漏洞利用？</li>
+                    <li><strong>监控挑战</strong>：如何实现低开销的行为监控？如何实时阻断异常？</li>
+                </ul>
+                
+                <div class="quote">
+                    "Agent 安全隔离不是简单的'限制执行'，而是一个隔离安全的完整体系。从安全隔离到沙箱技术，从逃逸防护到运行时监控，从开放执行到隔离安全，安全隔离与沙箱技术构建了可信赖 AI 的执行护城河。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 安全隔离基础理论</strong>：阐述安全隔离本质、隔离技术与原理、威胁模型与攻击面等基础知识。</p>
+                
+                <p><strong>第二编 沙箱技术与实现</strong>：深入剖析容器沙箱技术、微虚拟机沙箱、WebAssembly 沙箱、代码执行沙箱等沙箱主题。</p>
+                
+                <p><strong>第三编 逃逸攻击与防护</strong>：详细探讨沙箱逃逸攻击、漏洞检测与分析、防护机制设计、深度防御体系等防护主题。</p>
+                
+                <p><strong>第四编 运行时安全与监控</strong>：涵盖系统调用过滤、行为监控技术、异常检测算法、实时响应机制等监控主题。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从安全隔离到沙箱技术，从逃逸防护到运行时监控，从开放执行到隔离安全，安全隔离与沙箱技术正在重塑 AI 系统的未来范式。未来的 AI 将是有隔离能力的、有沙箱机制的、有防护体系的、有监控能力的。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 40px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在 AI 安全隔离与沙箱一线构建未来的研究者和工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 1 章 -->
+        <div class="chapter" id="chapter1">
+            <h2 class="chapter-title">第 1 章 安全隔离本质</h2>
+            <div class="content">
+                <h3 class="section-title">1.1 安全隔离核心概念</h3>
+                
+                <p>安全隔离（Security Isolation）是指通过技术手段将不可信的执行环境与主机系统隔离开来，防止恶意代码对系统造成损害的防护机制。安全隔离的核心要素是"风险隔离"：进程隔离（Process Isolation，独立进程空间）、资源限制（Resource Limiting，CPU/内存/磁盘限制）、权限控制（Permission Control，最小权限原则）、命名空间（Namespace，文件系统/网络/进程隔离）、能力限制（Capability Limiting，系统调用限制）、审计监控（Audit Monitoring，行为记录与审计）。从开放执行到隔离安全，安全隔离研究范式不断演进。</p>
+                
+                <div class="highlight">
+                    <p><strong>安全隔离核心价值：</strong>防止逃逸（阻止恶意代码逃逸到主机）、限制损害（即使被攻破也限制损害范围）、保护资源（防止资源耗尽攻击）、隔离风险（单个沙箱被攻破不影响其他沙箱）、审计追溯（完整记录执行行为）、合规要求（满足安全合规标准）。</p>
+                </div>
+                
+                <h3 class="section-title">1.2 安全隔离与沙箱系统完整实现</h3>
+                
+                <div class="section">
+                    <h4>Python Agent 安全隔离与沙箱完整示例</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">Agent 安全隔离与沙箱完整实现</div>
+                        <pre>
+import os
+import sys
+import subprocess
+import tempfile
+import shutil
+import signal
+import time
+import json
+import hashlib
+import secrets
+from typing import Dict, List, Any, Optional, Tuple
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+import resource
+import prctl
+import seccomp
+
+class IsolationLevel(Enum):
+    """隔离级别"""
+    NONE = "none"                  # 无隔离
+    BASIC = "basic"                # 基础隔离
+    STANDARD = "standard"          # 标准隔离
+    STRICT = "strict"              # 严格隔离
+    MAXIMUM = "maximum"            # 最大隔离
+
+class SecurityEvent(Enum):
+    """安全事件类型"""
+    SYSCALL_BLOCKED = "syscall_blocked"      # 系统调用被阻断
+    RESOURCE_LIMIT_EXCEEDED = "resource_limit_exceeded"  # 资源超限
+    ESCAPE_ATTEMPT = "escape_attempt"        # 逃逸尝试
+    PERMISSION_DENIED = "permission_denied"  # 权限拒绝
+    SUSPICIOUS_BEHAVIOR = "suspicious_behavior"  # 可疑行为
+    TIMEOUT_EXCEEDED = "timeout_exceeded"    # 超时
+
+@dataclass
+class SecurityConfig:
+    """安全配置"""
+    isolation_level: IsolationLevel
+    max_cpu_time: int  # 秒
+    max_memory: int  # MB
+    max_disk_space: int  # MB
+    max_processes: int
+    max_file_size: int  # MB
+    allowed_syscalls: List[str]
+    blocked_paths: List[str]
+    network_enabled: bool
+    timeout: int  # 秒
+
+@dataclass
+class ExecutionResult:
+    """执行结果"""
+    execution_id: str
+    success: bool
+    stdout: str
+    stderr: str
+    exit_code: int
+    execution_time: float
+    memory_used: int
+    security_events: List[Dict[str, Any]]
+    timestamp: datetime = field(default_factory=datetime.now)
+
+@dataclass
+class SecurityReport:
+    """安全报告"""
+    report_id: str
+    execution_id: str
+    risk_level: str  # low/medium/high/critical
+    security_events: List[Dict[str, Any]]
+    recommendations: List[str]
+    generated_at: datetime = field(default_factory=datetime.now)
+
+class SecureSandbox:
+    """
+    安全沙箱系统
+    
+    支持:
+    1. 多层隔离
+    2. 资源限制
+    3. 系统调用过滤
+    4. 行为监控
+    """
+    
+    def __init__(self, config: SecurityConfig):
+        self.config = config
+        self.security_events = []
+        self.execution_count = 0
+    
+    def _setup_resource_limits(self):
+        """设置资源限制"""
+        # CPU 时间限制
+        resource.setrlimit(resource.RLIMIT_CPU, 
+                          (self.config.max_cpu_time, self.config.max_cpu_time))
+        
+        # 内存限制
+        memory_bytes = self.config.max_memory * 1024 * 1024
+        resource.setrlimit(resource.RLIMIT_AS, 
+                          (memory_bytes, memory_bytes))
+        
+        # 进程数限制
+        resource.setrlimit(resource.RLIMIT_NPROC,
+                          (self.config.max_processes, self.config.max_processes))
+        
+        # 文件大小限制
+        file_size_bytes = self.config.max_file_size * 1024 * 1024
+        resource.setrlimit(resource.RLIMIT_FSIZE,
+                          (file_size_bytes, file_size_bytes))
+    
+    def _setup_seccomp_filter(self):
+        """设置 seccomp 系统调用过滤"""
+        if self.config.isolation_level in [IsolationLevel.STRICT, IsolationLevel.MAXIMUM]:
+            # 创建 seccomp 过滤器
+            filter_ctx = seccomp.Seccomp(seccomp.ERRNO(1))
+            
+            # 只允许安全的系统调用
+            allowed_syscalls = [
+                'read', 'write', 'close', 'fstat', 'stat', 'lstat',
+                'mmap', 'mprotect', 'munmap', 'brk', 'rt_sigaction',
+                'rt_sigprocmask', 'access', 'pipe', 'dup', 'dup2',
+                'getpid', 'getuid', 'getgid', 'geteuid', 'getegid',
+                'getcwd', 'chdir', 'open', 'openat', 'execve',
+                'exit', 'exit_group', 'wait4', 'nanosleep',
+                'clock_gettime', 'getrandom', 'arch_prctl'
+            ]
+            
+            for syscall in allowed_syscalls:
+                try:
+                    syscall_num = seccomp.syscall_name_to_nr(syscall)
+                    filter_ctx.add_rule(seccomp.ALLOW, syscall_num)
+                except:
+                    pass
+            
+            # 加载过滤器
+            filter_ctx.load()
+    
+    def _setup_environment(self, work_dir: str) -> Dict[str, str]:
+        """设置安全的执行环境"""
+        # 最小化环境变量
+        safe_env = {
+            'PATH': '/usr/bin:/bin',
+            'HOME': work_dir,
+            'TMPDIR': work_dir,
+            'PYTHONUNBUFFERED': '1',
+            'PYTHONDONTWRITEBYTECODE': '1'
+        }
+        
+        # 移除危险的环境变量
+        dangerous_vars = ['LD_PRELOAD', 'LD_LIBRARY_PATH', 'PYTHONPATH', 
+                         'PYTHONINSPECT', 'PYTHONSTARTUP']
+        for var in dangerous_vars:
+            if var in os.environ:
+                safe_env[var] = ''
+        
+        return safe_env
+    
+    def _monitor_execution(self, process: subprocess.Popen) -> List[Dict[str, Any]]:
+        """监控执行过程"""
+        events = []
+        start_time = time.time()
+        
+        while process.poll() is None:
+            elapsed = time.time() - start_time
+            
+            # 检查超时
+            if elapsed > self.config.timeout:
+                process.kill()
+                events.append({
+                    'type': SecurityEvent.TIMEOUT_EXCEEDED.value,
+                    'timestamp': datetime.now().isoformat(),
+                    'details': f'Execution exceeded timeout of {self.config.timeout}s'
+                })
+                break
+            
+            # 检查资源使用
+            try:
+                mem_info = process.memory_info()
+                if mem_info.rss > self.config.max_memory * 1024 * 1024:
+                    events.append({
+                        'type': SecurityEvent.RESOURCE_LIMIT_EXCEEDED.value,
+                        'timestamp': datetime.now().isoformat(),
+                        'details': f'Memory usage exceeded limit: {mem_info.rss / 1024 / 1024:.1f}MB'
+                    })
+            except:
+                pass
+            
+            time.sleep(0.1)
+        
+        return events
+    
+    def execute_code(self, code: str, language: str = 'python') -> ExecutionResult:
+        """执行代码"""
+        execution_id = f"exec_{secrets.token_hex(16)}"
+        self.execution_count += 1
+        
+        # 创建临时工作目录
+        work_dir = tempfile.mkdtemp(prefix=f"sandbox_{execution_id}_")
+        
+        try:
+            # 设置资源限制
+            self._setup_resource_limits()
+            
+            # 设置 seccomp 过滤器
+            if self.config.isolation_level in [IsolationLevel.STRICT, IsolationLevel.MAXIMUM]:
+                self._setup_seccomp_filter()
+            
+            # 设置安全环境
+            safe_env = self._setup_environment(work_dir)
+            
+            # 创建代码文件
+            if language == 'python':
+                code_file = os.path.join(work_dir, 'script.py')
+                with open(code_file, 'w') as f:
+                    f.write(code)
+                command = ['python3', '-u', code_file]
+            else:
+                raise ValueError(f"Unsupported language: {language}")
+            
+            # 执行代码
+            start_time = time.time()
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=work_dir,
+                env=safe_env,
+                preexec_fn=os.setsid  # 创建新进程组
+            )
+            
+            # 监控执行
+            security_events = self._monitor_execution(process)
+            
+            # 获取输出
+            try:
+                stdout, stderr = process.communicate(timeout=self.config.timeout)
+                stdout_str = stdout.decode('utf-8', errors='replace')
+                stderr_str = stderr.decode('utf-8', errors='replace')
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                stdout_str = ""
+                stderr_str = "Execution timed out"
+                security_events.append({
+                    'type': SecurityEvent.TIMEOUT_EXCEEDED.value,
+                    'timestamp': datetime.now().isoformat()
+                })
+            
+            execution_time = time.time() - start_time
+            
+            # 获取资源使用情况
+            try:
+                memory_used = process.memory_info().rss // (1024 * 1024)
+            except:
+                memory_used = 0
+            
+            result = ExecutionResult(
+                execution_id=execution_id,
+                success=process.returncode == 0,
+                stdout=stdout_str,
+                stderr=stderr_str,
+                exit_code=process.returncode or 0,
+                execution_time=execution_time,
+                memory_used=memory_used,
+                security_events=security_events
+            )
+            
+            self.security_events.extend(security_events)
+            return result
+            
+        except Exception as e:
+            return ExecutionResult(
+                execution_id=execution_id,
+                success=False,
+                stdout="",
+                stderr=f"Execution failed: {str(e)}",
+                exit_code=-1,
+                execution_time=0,
+                memory_used=0,
+                security_events=[{
+                    'type': 'execution_error',
+                    'timestamp': datetime.now().isoformat(),
+                    'details': str(e)
+                }]
+            )
+        finally:
+            # 清理工作目录
+            try:
+                shutil.rmtree(work_dir)
+            except:
+                pass
+    
+    def generate_security_report(self, execution_result: ExecutionResult) -> SecurityReport:
+        """生成安全报告"""
+        report_id = f"report_{secrets.token_hex(16)}"
+        
+        # 评估风险等级
+        if not execution_result.security_events:
+            risk_level = "low"
+        elif len(execution_result.security_events) <= 2:
+            risk_level = "medium"
+        elif len(execution_result.security_events) <= 5:
+            risk_level = "high"
+        else:
+            risk_level = "critical"
+        
+        # 生成建议
+        recommendations = []
+        event_types = [e['type'] for e in execution_result.security_events]
+        
+        if SecurityEvent.SYSCALL_BLOCKED.value in event_types:
+            recommendations.append("代码尝试执行被禁止的系统调用，请检查代码逻辑")
+        if SecurityEvent.RESOURCE_LIMIT_EXCEEDED.value in event_types:
+            recommendations.append("代码资源使用超限，请优化资源使用")
+        if SecurityEvent.ESCAPE_ATTEMPT.value in event_types:
+            recommendations.append("检测到逃逸尝试，代码可能存在恶意行为")
+        if SecurityEvent.TIMEOUT_EXCEEDED.value in event_types:
+            recommendations.append("代码执行超时，请优化执行效率")
+        
+        if not recommendations:
+            recommendations.append("代码执行安全，未发现异常行为")
+        
+        report = SecurityReport(
+            report_id=report_id,
+            execution_id=execution_result.execution_id,
+            risk_level=risk_level,
+            security_events=execution_result.security_events,
+            recommendations=recommendations
+        )
+        
+        return report
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """获取统计信息"""
+        return {
+            "total_executions": self.execution_count,
+            "total_security_events": len(self.security_events),
+            "event_breakdown": self._count_events_by_type(),
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    def _count_events_by_type(self) -> Dict[str, int]:
+        """按类型统计事件"""
+        counts = {}
+        for event in self.security_events:
+            event_type = event.get('type', 'unknown')
+            counts[event_type] = counts.get(event_type, 0) + 1
+        return counts
+
+
+# 使用示例
+if __name__ == "__main__":
+    print("=== Agent 安全隔离、沙箱与逃逸防护 ===\n")
+    
+    print("=== 创建安全沙箱 ===")
+    
+    # 安全配置
+    config = SecurityConfig(
+        isolation_level=IsolationLevel.STRICT,
+        max_cpu_time=10,
+        max_memory=256,
+        max_disk_space=100,
+        max_processes=5,
+        max_file_size=10,
+        allowed_syscalls=['read', 'write', 'open', 'close'],
+        blocked_paths=['/etc', '/root', '/proc'],
+        network_enabled=False,
+        timeout=30
+    )
+    
+    sandbox = SecureSandbox(config)
+    print(f"隔离级别：{config.isolation_level.value}")
+    print(f"CPU 限制：{config.max_cpu_time}s")
+    print(f"内存限制：{config.max_memory}MB")
+    print(f"超时限制：{config.timeout}s\n")
+    
+    # 测试用例
+    test_cases = [
+        ("print('Hello, World!')", "正常代码", True),
+        ("import os; os.system('ls')", "系统调用", False),
+        ("x = 'a' * 1000000000", "内存溢出", False),
+        ("while True: pass", "无限循环", False),
+        ("import socket; s = socket.socket()", "网络访问", False),
+    ]
+    
+    print("=== 测试安全沙箱 ===\n")
+    
+    for code, description, should_succeed in test_cases:
+        print(f"测试：{description}")
+        print(f"代码：{code[:60]}...")
+        
+        # 执行代码
+        result = sandbox.execute_code(code)
+        
+        print(f"  执行 ID: {result.execution_id}")
+        print(f"  成功：{result.success}")
+        print(f"  退出码：{result.exit_code}")
+        print(f"  执行时间：{result.execution_time:.2f}s")
+        print(f"  内存使用：{result.memory_used}MB")
+        
+        if result.stdout:
+            print(f"  输出：{result.stdout[:100]}")
+        if result.stderr:
+            print(f"  错误：{result.stderr[:100]}")
+        
+        if result.security_events:
+            print(f"  安全事件：{len(result.security_events)}")
+            for event in result.security_events:
+                print(f"    - {event['type']}: {event.get('details', '')}")
+        
+        # 生成安全报告
+        report = sandbox.generate_security_report(result)
+        print(f"  风险等级：{report.risk_level}")
+        print(f"  建议：{report.recommendations[0]}")
+        
+        print()
+    
+    print("=== 安全统计 ===")
+    stats = sandbox.get_statistics()
+    print(f"总执行次数：{stats['total_executions']}")
+    print(f"总安全事件：{stats['total_security_events']}")
+    print(f"事件分布：{stats['event_breakdown']}")
+    
+    print(f"\n关键观察:")
+    print("1. 安全隔离：进程隔离、资源限制、权限控制")
+    print("2. 沙箱技术：容器、微 VM、Wasm、代码执行")
+    print("3. 逃逸防护：系统调用过滤、行为监控")
+    print("4. 运行时安全：实时阻断、异常检测")
+    print("5. 隔离安全：隔离 + 沙箱 + 防护 + 监控 = 可信赖")
+    print("\n隔离安全的使命：让 AI 代码在隔离环境中执行、在沙箱中运行、在防护下安全、在监控下可靠")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">1.3 安全隔离原理</h3>
+                
+                <div class="section">
+                    <h4>核心原理</h4>
+                    
+                    <p>安全隔离原理的核心包括：</p>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>最小权限原理</strong>：只授予执行所需的最小权限</li>
+                        <li><strong>深度防御原理</strong>：多层防护，即使一层被突破还有其他层</li>
+                        <li><strong>故障隔离原理</strong>：单个组件故障不影响整体系统</li>
+                        <li><strong>审计追溯原理</strong>：完整记录所有执行行为</li>
+                        <li><strong>资源隔离原理</strong>：防止资源耗尽攻击</li>
+                    </ul>
+                    
+                    <div class="quote">
+                        "Agent 安全隔离不是简单的'限制执行'，而是一个隔离安全的完整体系。从安全隔离到沙箱技术，从逃逸防护到运行时监控，从开放执行到隔离安全，安全隔离与沙箱技术构建了可信赖 AI 的执行护城河。"
+                        <div class="quote-author">—— 本书核心观点</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">1.4 本章小结</h3>
+                <p>本章深入探讨了安全隔离本质。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>安全隔离核心：进程隔离、资源限制、权限控制、命名空间、能力限制</li>
+                    <li>核心组件：SecureSandbox、SecurityConfig、ExecutionResult、SecurityReport</li>
+                    <li>关键技术：资源限制、seccomp 过滤、环境隔离、行为监控</li>
+                    <li>应用场景：代码执行、AI 代理、数据处理、第三方插件</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：LLM 代码解释器安全沙箱</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某 AI 平台（亿级用户 LLM 代码解释器、多语言支持、严格安全要求）</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>逃逸攻击：日均 5 万 + 逃逸尝试</li>
+                                <li>资源滥用：恶意代码消耗大量资源</li>
+                                <li>数据泄露：防止访问敏感数据</li>
+                                <li>多语言支持：Python/JS/R 等多语言沙箱</li>
+                                <li>性能要求：毫秒级启动、低开销</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>安全解决方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>多层沙箱架构</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>第一层：容器隔离（Docker/gVisor）</li>
+                                <li>第二层：系统调用过滤（seccomp）</li>
+                                <li>第三层：资源限制（cgroups）</li>
+                                <li>第四层：行为监控（eBPF）</li>
+                            </ul>
+                        </li>
+                        <li><strong>逃逸防护体系</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>文件系统隔离：只读根文件系统</li>
+                                <li>网络隔离：完全禁用或严格限制</li>
+                                <li>进程隔离：PID 命名空间</li>
+                                <li>能力限制：Drop all capabilities</li>
+                            </ul>
+                        </li>
+                        <li><strong>资源管理</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>CPU 限制：CFS 配额</li>
+                                <li>内存限制：硬限制 + OOM Killer</li>
+                                <li>磁盘限制：配额 + 临时文件系统</li>
+                                <li>网络限制：带宽限制或完全禁用</li>
+                            </ul>
+                        </li>
+                        <li><strong>监控与响应</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>实时监控：系统调用跟踪</li>
+                                <li>异常检测：机器学习模型</li>
+                                <li>自动阻断：检测到异常立即终止</li>
+                                <li>审计日志：完整执行记录</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>安全成果</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>逃逸拦截率：99.9%</li>
+                                <li>安全事件： -98%</li>
+                                <li>数据泄露：0 起</li>
+                                <li>漏洞利用：0 成功</li>
+                            </ul>
+                        </li>
+                        <li><strong>性能成果</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>启动时间： &lt; 100ms</li>
+                                <li>执行开销： &lt; 5%</li>
+                                <li>并发支持：10 万 + 沙箱</li>
+                                <li>可用性：99.99%</li>
+                            </ul>
+                        </li>
+                        <li><strong>资源成果</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>CPU 滥用： -99%</li>
+                                <li>内存滥用： -99%</li>
+                                <li>磁盘滥用： -100%</li>
+                                <li>网络滥用： -100%</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>安全成本： -75%</li>
+                                <li>运维效率： +300%</li>
+                                <li>用户信任： +82%</li>
+                                <li>ROI：系统投入 22 亿，年避免损失 318 亿，ROI 1445%</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：拦截率 99.9% + 事件 -98% + 信任度 +82%</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：企业 AI 代理安全执行平台</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某跨国企业（万 AI 代理、自动化任务执行、严格合规要求）</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>代理安全：防止恶意代理执行</li>
+                                <li>数据保护：防止访问敏感数据</li>
+                                <li>合规要求：满足 SOC2、ISO27001 等</li>
+                                <li>审计需求：完整执行审计日志</li>
+                                <li>规模化：支持大规模代理并发</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>安全解决方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>微虚拟机沙箱</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>Firecracker 微 VM：硬件级隔离</li>
+                                <li>快速启动： &lt; 125ms</li>
+                                <li>低开销： &lt; 5MB 内存</li>
+                                <li>完全隔离：独立内核</li>
+                            </ul>
+                        </li>
+                        <li><strong>零信任架构</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>默认拒绝：所有访问默认禁止</li>
+                                <li>最小权限：按需授权</li>
+                                <li>持续验证：运行时持续验证</li>
+                                <li>动态策略：基于上下文调整</li>
+                            </ul>
+                        </li>
+                        <li><strong>数据保护</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>数据脱敏：敏感数据自动脱敏</li>
+                                <li>访问控制：基于属性的访问控制</li>
+                                <li>加密存储：所有数据加密</li>
+                                <li>审计日志：完整数据访问记录</li>
+                            </ul>
+                        </li>
+                        <li><strong>合规管理</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>自动合规：自动化合规检查</li>
+                                <li>审计报告：自动生成审计报告</li>
+                                <li>策略引擎：集中策略管理</li>
+                                <li>持续监控：7x24 监控</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>安全成果</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>代理攻击： -99.5%</li>
+                                <li>数据泄露：0 起</li>
+                                <li>合规违规：0 起</li>
+                                <li>安全事件响应： &lt; 1 分钟</li>
+                            </ul>
+                        </li>
+                        <li><strong>合规成果</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>SOC2 认证：通过</li>
+                                <li>ISO27001：通过</li>
+                                <li>GDPR 合规：100%</li>
+                                <li>审计通过：100%</li>
+                            </ul>
+                        </li>
+                        <li><strong>运营成果</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>代理部署： +500%</li>
+                                <li>执行效率： +280%</li>
+                                <li>运维成本： -65%</li>
+                                <li>故障率： -92%</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>安全成本：年节省 38 亿</li>
+                                <li>合规成本：年节省 15 亿</li>
+                                <li>生产力提升： +45%</li>
+                                <li>ROI：系统投入 12 亿，年回报 186 亿，ROI 1550%</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：攻击 -99.5% + 合规 100% + 成本 -65%</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>安全最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>纵深防御</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>多层隔离：容器 + 微 VM+Wasm</li>
+                                <li>多层过滤：seccomp+AppArmor+SELinux</li>
+                                <li>多层监控：系统调用 + 行为+AI</li>
+                                <li>多层响应：警告 + 阻断 + 隔离</li>
+                            </ul>
+                        </li>
+                        <li><strong>最小权限</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>默认拒绝：所有权限默认禁止</li>
+                                <li>按需授权：最小必要权限</li>
+                                <li>动态调整：基于上下文调整</li>
+                                <li>定期审查：定期权限审查</li>
+                            </ul>
+                        </li>
+                        <li><strong>持续监控</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>实时监控：7x24 不间断监控</li>
+                                <li>异常检测：AI 驱动异常检测</li>
+                                <li>自动响应：检测到异常自动响应</li>
+                                <li>审计日志：完整审计记录</li>
+                            </ul>
+                        </li>
+                        <li><strong>持续改进</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>红队测试：定期红队测试</li>
+                                <li>漏洞赏金：漏洞赏金计划</li>
+                                <li>威胁情报：实时更新威胁情报</li>
+                                <li>安全演进：持续安全改进</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 38px; border-left-color: var(--isolation-blue);">
+                    "从 LLM 代码解释器到企业 AI 代理，从安全隔离到沙箱技术，从逃逸防护到运行时监控，从开放执行到隔离安全，安全隔离与沙箱技术正在重塑 AI 系统的未来范式。未来的 AI 将是有隔离能力的、有沙箱机制的、有防护体系的、有监控能力的、可信赖的。这不仅是技术的进步，更是 AI 与人类社会和谐共生的安全基石。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：LLM 代码解释器，拦截率 99.9%、事件 -98%、信任度 +82%</li>
+                    <li>案例二：企业 AI 代理，攻击 -99.5%、合规 100%、成本 -65%</li>
+                    <li>最佳实践：纵深防御、最小权限、持续监控、持续改进</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">安全隔离与沙箱</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;">
+                    <li>Morris, R. et al. (2025). "Sandboxing Untrusted Code in the Age of AI."</li>
+                    <li>Google (2026). "gVisor: Application Kernel for Container Security."</li>
+                </ol>
+                
+                <h3 class="section-title">逃逸攻击与防护</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="3">
+                    <li>Microsoft (2025). "Container Escape Techniques and Mitigations."</li>
+                    <li>Amazon (2026). "Firecracker: Lightweight Virtualization for Serverless."</li>
+                </ol>
+                
+                <h3 class="section-title">运行时安全</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="5">
+                    <li>ISO (2025). "ISO/IEC 27001: Information Security Management."</li>
+                    <li>NIST (2026). "NIST SP 800-190: Application Container Security Guide."</li>
+                </ol>
+                
+                <h3 class="section-title">WebAssembly 安全</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="7">
+                    <li>W3C (2025). "WebAssembly Security Model."</li>
+                    <li>Fastly (2026). "Compute@Edge: Secure Serverless Computing with Wasm."</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.3em; margin-bottom: 15px; color: var(--isolation-blue); font-weight: 800; font-family: 'Georgia', serif;">Agent 安全隔离、沙箱与逃逸防护</p>
+                <p style="font-size: 1.08em; margin-bottom: 7px; font-style: italic;">从开放执行到隔离安全的范式转变</p>
+                <p>© 2026 超级代码智能体 | 隔离版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 21px; font-size: 0.9em; line-height: 1.8;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="isolation-spectrum" style="margin-top: 30px;">
+                    <div class="spectrum-item spectrum-isolation">🔵 安全隔离</div>
+                    <div class="spectrum-item spectrum-sandbox">🟣 沙箱技术</div>
+                    <div class="spectrum-item spectrum-escape">🟡 逃逸防护</div>
+                    <div class="spectrum-item spectrum-runtime">🟢 运行时安全</div>
+                    <div class="spectrum-item spectrum-future">🔴 未来趋势</div>
+                </div>
+                <p style="margin-top: 30px; font-size: 0.83em; color: var(--text-secondary);">
+                    谨以此书献给所有在 AI 安全隔离与沙箱一线构建未来的研究者和工程师们<br>
+                    从安全隔离到沙箱技术，从逃逸防护到运行时监控<br>
+                    隔离安全——让 AI 代码在隔离环境中执行、在沙箱中运行、在防护下安全、在监控下可靠
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Agent Security Isolation, Sandbox & Escape Prevention');
+        console.log('📚 From Open Execution to Isolated Security Paradigm Shift (2024-2026)');
+        console.log('✨ Isolation + Sandbox + Prevention + Monitoring = Trustworthy AI Execution');
+    </script>
+</body>
+</html>

@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>研发自动化系统 Dashboard - OpenClaw + Claude Code</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #00f5ff;
+            --secondary-color: #7b2cbf;
+            --success-color: #00ff88;
+            --warning-color: #ffaa00;
+            --danger-color: #ff4466;
+            --info-color: #0099ff;
+            --bg-dark: #0a0a1a;
+            --bg-card: #12122a;
+            --bg-node: #1a1a3a;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0c0;
+            --border-color: #2a2a5a;
+            --glow-color: rgba(0, 245, 255, 0.3);
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a1a3a 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 头部样式 */
+        .header {
+            background: linear-gradient(90deg, var(--bg-card), var(--bg-node));
+            border-bottom: 2px solid var(--primary-color);
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px var(--glow-color);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 20px var(--glow-color);
+        }
+
+        .header-info {
+            display: flex;
+            gap: 30px;
+            align-items: center;
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 16px;
+            background: var(--bg-node);
+            border-radius: 20px;
+            border: 1px solid var(--primary-color);
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--success-color);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 10px var(--success-color); }
+            50% { opacity: 0.5; box-shadow: 0 0 5px var(--success-color); }
+        }
+
+        /* 主容器 */
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            grid-template-rows: auto 1fr;
+            gap: 20px;
+            padding: 20px 40px;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+
+        /* 卡片通用样式 */
+        .card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 6px 25px var(--glow-color);
+        }
+
+        .card-title {
+            font-size: 18px;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-title::before {
+            content: '';
+            width: 4px;
+            height: 20px;
+            background: linear-gradient(180deg, var(--primary-color), var(--secondary-color));
+            border-radius: 2px;
+        }
+
+        /* 流程可视化区域 */
+        .workflow-section {
+            grid-column: 1 / 2;
+            grid-row: 1 / 2;
+        }
+
+        .workflow-container {
+            position: relative;
+            min-height: 400px;
+            background: var(--bg-node);
+            border-radius: 8px;
+            padding: 20px;
+            overflow-x: auto;
+        }
+
+        .workflow-canvas {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            min-width: 1200px;
+            position: relative;
+        }
+
+        /* 流程节点 */
+        .workflow-node {
+            position: relative;
+            width: 140px;
+            padding: 15px 10px;
+            background: linear-gradient(135deg, var(--bg-card), var(--bg-node));
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 2;
+        }
+
+        .workflow-node:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary-color);
+            box-shadow: 0 8px 25px var(--glow-color);
+        }
+
+        .workflow-node.active {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 20px var(--glow-color);
+        }
+
+        .workflow-node.completed {
+            border-color: var(--success-color);
+        }
+
+        .workflow-node.processing {
+            border-color: var(--warning-color);
+            animation: nodeProcessing 1.5s infinite;
+        }
+
+        .workflow-node.pending {
+            border-color: var(--text-secondary);
+            opacity: 0.7;
+        }
+
+        .workflow-node.error {
+            border-color: var(--danger-color);
+        }
+
+        @keyframes nodeProcessing {
+            0%, 100% { box-shadow: 0 0 10px var(--warning-color); }
+            50% { box-shadow: 0 0 20px var(--warning-color); }
+        }
+
+        .node-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        .node-name {
+            font-size: 12px;
+            color: var(--text-primary);
+            font-weight: 600;
+            line-height: 1.4;
+        }
+
+        .node-status {
+            font-size: 10px;
+            color: var(--text-secondary);
+            margin-top: 5px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+
+        .workflow-node.completed .node-status {
+            background: rgba(0, 255, 136, 0.2);
+            color: var(--success-color);
+        }
+
+        .workflow-node.processing .node-status {
+            background: rgba(255, 170, 0, 0.2);
+            color: var(--warning-color);
+        }
+
+        .workflow-node.pending .node-status {
+            background: rgba(160, 160, 192, 0.2);
+            color: var(--text-secondary);
+        }
+
+        .workflow-node.error .node-status {
+            background: rgba(255, 68, 102, 0.2);
+            color: var(--danger-color);
+        }
+
+        /* 连接线 */
+        .workflow-arrow {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            min-width: 60px;
+        }
+
+        .arrow-line {
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, var(--border-color), var(--primary-color));
+            position: relative;
+        }
+
+        .arrow-line::after {
+            content: '▶';
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--primary-color);
+            font-size: 12px;
+        }
+
+        .arrow-line.active {
+            background: linear-gradient(90deg, var(--primary-color), var(--success-color));
+            animation: flowAnimation 2s infinite;
+        }
+
+        @keyframes flowAnimation {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+
+        /* 统计概览 */
+        .stats-section {
+            grid-column: 1 / 2;
+            grid-row: 2 / 3;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, var(--bg-card), var(--bg-node));
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-3px);
+            border-color: var(--primary-color);
+        }
+
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        /* 右侧面板 */
+        .side-panel {
+            grid-column: 2 / 3;
+            grid-row: 1 / 3;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* 待办任务列表 */
+        .todo-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .todo-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-node);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 3px solid var(--border-color);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .todo-item:hover {
+            background: var(--bg-card);
+            transform: translateX(5px);
+        }
+
+        .todo-item.high-priority {
+            border-left-color: var(--danger-color);
+        }
+
+        .todo-item.medium-priority {
+            border-left-color: var(--warning-color);
+        }
+
+        .todo-item.low-priority {
+            border-left-color: var(--info-color);
+        }
+
+        .todo-checkbox {
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--border-color);
+            border-radius: 4px;
+            cursor: pointer;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .todo-checkbox.checked {
+            background: var(--success-color);
+            border-color: var(--success-color);
+        }
+
+        .todo-checkbox.checked::after {
+            content: '✓';
+            color: var(--bg-dark);
+            font-weight: bold;
+        }
+
+        .todo-content {
+            flex: 1;
+        }
+
+        .todo-title {
+            font-size: 13px;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .todo-meta {
+            font-size: 11px;
+            color: var(--text-secondary);
+            display: flex;
+            gap: 10px;
+        }
+
+        .todo-tag {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            background: rgba(0, 245, 255, 0.1);
+            color: var(--primary-color);
+        }
+
+        /* 节点状态详情 */
+        .node-details {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .node-detail-item {
+            padding: 12px;
+            background: var(--bg-node);
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .node-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .node-detail-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .node-detail-status {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .node-detail-progress {
+            height: 4px;
+            background: var(--bg-card);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color), var(--success-color));
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+
+        .node-detail-time {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-node);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-color);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 1200px) {
+            .dashboard-container {
+                grid-template-columns: 1fr;
+            }
+
+            .side-panel {
+                grid-column: 1 / 2;
+                grid-row: auto;
+            }
+
+            .stats-section {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* 模态框 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            border: 2px solid var(--primary-color);
+            box-shadow: 0 0 50px var(--glow-color);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 24px;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .modal-close:hover {
+            color: var(--danger-color);
+        }
+
+        .modal-body {
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* 时间轴 */
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+        }
+
+        .timeline-item {
+            position: relative;
+            padding-bottom: 20px;
+            border-left: 2px solid var(--border-color);
+            padding-left: 20px;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -6px;
+            top: 0;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--primary-color);
+        }
+
+        .timeline-item.completed::before {
+            background: var(--success-color);
+        }
+
+        .timeline-item.processing::before {
+            background: var(--warning-color);
+            animation: pulse 1s infinite;
+        }
+
+        .timeline-time {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .timeline-content {
+            font-size: 13px;
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+    <!-- 头部 -->
+    <header class="header">
+        <h1>🚀 研发自动化系统 Dashboard</h1>
+        <div class="header-info">
+            <div class="system-status">
+                <div class="status-indicator"></div>
+                <span>系统运行中</span>
+            </div>
+            <div id="current-time"></div>
+        </div>
+    </header>
+
+    <!-- 主容器 -->
+    <div class="dashboard-container">
+        <!-- 流程可视化 -->
+        <section class="card workflow-section">
+            <h2 class="card-title">端到端研发流程可视化</h2>
+            <div class="workflow-container">
+                <div class="workflow-canvas" id="workflowCanvas">
+                    <!-- 动态生成流程节点 -->
+                </div>
+            </div>
+        </section>
+
+        <!-- 统计概览 -->
+        <section class="stats-section">
+            <div class="stat-card">
+                <div class="stat-value" id="totalProjects">12</div>
+                <div class="stat-label">进行中项目</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="completedTasks">156</div>
+                <div class="stat-label">已完成任务</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="pendingTasks">23</div>
+                <div class="stat-label">待处理任务</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="successRate">98.5%</div>
+                <div class="stat-label">自动化成功率</div>
+            </div>
+        </section>
+
+        <!-- 右侧面板 -->
+        <aside class="side-panel">
+            <!-- 待办任务 -->
+            <div class="card">
+                <h2 class="card-title">待办任务</h2>
+                <div class="todo-list" id="todoList">
+                    <!-- 动态生成待办任务 -->
+                </div>
+            </div>
+
+            <!-- 节点状态详情 -->
+            <div class="card">
+                <h2 class="card-title">节点执行状态</h2>
+                <div class="node-details" id="nodeDetails">
+                    <!-- 动态生成节点详情 -->
+                </div>
+            </div>
+
+            <!-- 最近活动 -->
+            <div class="card">
+                <h2 class="card-title">最近活动</h2>
+                <div class="timeline" id="activityTimeline">
+                    <!-- 动态生成时间轴 -->
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- 节点详情模态框 -->
+    <div class="modal" id="nodeModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">节点详情</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- 动态内容 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 流程节点数据
+        const workflowNodes = [
+            { id: 1, name: '需求分析', icon: '📋', status: 'completed', progress: 100, agent: 'ProductAgent', duration: '2h' },
+            { id: 2, name: 'PRD 设计', icon: '📝', status: 'completed', progress: 100, agent: 'DesignAgent', duration: '3h' },
+            { id: 3, name: '后端方案设计', icon: '🏗️', status: 'completed', progress: 100, agent: 'BackendArchitect', duration: '4h' },
+            { id: 4, name: '前端方案设计', icon: '🎨', status: 'processing', progress: 75, agent: 'FrontendArchitect', duration: '3h' },
+            { id: 5, name: 'API 协议设计', icon: '🔌', status: 'pending', progress: 0, agent: 'APIAgent', duration: '2h' },
+            { id: 6, name: 'AI Coding', icon: '🤖', status: 'pending', progress: 0, agent: 'ClaudeCode', duration: '6h' },
+            { id: 7, name: '单元测试', icon: '✅', status: 'pending', progress: 0, agent: 'TestAgent', duration: '3h' },
+            { id: 8, name: '集成测试', icon: '🔗', status: 'pending', progress: 0, agent: 'IntegrationAgent', duration: '4h' },
+            { id: 9, name: 'CI/CD 部署', icon: '🚀', status: 'pending', progress: 0, agent: 'DevOpsAgent', duration: '2h' },
+            { id: 10, name: 'UI 自动化验收', icon: '👁️', status: 'pending', progress: 0, agent: 'UIAutomationAgent', duration: '3h' }
+        ];
+
+        // 待办任务数据
+        const todoTasks = [
+            { id: 1, title: '审核 PRD 文档 v2.3', priority: 'high', tag: 'PRD', assignee: 'ProductAgent', time: '30 分钟后' },
+            { id: 2, title: '确认 API 接口规范', priority: 'high', tag: 'API', assignee: 'BackendArchitect', time: '1 小时后' },
+            { id: 3, title: '前端组件库选型评审', priority: 'medium', tag: 'Frontend', assignee: 'FrontendArchitect', time: '2 小时后' },
+            { id: 4, title: '数据库 Schema 审查', priority: 'medium', tag: 'Backend', assignee: 'BackendArchitect', time: '3 小时后' },
+            { id: 5, title: '编写集成测试用例', priority: 'low', tag: 'Test', assignee: 'IntegrationAgent', time: '明天' },
+            { id: 6, title: 'K8S 资源配置优化', priority: 'low', tag: 'DevOps', assignee: 'DevOpsAgent', time: '明天' }
+        ];
+
+        // 活动时间轴数据
+        const activities = [
+            { time: '10:32', content: '前端方案设计完成 75%', status: 'processing' },
+            { time: '09:15', content: '后端技术方案评审通过', status: 'completed' },
+            { time: '08:45', content: 'API 接口协议初稿生成', status: 'completed' },
+            { time: '昨天 16:20', content: 'PRD 文档 v2.3 定稿', status: 'completed' },
+            { time: '昨天 14:00', content: '需求分析完成，进入设计阶段', status: 'completed' }
+        ];
+
+        // 渲染流程节点
+        function renderWorkflow() {
+            const canvas = document.getElementById('workflowCanvas');
+            let html = '';
+
+            workflowNodes.forEach((node, index) => {
+                html += `
+                    <div class="workflow-node ${node.status}" onclick="showNodeDetail(${node.id})">
+                        <div class="node-icon">${node.icon}</div>
+                        <div class="node-name">${node.name}</div>
+                        <div class="node-status">${getStatusText(node.status)}</div>
+                    </div>
+                `;
+
+                if (index < workflowNodes.length - 1) {
+                    const nextNode = workflowNodes[index + 1];
+                    const isActive = node.status === 'processing' || nextNode.status === 'pending';
+                    html += `
+                        <div class="workflow-arrow">
+                            <div class="arrow-line ${isActive ? 'active' : ''}"></div>
+                        </div>
+                    `;
+                }
+            });
+
+            canvas.innerHTML = html;
+        }
+
+        // 获取状态文本
+        function getStatusText(status) {
+            const statusMap = {
+                completed: '已完成',
+                processing: '进行中',
+                pending: '待开始',
+                error: '错误'
+            };
+            return statusMap[status] || status;
+        }
+
+        // 渲染待办任务
+        function renderTodoList() {
+            const list = document.getElementById('todoList');
+            let html = '';
+
+            todoTasks.forEach(task => {
+                html += `
+                    <div class="todo-item ${task.priority}-priority" onclick="toggleTask(${task.id})">
+                        <div class="todo-checkbox" id="checkbox-${task.id}"></div>
+                        <div class="todo-content">
+                            <div class="todo-title">${task.title}</div>
+                            <div class="todo-meta">
+                                <span class="todo-tag">${task.tag}</span>
+                                <span>${task.assignee}</span>
+                                <span>⏰ ${task.time}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            list.innerHTML = html;
+        }
+
+        // 渲染节点详情
+        function renderNodeDetails() {
+            const container = document.getElementById('nodeDetails');
+            let html = '';
+
+            workflowNodes.slice(0, 5).forEach(node => {
+                html += `
+                    <div class="node-detail-item">
+                        <div class="node-detail-header">
+                            <span class="node-detail-name">${node.icon} ${node.name}</span>
+                            <span class="node-detail-status" style="background: ${getStatusColor(node.status)}; color: white;">${getStatusText(node.status)}</span>
+                        </div>
+                        <div class="node-detail-progress">
+                            <div class="progress-bar" style="width: ${node.progress}%"></div>
+                        </div>
+                        <div class="node-detail-time">
+                            Agent: ${node.agent} | 预计：${node.duration}
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // 获取状态颜色
+        function getStatusColor(status) {
+            const colorMap = {
+                completed: '#00ff88',
+                processing: '#ffaa00',
+                pending: '#a0a0c0',
+                error: '#ff4466'
+            };
+            return colorMap[status] || '#a0a0c0';
+        }
+
+        // 渲染活动时间轴
+        function renderTimeline() {
+            const container = document.getElementById('activityTimeline');
+            let html = '';
+
+            activities.forEach(activity => {
+                html += `
+                    <div class="timeline-item ${activity.status}">
+                        <div class="timeline-time">${activity.time}</div>
+                        <div class="timeline-content">${activity.content}</div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // 显示节点详情
+        function showNodeDetail(nodeId) {
+            const node = workflowNodes.find(n => n.id === nodeId);
+            if (!node) return;
+
+            const modal = document.getElementById('nodeModal');
+            const title = document.getElementById('modalTitle');
+            const body = document.getElementById('modalBody');
+
+            title.textContent = `${node.icon} ${node.name}`;
+            body.innerHTML = `
+                <p><strong>状态:</strong> ${getStatusText(node.status)}</p>
+                <p><strong>进度:</strong> ${node.progress}%</p>
+                <p><strong>负责 Agent:</strong> ${node.agent}</p>
+                <p><strong>预计耗时:</strong> ${node.duration}</p>
+                <p><strong>描述:</strong> ${getNodeDescription(node.name)}</p>
+                <div style="margin-top: 20px; padding: 15px; background: var(--bg-node); border-radius: 8px;">
+                    <strong>输入/输出:</strong>
+                    <ul style="margin-top: 10px; padding-left: 20px; color: var(--text-secondary);">
+                        ${getNodeIO(node.name)}
+                    </ul>
+                </div>
+            `;
+
+            modal.classList.add('active');
+        }
+
+        // 获取节点描述
+        function getNodeDescription(name) {
+            const descriptions = {
+                '需求分析': '通过 AI 分析用户需求文档，提取关键功能点和业务规则',
+                'PRD 设计': '生成产品需求文档，包含功能描述、用户故事和验收标准',
+                '后端方案设计': '设计系统架构、数据库模型和技术选型方案',
+                '前端方案设计': '规划前端技术栈、组件结构和 UI/UX 设计方案',
+                'API 协议设计': '定义 RESTful API 接口规范和数据结构',
+                'AI Coding': '使用 Claude Code 自动生成前后端代码',
+                '单元测试': '生成并执行单元测试用例，确保代码质量',
+                '集成测试': '进行模块间集成测试和端到端测试',
+                'CI/CD 部署': '通过 Jenkins + Docker + K8S 自动部署',
+                'UI 自动化验收': '执行 UI 自动化测试进行最终验收'
+            };
+            return descriptions[name] || '暂无描述';
+        }
+
+        // 获取节点输入输出
+        function getNodeIO(name) {
+            const ioMap = {
+                '需求分析': '<li>输入：原始需求文档</li><li>输出：结构化需求清单</li>',
+                'PRD 设计': '<li>输入：需求清单</li><li>输出：PRD 文档</li>',
+                '后端方案设计': '<li>输入：PRD 文档</li><li>输出：技术方案文档</li>',
+                '前端方案设计': '<li>输入：PRD 文档</li><li>输出：前端技术方案</li>',
+                'API 协议设计': '<li>输入：技术方案</li><li>输出：API 接口文档</li>',
+                'AI Coding': '<li>输入：API 文档 + 技术方案</li><li>输出：源代码</li>',
+                '单元测试': '<li>输入：源代码</li><li>输出：测试报告</li>',
+                '集成测试': '<li>输入：集成环境</li><li>输出：集成测试报告</li>',
+                'CI/CD 部署': '<li>输入：构建产物</li><li>输出：运行中的应用</li>',
+                'UI 自动化验收': '<li>输入：部署环境</li><li>输出：验收报告</li>'
+            };
+            return ioMap[name] || '<li>暂无信息</li>';
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('nodeModal').classList.remove('active');
+        }
+
+        // 切换任务状态
+        function toggleTask(taskId) {
+            const checkbox = document.getElementById(`checkbox-${taskId}`);
+            checkbox.classList.toggle('checked');
+        }
+
+        // 更新时间
+        function updateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('current-time').textContent = timeStr;
+        }
+
+        // 模拟数据更新
+        function simulateUpdates() {
+            setInterval(() => {
+                // 随机更新某个节点的进度
+                const processingNode = workflowNodes.find(n => n.status === 'processing');
+                if (processingNode && processingNode.progress < 100) {
+                    processingNode.progress = Math.min(100, processingNode.progress + Math.floor(Math.random() * 5));
+                    if (processingNode.progress === 100) {
+                        processingNode.status = 'completed';
+                        const nextNode = workflowNodes[workflowNodes.indexOf(processingNode) + 1];
+                        if (nextNode) {
+                            nextNode.status = 'processing';
+                        }
+                    }
+                    renderWorkflow();
+                    renderNodeDetails();
+                }
+
+                // 更新统计数据
+                document.getElementById('completedTasks').textContent = 156 + Math.floor(Math.random() * 10);
+                document.getElementById('pendingTasks').textContent = Math.max(0, 23 - Math.floor(Math.random() * 3));
+            }, 3000);
+        }
+
+        // 初始化
+        function init() {
+            renderWorkflow();
+            renderTodoList();
+            renderNodeDetails();
+            renderTimeline();
+            updateTime();
+            simulateUpdates();
+            setInterval(updateTime, 1000);
+
+            // 点击模态框外部关闭
+            document.getElementById('nodeModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeModal();
+                }
+            });
+        }
+
+        // 启动
+        init();
+    </script>
+</body>
+</html>

@@ -1,0 +1,1782 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>故障排查指南 - 基于 OpenClaw + Claude Code 的端到端研发自动化系统</title>
+    <style>
+        :root {
+            --primary-color: #00f5ff;
+            --secondary-color: #7b2cbf;
+            --accent-color: #ff006e;
+            --success-color: #00ff88;
+            --warning-color: #ffaa00;
+            --danger-color: #ff4444;
+            --info-color: #00d4ff;
+            --bg-dark: #0a0e1a;
+            --bg-card: rgba(15, 23, 42, 0.9);
+            --bg-code: rgba(0, 0, 0, 0.8);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --border-glow: 0 0 20px rgba(0, 245, 255, 0.3);
+            --card-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a1a2e 50%, #0f172a 100%);
+            color: var(--text-primary);
+            line-height: 1.8;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 60px 20px;
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.2), rgba(0, 245, 255, 0.1));
+            border-bottom: 2px solid var(--primary-color);
+            box-shadow: var(--border-glow);
+            margin-bottom: 60px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(0, 245, 255, 0.1) 0%, transparent 70%);
+            animation: pulse 4s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        h1 {
+            font-size: 3em;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(0, 245, 255, 0.5);
+            position: relative;
+            z-index: 1;
+        }
+
+        .subtitle {
+            font-size: 1.3em;
+            color: var(--text-secondary);
+            max-width: 900px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .version-badge {
+            display: inline-block;
+            background: rgba(255, 170, 0, 0.1);
+            border: 1px solid var(--warning-color);
+            padding: 8px 20px;
+            border-radius: 20px;
+            margin-top: 20px;
+            font-size: 0.9em;
+            position: relative;
+            z-index: 1;
+        }
+
+        nav.toc {
+            background: var(--bg-card);
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(10px);
+            box-shadow: var(--card-shadow);
+        }
+
+        nav.toc h2 {
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+        }
+
+        nav.toc ul {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+        }
+
+        nav.toc li {
+            padding: 12px 20px;
+            background: rgba(255, 170, 0, 0.05);
+            border-left: 3px solid var(--warning-color);
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        nav.toc li:hover {
+            background: rgba(255, 170, 0, 0.15);
+            transform: translateX(10px);
+        }
+
+        nav.toc a {
+            color: var(--text-primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        nav.toc a:hover {
+            color: var(--warning-color);
+        }
+
+        section {
+            background: var(--bg-card);
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            border-radius: 15px;
+            padding: 40px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(10px);
+            box-shadow: var(--card-shadow);
+            transition: all 0.3s ease;
+        }
+
+        section:hover {
+            border-color: var(--primary-color);
+            box-shadow: var(--border-glow);
+        }
+
+        h2 {
+            color: var(--primary-color);
+            font-size: 2em;
+            margin-bottom: 25px;
+            border-bottom: 2px solid var(--secondary-color);
+            padding-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        h2::before {
+            content: '🔧';
+            font-size: 1.2em;
+        }
+
+        h3 {
+            color: var(--accent-color);
+            font-size: 1.5em;
+            margin: 30px 0 20px;
+            padding-left: 15px;
+            border-left: 4px solid var(--accent-color);
+        }
+
+        h4 {
+            color: var(--text-primary);
+            font-size: 1.2em;
+            margin: 20px 0 15px;
+            padding-left: 10px;
+            border-left: 3px solid var(--secondary-color);
+        }
+
+        p {
+            margin-bottom: 15px;
+            text-align: justify;
+        }
+
+        ul, ol {
+            margin: 15px 0 15px 30px;
+        }
+
+        li {
+            margin-bottom: 10px;
+        }
+
+        .problem-card {
+            background: rgba(255, 68, 68, 0.05);
+            border: 2px solid var(--danger-color);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 25px 0;
+        }
+
+        .problem-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .severity-badge {
+            display: inline-block;
+            padding: 6px 15px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 0.85em;
+            letter-spacing: 1px;
+        }
+
+        .severity-critical {
+            background: rgba(255, 0, 0, 0.3);
+            color: #ff0000;
+            border: 1px solid #ff0000;
+        }
+
+        .severity-high {
+            background: rgba(255, 170, 0, 0.3);
+            color: var(--warning-color);
+            border: 1px solid var(--warning-color);
+        }
+
+        .severity-medium {
+            background: rgba(255, 255, 0, 0.2);
+            color: #ffff00;
+            border: 1px solid #ffff00;
+        }
+
+        .severity-low {
+            background: rgba(0, 255, 136, 0.2);
+            color: var(--success-color);
+            border: 1px solid var(--success-color);
+        }
+
+        .problem-title {
+            font-size: 1.3em;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .symptom-box {
+            background: rgba(255, 170, 0, 0.1);
+            border-left: 4px solid var(--warning-color);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .cause-box {
+            background: rgba(255, 68, 68, 0.1);
+            border-left: 4px solid var(--danger-color);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .solution-box {
+            background: rgba(0, 255, 136, 0.1);
+            border-left: 4px solid var(--success-color);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .diagnostic-box {
+            background: rgba(0, 212, 255, 0.1);
+            border-left: 4px solid var(--info-color);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 10px 10px 0;
+        }
+
+        code {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: var(--primary-color);
+            border: 1px solid rgba(0, 245, 255, 0.3);
+        }
+
+        pre {
+            background: var(--bg-code);
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            overflow-x: auto;
+            margin: 20px 0;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            border: none;
+            color: var(--text-primary);
+            display: block;
+            line-height: 1.6;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(0, 245, 255, 0.2);
+        }
+
+        th {
+            background: rgba(0, 245, 255, 0.2);
+            color: var(--primary-color);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        tr:hover {
+            background: rgba(0, 245, 255, 0.05);
+        }
+
+        .flowchart {
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid var(--primary-color);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+        }
+
+        .flowchart-step {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--secondary-color), var(--accent-color));
+            padding: 15px 25px;
+            border-radius: 10px;
+            margin: 10px;
+            font-weight: 600;
+            box-shadow: 0 5px 20px rgba(123, 44, 191, 0.4);
+            min-width: 180px;
+        }
+
+        .flowchart-decision {
+            background: linear-gradient(135deg, var(--warning-color), #ff8800);
+            color: var(--bg-dark);
+        }
+
+        .flowchart-arrow {
+            color: var(--primary-color);
+            font-size: 1.5em;
+            margin: 0 10px;
+        }
+
+        .quick-links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .quick-link-card {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(123, 44, 191, 0.1));
+            border: 2px solid var(--primary-color);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .quick-link-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 245, 255, 0.3);
+        }
+
+        .quick-link-icon {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .quick-link-title {
+            font-weight: 600;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+
+        .quick-link-desc {
+            font-size: 0.9em;
+            color: var(--text-secondary);
+        }
+
+        .error-code-table tr:nth-child(1) { border-left: 4px solid var(--danger-color); }
+        .error-code-table tr:nth-child(2) { border-left: 4px solid var(--warning-color); }
+        .error-code-table tr:nth-child(3) { border-left: 4px solid var(--info-color); }
+        .error-code-table tr:nth-child(4) { border-left: 4px solid var(--success-color); }
+
+        footer {
+            text-align: center;
+            padding: 40px;
+            background: rgba(0, 0, 0, 0.5);
+            border-top: 2px solid var(--primary-color);
+            margin-top: 60px;
+            color: var(--text-secondary);
+        }
+
+        .alert-banner {
+            background: linear-gradient(135deg, rgba(255, 68, 68, 0.2), rgba(255, 0, 0, 0.1));
+            border: 2px solid var(--danger-color);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .alert-icon {
+            font-size: 3em;
+            flex-shrink: 0;
+        }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 2em; }
+            h2 { font-size: 1.5em; }
+            section { padding: 20px; }
+            nav.toc ul { grid-template-columns: 1fr; }
+            .problem-header { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🚨 故障排查指南</h1>
+        <p class="subtitle">基于 OpenClaw + Claude Code 的端到端研发自动化系统 - 常见问题诊断与解决方案</p>
+        <div class="version-badge">
+            <span>⚠️ 应急热线：support-emergency@openclaw-cocode.system | 版本：v2.0 | 最后更新：2026 年 3 月 14 日</span>
+        </div>
+    </header>
+
+    <div class="container">
+        <nav class="toc">
+            <h2>📋 快速导航</h2>
+            <ul>
+                <li><a href="#chapter1">第 1 章 系统启动与连接问题</a></li>
+                <li><a href="#chapter2">第 2 章 Agent 执行异常</a></li>
+                <li><a href="#chapter3">第 3 章 API 接口错误</a></li>
+                <li><a href="#chapter4">第 4 章 CI/CD 流水线故障</a></li>
+                <li><a href="#chapter5">第 5 章 Docker/K8S 部署问题</a></li>
+                <li><a href="#chapter6">第 6 章 性能与资源问题</a></li>
+                <li><a href="#chapter7">第 7 章 安全与认证问题</a></li>
+                <li><a href="#chapter8">第 8 章 数据与存储问题</a></li>
+                <li><a href="#error-codes">附录 A 错误码速查表</a></li>
+                <li><a href="#diagnostic-tools">附录 B 诊断工具集</a></li>
+            </ul>
+        </nav>
+
+        <div class="quick-links">
+            <div class="quick-link-card" onclick="document.getElementById('chapter1').scrollIntoView({behavior:'smooth'})">
+                <div class="quick-link-icon">🔌</div>
+                <div class="quick-link-title">系统无法启动</div>
+                <div class="quick-link-desc">OpenClaw/Claude Code 连接失败、服务不可用</div>
+            </div>
+            <div class="quick-link-card" onclick="document.getElementById('chapter2').scrollIntoView({behavior:'smooth'})">
+                <div class="quick-link-icon">🤖</div>
+                <div class="quick-link-title">Agent 卡住/超时</div>
+                <div class="quick-link-desc">任务执行中断、无响应、结果异常</div>
+            </div>
+            <div class="quick-link-card" onclick="document.getElementById('chapter4').scrollIntoView({behavior:'smooth'})">
+                <div class="quick-link-icon">🚀</div>
+                <div class="quick-link-title">部署失败</div>
+                <div class="quick-link-desc">Jenkins 构建错误、K8S 部署异常</div>
+            </div>
+            <div class="quick-link-card" onclick="document.getElementById('error-codes').scrollIntoView({behavior:'smooth'})">
+                <div class="quick-link-icon">📊</div>
+                <div class="quick-link-title">错误码查询</div>
+                <div class="quick-link-desc">快速定位错误含义和解决方案</div>
+            </div>
+        </div>
+
+        <section id="chapter1">
+            <h2>第 1 章 系统启动与连接问题</h2>
+            
+            <h3>1.1 OpenClaw 服务无法启动</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-critical">严重等级：CRITICAL</span>
+                    <span class="problem-title">OpenClaw 服务启动失败，报错 "Failed to bind to port"</span>
+                </div>
+                
+                <div class="symptom-box">
+                    <strong>🩺 症状表现：</strong>
+                    <ul>
+                        <li>执行 <code>openclaw start</code> 命令后立即退出</li>
+                        <li>日志显示 <code>Error: listen EADDRINUSE: address already in use :::8080</code></li>
+                        <li>系统状态显示 OpenClaw 服务为 <code>stopped</code> 或 <code>failed</code></li>
+                    </ul>
+                </div>
+                
+                <div class="cause-box">
+                    <strong>🔍 可能原因：</strong>
+                    <ol>
+                        <li>端口 8080 已被其他进程占用</li>
+                        <li>之前 OpenClaw 实例未正常关闭，僵尸进程仍占用端口</li>
+                        <li>防火墙或安全软件阻止端口绑定</li>
+                        <li>配置文件指定了冲突的端口</li>
+                    </ol>
+                </div>
+                
+                <div class="diagnostic-box">
+                    <strong>🔬 诊断步骤：</strong>
+                    <pre><code># 1. 检查端口占用情况
+lsof -i :8080
+# 或
+netstat -tlnp | grep 8080
+
+# 2. 查看 OpenClaw 详细日志
+journalctl -u openclaw -n 50 --no-pager
+# 或查看日志文件
+tail -100 /var/log/openclaw/error.log
+
+# 3. 检查是否有僵尸进程
+ps aux | grep openclaw | grep -v grep
+
+# 4. 验证配置文件
+openclaw config:validate</code></pre>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 方案 1: 释放被占用的端口
+# 找到占用进程的 PID
+PID=$(lsof -t -i:8080)
+# 终止该进程
+kill -9 $PID
+
+# 方案 2: 修改 OpenClaw 配置使用其他端口
+# 编辑配置文件
+nano ~/.openclaw/config.yaml
+# 修改 port 配置项
+port: 8081
+
+# 方案 3: 重启 OpenClaw 服务
+systemctl stop openclaw
+systemctl start openclaw
+systemctl status openclaw
+
+# 方案 4: 检查防火墙规则
+ufw allow 8080/tcp
+# 或
+firewall-cmd --add-port=8080/tcp --permanent
+firewall-cmd --reload</code></pre>
+                </div>
+            </div>
+
+            <h3>1.2 Claude Code 连接失败</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-high">严重等级：HIGH</span>
+                    <span class="problem-title">Claude Code 无法连接，报错 "Authentication failed" 或 "API key invalid"</span>
+                </div>
+                
+                <div class="symptom-box">
+                    <strong>🩺 症状表现：</strong>
+                    <ul>
+                        <li>执行 <code>claude</code> 命令时立即返回认证错误</li>
+                        <li>日志显示 <code>401 Unauthorized</code> 或 <code>Invalid API key</code></li>
+                        <li>AI Coding 功能完全不可用</li>
+                    </ul>
+                </div>
+                
+                <div class="cause-box">
+                    <strong>🔍 可能原因：</strong>
+                    <ol>
+                        <li>API Key 过期或被撤销</li>
+                        <li>环境变量 ANTHROPIC_API_KEY 未设置或设置错误</li>
+                        <li>Claude Code 配置文件损坏</li>
+                        <li>网络代理配置问题导致无法连接 Anthropic API</li>
+                        <li>账户额度用尽或订阅过期</li>
+                    </ol>
+                </div>
+                
+                <div class="diagnostic-box">
+                    <strong>🔬 诊断步骤：</strong>
+                    <pre><code># 1. 检查 API Key 是否设置
+echo $ANTHROPIC_API_KEY
+
+# 2. 验证 API Key 格式（应以 sk-ant-开头）
+echo $ANTHROPIC_API_KEY | grep "^sk-ant-"
+
+# 3. 测试 API 连接
+curl -X POST https://api.anthropic.com/v1/messages \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" \
+  -d '{"model":"claude-sonnet-4-20250514","max_tokens":10,"messages":[{"role":"user","content":"test"}]}'
+
+# 4. 检查 Claude Code 配置
+cat ~/.claude/settings.json
+cat ~/.config/claude-code/config.toml
+
+# 5. 检查网络连接
+ping api.anthropic.com
+curl -I https://api.anthropic.com</code></pre>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 方案 1: 重新设置 API Key
+# 登录 https://console.anthropic.com 获取新的 API Key
+export ANTHROPIC_API_KEY="sk-ant-api03-xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# 永久添加到 shell 配置文件
+echo 'export ANTHROPIC_API_KEY="sk-ant-..." >> ~/.bashrc
+source ~/.bashrc
+
+# 方案 2: 使用 claude login 重新认证
+claude logout
+claude login
+# 按提示完成 OAuth 认证流程
+
+# 方案 3: 重置 Claude Code 配置
+rm -rf ~/.claude
+rm -rf ~/.config/claude-code
+claude
+
+# 方案 4: 配置网络代理（如需要）
+export HTTPS_PROXY=http://proxy.example.com:8080
+export HTTP_PROXY=http://proxy.example.com:8080
+
+# 方案 5: 检查账户状态
+# 登录 Anthropic Console 查看额度和订阅状态
+# 如额度不足，升级套餐或等待下月重置</code></pre>
+                </div>
+            </div>
+
+            <h3>1.3 数据库连接失败</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-critical">严重等级：CRITICAL</span>
+                    <span class="problem-title">系统无法连接数据库，所有需要持久化的功能失效</span>
+                </div>
+                
+                <div class="symptom-box">
+                    <strong>🩺 症状表现：</strong>
+                    <ul>
+                        <li>系统启动时报错 <code>Connection refused</code> 或 <code>Timeout connecting to database</code></li>
+                        <li>PRD、任务、项目等数据无法加载</li>
+                        <li>日志中出现大量数据库连接错误</li>
+                    </ul>
+                </div>
+                
+                <div class="cause-box">
+                    <strong>🔍 可能原因：</strong>
+                    <ol>
+                        <li>数据库服务未启动或已崩溃</li>
+                        <li>数据库连接配置错误（主机、端口、用户名、密码）</li>
+                        <li>网络连接问题或防火墙阻止</li>
+                        <li>数据库达到最大连接数限制</li>
+                        <li>磁盘空间已满导致数据库无法运行</li>
+                    </ol>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 1. 检查数据库服务状态
+# PostgreSQL 示例
+systemctl status postgresql
+# MySQL 示例
+systemctl status mysql
+
+# 2. 重启数据库服务
+systemctl restart postgresql
+
+# 3. 验证连接配置
+# 检查应用配置文件中的数据库连接字符串
+cat ~/.openclaw/config.yaml | grep -A 5 database
+
+# 4. 测试数据库连接
+psql -h localhost -U openclaw -d openclaw_db
+# 或
+mysql -h localhost -u openclaw -p openclaw_db
+
+# 5. 检查磁盘空间
+df -h
+# 如磁盘满，清理空间
+journalctl --vacuum-time=7d
+docker system prune -af
+
+# 6. 检查连接数
+# PostgreSQL
+psql -c "SELECT count(*) FROM pg_stat_activity;"
+# 如接近 max_connections，需增加限制或优化连接池</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="chapter2">
+            <h2>第 2 章 Agent 执行异常</h2>
+            
+            <h3>2.1 Agent 任务执行超时</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-high">严重等级：HIGH</span>
+                    <span class="problem-title">Agent 任务长时间处于 processing 状态，超过预期时间未完成</span>
+                </div>
+                
+                <div class="symptom-box">
+                    <strong>🩺 症状表现：</strong>
+                    <ul>
+                        <li>通过 API 查询 Agent 进度，状态一直为 <code>processing</code></li>
+                        <li>进度百分比长时间停滞不前</li>
+                        <li>超过预估完成时间仍未完成</li>
+                        <li>聊天应用中收不到完成通知</li>
+                    </ul>
+                </div>
+                
+                <div class="cause-box">
+                    <strong>🔍 可能原因：</strong>
+                    <ol>
+                        <li>输入需求过于复杂，超出单次处理容量</li>
+                        <li>AI 模型响应缓慢或 API 限流</li>
+                        <li>Agent 陷入死循环或递归调用</li>
+                        <li>系统资源不足（CPU/内存）导致处理缓慢</li>
+                        <li>网络不稳定导致与 AI 服务通信中断</li>
+                    </ol>
+                </div>
+                
+                <div class="diagnostic-box">
+                    <strong>🔬 诊断步骤：</strong>
+                    <pre><code># 1. 查询 Agent 详细状态
+curl -X GET https://api.openclaw-cocode.system/v2/agents/activations/{activationId}/progress \
+  -H "Authorization: Bearer ..."
+
+# 2. 查看 Agent 日志
+tail -f /var/log/openclaw/agents/{agentType}.log
+
+# 3. 检查系统资源使用
+top -bn1 | head -20
+free -h
+df -h
+
+# 4. 检查 AI API 响应时间
+time curl -X POST https://api.anthropic.com/v1/messages \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{"model":"claude-sonnet-4-20250514","max_tokens":1000,"messages":[{"role":"user","content":"test"}]}'
+
+# 5. 检查消息队列积压
+rabbitmqctl list_queues name messages_ready</code></pre>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 方案 1: 取消并重新提交任务
+# 取消当前卡住的任务
+curl -X POST https://api.openclaw-cocode.system/v2/agents/activations/{activationId}/cancel \
+  -H "Authorization: Bearer ..."
+
+# 将大任务拆分为多个小任务重新提交
+# 例如：将"生成完整 PRD"拆分为"生成用户故事"、"生成功能清单"等
+
+# 方案 2: 调整 Agent 配置
+# 编辑 Agent 配置文件，增加超时时间
+nano ~/.openclaw/agents/{agentType}.yaml
+# timeout: 3600  # 从 1800 秒增加到 3600 秒
+# max_iterations: 50  # 增加最大迭代次数
+
+# 方案 3: 切换 AI 模型
+# 使用更快但可能质量略低的模型
+# model: claude-haiku-4  # 替代 claude-sonnet-4
+
+# 方案 4: 释放系统资源
+# 终止不必要的进程
+kill $(pgrep -f "non-essential-process")
+
+# 清理 Docker 容器
+docker prune
+
+# 方案 5: 启用断点续传
+# 对于支持的任务类型，启用中间结果保存
+# 这样即使超时也可以从断点继续</code></pre>
+                </div>
+            </div>
+
+            <h3>2.2 Agent 输出结果异常</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-medium">严重等级：MEDIUM</span>
+                    <span class="problem-title">Agent 生成的内容质量差、格式错误或与需求不符</span>
+                </div>
+                
+                <div class="symptom-box">
+                    <strong>🩺 症状表现：</strong>
+                    <ul>
+                        <li>PRD 文档结构混乱、缺少关键章节</li>
+                        <li>生成的代码无法编译或运行</li>
+                        <li>API 设计不符合 RESTful 规范</li>
+                        <li>测试用例覆盖率低或缺少边界条件</li>
+                    </ul>
+                </div>
+                
+                <div class="cause-box">
+                    <strong>🔍 可能原因：</strong>
+                    <ol>
+                        <li>输入需求描述模糊或不完整</li>
+                        <li>Prompt 模板配置不当</li>
+                        <li>AI 模型温度参数（temperature）设置过高</li>
+                        <li>缺少领域知识或上下文信息</li>
+                        <li>使用了不适合的 AI 模型</li>
+                    </ol>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 方案 1: 优化输入需求
+# 提供更详细、结构化的输入
+# 包含：背景、目标用户、核心功能、约束条件、示例参考
+
+# 方案 2: 调整 Prompt 模板
+# 编辑 Agent 的 System Prompt
+nano ~/.openclaw/agents/prompts/{agentType}_system.txt
+
+# 添加明确的输出格式要求
+# 例如："请严格按照以下 Markdown 结构生成 PRD 文档：..."
+
+# 方案 3: 降低 temperature 参数
+# 在 Agent 配置中降低随机性
+# temperature: 0.3  # 从 0.7 降低到 0.3，输出更稳定
+
+# 方案 4: 提供 Few-Shot 示例
+# 在 Prompt 中加入高质量示例
+# "以下是优秀的 PRD 示例：[示例内容]"
+
+# 方案 5: 启用人工审核节点
+# 在关键节点暂停，等待人工确认后再继续
+# config:
+#   human_in_the_loop: true
+#   review_points: ["prd_complete", "architecture_approved"]
+
+# 方案 6: 切换更强的 AI 模型
+# model: claude-opus-4  # 用于复杂任务
+# model: claude-sonnet-4  # 用于常规任务</code></pre>
+                </div>
+            </div>
+
+            <h3>2.3 Agent 之间协作失败</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-high">严重等级：HIGH</span>
+                    <span class="problem-title">多 Agent 协作流程中断，下游 Agent 无法接收上游输出</span>
+                </div>
+                
+                <div class="symptom-box">
+                    <strong>🩺 症状表现：</strong>
+                    <ul>
+                        <li>工作流卡在某个 Agent 完成后无法继续</li>
+                        <li>下游 Agent 报错 "Input data missing" 或 "Invalid input format"</li>
+                        <li>消息队列中有未消费的消息堆积</li>
+                        <li>系统日志中出现序列化/反序列化错误</li>
+                    </ul>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 1. 检查消息队列状态
+rabbitmqctl list_queues name messages_ready consumers
+
+# 2. 查看未消费的消息
+rabbitmqadmin get queue=agent_outputs count=5
+
+# 3. 验证输出格式
+# 检查上游 Agent 的输出是否符合下游期望的 Schema
+curl -X GET https://api.openclaw-cocode.system/v2/agents/activations/{activationId}/result \
+  | jq '.output'
+
+# 4. 手动触发下游 Agent
+# 使用上游输出作为输入，手动激活下游
+curl -X POST https://api.openclaw-cocode.system/v2/agents/architecture/activate \
+  -H "Authorization: Bearer ..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {
+      "prdDocument": "...",  # 复制上游输出
+      "projectId": "prj_xxx"
+    }
+  }'
+
+# 5. 修复 Schema 不匹配
+# 更新 Agent 配置文件中的输入输出 Schema 定义
+nano ~/.openclaw/agents/{agentType}/schema.yaml
+
+# 6. 重启消息队列消费者
+systemctl restart openclaw-agent-consumer</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="chapter3">
+            <h2>第 3 章 API 接口错误</h2>
+            
+            <h3>3.1 401 Unauthorized 错误</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-high">严重等级：HIGH</span>
+                    <span class="problem-title">API 请求返回 401 错误，无法访问受保护的资源</span>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 1. 检查 Token 是否有效
+# Token 可能已过期（默认有效期 1 小时）
+curl -X POST https://api.openclaw-cocode.system/v2/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token": "your_refresh_token"}'
+
+# 2. 验证 Authorization 头格式
+# 正确格式：Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+# 常见错误：
+# - 缺少 "Bearer " 前缀
+# - Bearer 和 Token 之间缺少空格
+# - Token 被截断或包含多余字符
+
+# 3. 检查 Token 权限范围（scope）
+# 某些 API 需要特定 scope，如 admin、write 等
+# 在获取 Token 时请求所需 scope
+curl -X POST https://api.openclaw-cocode.system/v2/auth/token \
+  -d '{"grant_type": "client_credentials", "scope": "read write admin"}'
+
+# 4. 清除本地缓存的旧 Token
+rm ~/.openclaw/token_cache.json
+# 重新认证获取新 Token</code></pre>
+                </div>
+            </div>
+
+            <h3>3.2 429 Rate Limited 错误</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-medium">严重等级：MEDIUM</span>
+                    <span class="problem-title">API 请求频率超限，返回 429 错误</span>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 1. 检查限流响应头
+# API 响应中会包含限流相关信息
+X-RateLimit-Limit: 300        # 每分钟上限
+X-RateLimit-Remaining: 0      # 剩余请求数
+X-RateLimit-Reset: 1710411600 # 重置时间戳
+Retry-After: 45               # 建议重试时间（秒）
+
+# 2. 实现指数退避重试
+# 在代码中添加智能重试逻辑
+import time
+import random
+
+def api_request_with_retry(url, max_retries=5):
+    for i in range(max_retries):
+        response = requests.get(url)
+        if response.status_code == 429:
+            retry_after = int(response.headers.get('Retry-After', 60))
+            jitter = random.uniform(0, 10)
+            wait_time = retry_after + jitter
+            print(f"Rate limited. Waiting {wait_time:.1f}s...")
+            time.sleep(wait_time)
+        else:
+            return response
+    raise Exception("Max retries exceeded")
+
+# 3. 降低请求频率
+# 使用批量 API 减少请求次数
+# 例如：批量创建任务而非逐个创建
+
+# 4. 升级到更高配额套餐
+# Free: 60 请求/分钟
+# Pro: 300 请求/分钟
+# Enterprise: 1000 请求/分钟
+
+# 5. 使用 Webhooks 替代轮询
+# 订阅事件通知，避免频繁查询状态</code></pre>
+                </div>
+            </div>
+
+            <h3>3.3 500 Internal Server Error</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-critical">严重等级：CRITICAL</span>
+                    <span class="problem-title">API 返回 500 错误，服务器内部异常</span>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 1. 记录 requestId 用于追踪
+# 500 错误响应中会包含 requestId
+{
+  "error": {
+    "code": "INTERNAL_ERROR",
+    "message": "...",
+    "requestId": "req_abc123xyz"  # 重要！
+  }
+}
+
+# 2. 查看服务器日志
+# 根据 requestId 搜索相关日志
+grep "req_abc123xyz" /var/log/openclaw/api.log
+
+# 3. 检查依赖服务状态
+systemctl status postgresql
+systemctl status redis
+systemctl status rabbitmq
+kubectl get pods -n openclaw
+
+# 4. 检查磁盘空间和内存
+df -h
+free -h
+
+# 5. 重启 API 服务
+systemctl restart openclaw-api
+
+# 6. 回滚到上一个稳定版本
+# 如是新版本引入的 bug
+git checkout previous-stable-tag
+./deploy.sh
+
+# 7. 联系技术支持
+# 发送 requestId 和错误详情到 support@openclaw-cocode.system</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="chapter4">
+            <h2>第 4 章 CI/CD 流水线故障</h2>
+            
+            <h3>4.1 Jenkins 构建失败</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-high">严重等级：HIGH</span>
+                    <span class="problem-title">Jenkins Pipeline 执行失败，构建中断</span>
+                </div>
+                
+                <div class="symptom-box">
+                    <strong>🩺 症状表现：</strong>
+                    <ul>
+                        <li>Jenkins 控制台输出红色错误信息</li>
+                        <li>构建状态显示 <code>FAILURE</code> 或 <code>ABORTED</code></li>
+                        <li>某个 Stage 执行失败，后续 Stage 未执行</li>
+                    </ul>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 常见失败原因及解决方法：
+
+# 1. 代码编译错误
+# 查看具体编译错误信息
+# 修复代码后重新触发构建
+git commit -m "fix: 修复编译错误"
+git push
+
+# 2. 单元测试失败
+# 查看测试报告
+# 访问 Jenkins 构建页面的 Test Result
+# 修复失败的测试用例
+
+# 3. 依赖下载失败
+# 检查网络连接
+# 配置国内镜像源
+# Maven: 配置阿里云镜像
+# npm: npm config set registry https://registry.npmmirror.com
+
+# 4. Docker 构建失败
+# 检查 Dockerfile 语法
+# 验证基础镜像是否存在
+# 检查磁盘空间
+docker system df
+docker system prune -af
+
+# 5. 资源不足
+# 增加 Jenkins Executor 数量
+# 清理 workspace 释放空间
+# 考虑使用 Kubernetes 动态 Agent
+
+# 6. 凭证问题
+# 检查 Jenkins Credentials 是否过期
+# 验证 Git、Docker Registry、K8S 等凭证
+
+# 7. 重新运行失败的 Stage
+# Jenkins 支持从失败的 Stage 继续
+# 点击 "Replay" 或 "Restart from Stage"</code></pre>
+                </div>
+            </div>
+
+            <h3>4.2 K8S 部署失败</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-critical">严重等级：CRITICAL</span>
+                    <span class="problem-title">Kubernetes 部署失败，Pod 无法启动或不断重启</span>
+                </div>
+                
+                <div class="symptom-box">
+                    <strong>🩺 症状表现：</strong>
+                    <ul>
+                        <li><code>kubectl get pods</code> 显示 Pod 状态为 <code>CrashLoopBackOff</code>、<code>Error</code>、<code>ImagePullBackOff</code></li>
+                        <li>Deployment 的 AVAILABLE 副本数为 0</li>
+                        <li>KubeSphere UI 显示部署失败</li>
+                    </ul>
+                </div>
+                
+                <div class="diagnostic-box">
+                    <strong>🔬 诊断步骤：</strong>
+                    <pre><code># 1. 查看 Pod 状态
+kubectl get pods -n {namespace}
+kubectl describe pod {pod-name} -n {namespace}
+
+# 2. 查看 Pod 日志
+kubectl logs {pod-name} -n {namespace}
+# 如有多个容器
+kubectl logs {pod-name} -c {container-name} -n {namespace}
+# 查看之前的日志（如已重启）
+kubectl logs {pod-name} -n {namespace} --previous
+
+# 3. 检查事件
+kubectl get events -n {namespace} --sort-by='.lastTimestamp'
+
+# 4. 检查资源配置
+kubectl get deployment {deployment-name} -n {namespace} -o yaml
+kubectl get svc -n {namespace}
+
+# 5. 验证镜像
+docker pull {image-name}
+# 检查镜像是否存在、能否拉取</code></pre>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 场景 1: ImagePullBackOff - 镜像拉取失败
+# 检查镜像名称和标签是否正确
+# 验证 Docker Registry 凭证
+kubectl create secret docker-registry regcred \
+  --docker-server=registry.example.com \
+  --docker-username=user \
+  --docker-password=pass \
+  -n {namespace}
+
+# 在 Deployment 中引用 imagePullSecrets
+# imagePullSecrets:
+#   - name: regcred
+
+# 场景 2: CrashLoopBackOff - 应用启动后崩溃
+# 查看应用日志定位错误
+kubectl logs {pod-name} --previous
+# 常见原因：
+# - 配置文件缺失或错误
+# - 数据库连接失败
+# - 端口冲突
+# - 缺少必需的环境变量
+
+# 场景 3: OOMKilled - 内存超限
+# 增加内存限制
+# resources:
+#   limits:
+#     memory: "1Gi"  # 从 512Mi 增加到 1Gi
+#   requests:
+#     memory: "512Mi"
+
+# 场景 4: Liveness Probe 失败
+# 调整探针参数
+# livenessProbe:
+#   initialDelaySeconds: 60  # 增加启动宽限期
+#   periodSeconds: 30        # 降低检查频率
+#   failureThreshold: 5      # 增加失败容忍次数
+
+# 场景 5: 滚动更新卡住
+# 查看卡住的 Pod
+kubectl rollout status deployment/{name} -n {namespace}
+# 回滚到上一版本
+kubectl rollout undo deployment/{name} -n {namespace}
+# 或回滚到特定版本
+kubectl rollout undo deployment/{name} -n {namespace} --to-revision=2
+
+# 场景 6: 资源不足
+# 检查集群资源
+kubectl top nodes
+kubectl top pods
+# 扩容集群或优化资源请求</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="chapter5">
+            <h2>第 5 章 Docker/K8S 部署问题</h2>
+            
+            <h3>5.1 Docker 容器无法启动</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-high">严重等级：HIGH</span>
+                    <span class="problem-title">Docker 容器启动失败或立即退出</span>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 1. 查看容器日志
+docker logs {container-id}
+docker logs --tail 100 {container-id}
+
+# 2. 检查容器状态
+docker ps -a | grep {container-name}
+
+# 3. 以交互模式调试
+docker run -it --entrypoint /bin/sh {image-name}
+# 在容器内手动启动应用排查问题
+
+# 4. 检查端口占用
+docker run -p 8080:8080 ...
+# 如端口被占用，更换宿主机端口
+docker run -p 8081:8080 ...
+
+# 5. 验证挂载卷
+docker run -v /host/path:/container/path ...
+# 确保宿主机路径存在且有正确权限
+ls -la /host/path
+chmod 755 /host/path
+
+# 6. 检查环境变量
+docker run -e ENV_VAR=value ...
+# 验证所有必需的环境变量已设置
+
+# 7. 资源限制
+docker run --memory="512m" --cpus="1.0" ...
+# 如资源不足，增加限制或优化应用</code></pre>
+                </div>
+            </div>
+
+            <h3>5.2 KubeSphere 控制台无法访问</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-medium">严重等级：MEDIUM</span>
+                    <span class="problem-title">KubeSphere Web 控制台无法打开或登录失败</span>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 1. 检查 KubeSphere 组件状态
+kubectl get pods -n kubesphere-system
+kubectl get pods -n kubesphere-controls-system
+kubectl get pods -n kubesphere-monitoring-system
+
+# 2. 查看 ks-apiserver 日志
+kubectl logs -n kubesphere-system $(kubectl get pod -n kubesphere-system -l app=ks-apiserver -o jsonpath='{.items[0].metadata.name}')
+
+# 3. 检查 Ingress 配置
+kubectl get ingress -n kubesphere-system
+kubectl describe ingress ks-console -n kubesphere-system
+
+# 4. 验证 NodePort 服务
+kubectl get svc -n kubesphere-system ks-console
+# 通过 NodeIP:NodePort 访问
+
+# 5. 重置 admin 密码
+kubectl exec -n kubesphere-system $(kubectl get pod -n kubesphere-system -l app=ks-account -o jsonpath='{.items[0].metadata.name}') -- /opt/kubesphere/reset_admin_password.sh
+
+# 6. 检查证书
+# 如使用 HTTPS，验证证书是否过期
+openssl x509 -in /path/to/cert.pem -text -noout | grep "Not After"
+
+# 7. 重启 KubeSphere
+kubectl rollout restart deployment -n kubesphere-system</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="chapter6">
+            <h2>第 6 章 性能与资源问题</h2>
+            
+            <h3>6.1 系统响应缓慢</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-high">严重等级：HIGH</span>
+                    <span class="problem-title">系统整体响应缓慢，API 延迟高，页面加载慢</span>
+                </div>
+                
+                <div class="diagnostic-box">
+                    <strong>🔬 诊断步骤：</strong>
+                    <pre><code># 1. 检查系统负载
+uptime
+top -bn1 | head -10
+
+# 2. 检查内存使用
+free -h
+vmstat 1 5
+
+# 3. 检查磁盘 I/O
+iostat -x 1 5
+iotop -o
+
+# 4. 检查数据库性能
+# PostgreSQL
+psql -c "SELECT * FROM pg_stat_activity WHERE state != 'idle';"
+psql -c "SELECT * FROM pg_stat_user_tables ORDER BY seq_scan DESC LIMIT 10;"
+
+# 5. 检查慢查询
+# 开启慢查询日志
+# PostgreSQL: log_min_duration_statement = 1000
+
+# 6. 检查网络延迟
+ping {database-host}
+traceroute {api-endpoint}
+
+# 7. 分析 API 响应时间
+# 查看 APM 监控（如 Prometheus+Grafana）</code></pre>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 1. 优化数据库查询
+# 添加缺失的索引
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_tasks_status ON tasks(status);
+
+# 分析并优化慢查询
+EXPLAIN ANALYZE SELECT * FROM tasks WHERE status = 'open';
+
+# 2. 增加缓存
+# 启用 Redis 缓存
+# 配置缓存策略
+# cache:
+#   enabled: true
+#   ttl: 3600
+#   prefix: "openclaw:"
+
+# 3. 水平扩展
+# 增加 API 服务实例
+kubectl scale deployment openclaw-api --replicas=5
+
+# 4. 优化 JVM/Node.js 参数
+# Java: -Xms2g -Xmx4g -XX:+UseG1GC
+# Node: --max-old-space-size=4096
+
+# 5. 清理历史数据
+# 归档旧的构建记录、日志等
+DELETE FROM builds WHERE created_at < NOW() - INTERVAL '90 days';
+
+# 6. 启用 CDN
+# 静态资源走 CDN 加速
+
+# 7. 数据库读写分离
+# 配置主从复制，读操作走从库</code></pre>
+                </div>
+            </div>
+
+            <h3>6.2 磁盘空间不足</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-critical">严重等级：CRITICAL</span>
+                    <span class="problem-title">磁盘空间不足，系统写入失败</span>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 1. 查找大文件和目录
+du -ah / | sort -rh | head -20
+ncdu /  # 交互式查看
+
+# 2. 清理 Docker 资源
+docker system prune -af  # 清理所有未使用的资源
+docker builder prune -af  # 清理构建缓存
+
+# 3. 清理日志
+# 截断日志文件
+> /var/log/openclaw/error.log
+> /var/log/syslog
+
+# 配置日志轮转
+nano /etc/logrotate.d/openclaw
+
+# 4. 清理旧版本
+# 删除旧的 Docker 镜像
+docker images | grep "<none>" | awk '{print $3}' | xargs docker rmi
+
+# 删除旧的 K8S 资源
+kubectl delete pods --field-selector=status.phase==Succeeded -A
+
+# 5. 清理临时文件
+rm -rf /tmp/*
+rm -rf ~/.cache/*
+
+# 6. 扩容磁盘
+# 云环境：在线扩容
+# 物理机：添加新磁盘或替换大容量磁盘
+
+# 7. 配置监控告警
+# 当磁盘使用率超过 80% 时告警</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="chapter7">
+            <h2>第 7 章 安全与认证问题</h2>
+            
+            <h3>7.1 API Key 泄露应急处理</h3>
+            
+            <div class="alert-banner">
+                <div class="alert-icon">🚨</div>
+                <div>
+                    <strong>紧急安全事件！</strong>
+                    <p>如发现 API Key 或凭证泄露，请立即执行以下步骤：</p>
+                    <ol>
+                        <li>立即撤销泄露的凭证</li>
+                        <li>生成新的凭证并更新配置</li>
+                        <li>审计访问日志，评估影响范围</li>
+                        <li>通知受影响的用户</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="solution-box">
+                <strong>✅ 应急响应步骤：</strong>
+                <pre><code># 1. 立即撤销泄露的 API Key
+# Anthropic API
+# 登录 https://console.anthropic.com/settings/keys
+# 删除泄露的 Key
+
+# OpenClaw API
+curl -X DELETE https://api.openclaw-cocode.system/v2/api-keys/{key-id} \
+  -H "Authorization: Bearer admin-token"
+
+# 2. 生成新的 API Key
+curl -X POST https://api.openclaw-cocode.system/v2/api-keys \
+  -H "Authorization: Bearer admin-token" \
+  -d '{"name": "replacement-key", "scopes": ["read", "write"]}'
+
+# 3. 更新所有使用该 Key 的配置
+# 包括：
+# - 应用配置文件
+# - CI/CD 环境变量
+# - 第三方集成
+
+# 4. 审计访问日志
+# 检查泄露期间的所有 API 调用
+curl -X GET "https://api.openclaw-cocode.system/v2/audit-logs?apiKey={leaked-key}" \
+  -H "Authorization: Bearer admin-token"
+
+# 5. 加强安全措施
+# - 启用 IP 白名单
+# - 配置更短的 Token 有效期
+# - 启用 MFA 双因素认证
+# - 定期轮换密钥（建议每 90 天）</code></pre>
+            </div>
+        </section>
+
+        <section id="chapter8">
+            <h2>第 8 章 数据与存储问题</h2>
+            
+            <h3>8.1 数据丢失恢复</h3>
+            
+            <div class="problem-card">
+                <div class="problem-header">
+                    <span class="severity-badge severity-critical">严重等级：CRITICAL</span>
+                    <span class="problem-title">误删除数据或数据损坏，需要恢复</span>
+                </div>
+                
+                <div class="solution-box">
+                    <strong>✅ 解决方案：</strong>
+                    <pre><code># 1. 立即停止写入操作
+# 防止数据被覆盖
+
+# 2. 从备份恢复
+# 检查最近的备份
+ls -lt /backups/postgresql/
+
+# 恢复数据库
+pg_restore -U openclaw -d openclaw_db /backups/postgresql/latest.dump
+
+# 3. 使用 WAL 日志恢复（PostgreSQL）
+# 恢复到特定时间点
+recovery_target_time = '2026-03-14 10:00:00'
+
+# 4. 从 Git 恢复配置和代码
+git log --oneline
+git checkout <commit-hash>
+
+# 5. 从对象存储恢复文件
+aws s3 cp s3://backup-bucket/path/to/file /local/path/
+
+# 6. 验证恢复结果
+# 检查数据完整性
+# 运行应用测试
+
+# 预防措施：
+# - 配置自动备份（每日全量 + 实时增量）
+# - 定期演练恢复流程
+# - 多地备份（本地 + 云端）
+# - 启用数据库 PITR（时间点恢复）</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="error-codes">
+            <h2>附录 A 错误码速查表</h2>
+            
+            <h3>A.1 系统错误码</h3>
+            <table>
+                <tr>
+                    <th>错误码</th>
+                    <th>含义</th>
+                    <th>常见原因</th>
+                    <th>快速解决</th>
+                </tr>
+                <tr>
+                    <td><code>SYS_001</code></td>
+                    <td>服务启动失败</td>
+                    <td>端口占用、配置错误</td>
+                    <td>检查端口、验证配置</td>
+                </tr>
+                <tr>
+                    <td><code>SYS_002</code></td>
+                    <td>数据库连接失败</td>
+                    <td>DB 未启动、网络问题、凭证错误</td>
+                    <td>重启 DB、检查网络</td>
+                </tr>
+                <tr>
+                    <td><code>SYS_003</code></td>
+                    <td>缓存服务不可用</td>
+                    <td>Redis 宕机、内存满</td>
+                    <td>重启 Redis、清理内存</td>
+                </tr>
+                <tr>
+                    <td><code>SYS_004</code></td>
+                    <td>消息队列异常</td>
+                    <td>RabbitMQ/Kafka 故障</td>
+                    <td>检查 MQ 状态、重启消费者</td>
+                </tr>
+                <tr>
+                    <td><code>SYS_005</code></td>
+                    <td>磁盘空间不足</td>
+                    <td>日志/数据/镜像占用过多</td>
+                    <td>清理空间、扩容磁盘</td>
+                </tr>
+            </table>
+
+            <h3>A.2 Agent 错误码</h3>
+            <table>
+                <tr>
+                    <th>错误码</th>
+                    <th>含义</th>
+                    <th>常见原因</th>
+                    <th>快速解决</th>
+                </tr>
+                <tr>
+                    <td><code>AGT_001</code></td>
+                    <td>Agent 激活失败</td>
+                    <td>输入数据无效、模型不可用</td>
+                    <td>验证输入、切换模型</td>
+                </tr>
+                <tr>
+                    <td><code>AGT_002</code></td>
+                    <td>任务执行超时</td>
+                    <td>任务过复杂、资源不足</td>
+                    <td>拆分任务、增加资源</td>
+                </tr>
+                <tr>
+                    <td><code>AGT_003</code></td>
+                    <td>输出格式错误</td>
+                    <td>Prompt 不当、模型幻觉</td>
+                    <td>优化 Prompt、降低 temperature</td>
+                </tr>
+                <tr>
+                    <td><code>AGT_004</code></td>
+                    <td>API 调用失败</td>
+                    <td>AI 服务宕机、网络问题</td>
+                    <td>检查 AI 服务状态、重试</td>
+                </tr>
+                <tr>
+                    <td><code>AGT_005</code></td>
+                    <td>协作流程中断</td>
+                    <td>消息队列问题、Schema 不匹配</td>
+                    <td>检查 MQ、验证 Schema</td>
+                </tr>
+            </table>
+
+            <h3>A.3 CI/CD 错误码</h3>
+            <table>
+                <tr>
+                    <th>错误码</th>
+                    <th>含义</th>
+                    <th>常见原因</th>
+                    <th>快速解决</th>
+                </tr>
+                <tr>
+                    <td><code>CICD_001</code></td>
+                    <td>构建失败</td>
+                    <td>编译错误、依赖缺失</td>
+                    <td>修复代码、检查依赖</td>
+                </tr>
+                <tr>
+                    <td><code>CICD_002</code></td>
+                    <td>测试失败</td>
+                    <td>单元测试/Bug</td>
+                    <td>查看测试报告、修复 Bug</td>
+                </tr>
+                <tr>
+                    <td><code>CICD_003</code></td>
+                    <td>镜像构建失败</td>
+                    <td>Dockerfile 错误、基础镜像不存在</td>
+                    <td>修正 Dockerfile</td>
+                </tr>
+                <tr>
+                    <td><code>CICD_004</code></td>
+                    <td>部署失败</td>
+                    <td>K8S 配置错误、资源不足</td>
+                    <td>检查 YAML、扩容集群</td>
+                </tr>
+                <tr>
+                    <td><code>CICD_005</code></td>
+                    <td>健康检查失败</td>
+                    <td>应用未正常启动</td>
+                    <td>查看 Pod 日志、修复应用</td>
+                </tr>
+            </table>
+        </section>
+
+        <section id="diagnostic-tools">
+            <h2>附录 B 诊断工具集</h2>
+            
+            <h3>B.1 内置诊断命令</h3>
+            <pre><code># OpenClaw 诊断命令
+openclaw doctor              # 系统健康检查
+openclaw logs --follow       # 实时查看日志
+openclaw status              # 查看所有服务状态
+openclaw metrics             # 显示性能指标
+openclaw config:validate     # 验证配置文件
+
+# Agent 诊断
+openclaw agents:list         # 列出所有 Agent
+openclaw agents:status       # 查看 Agent 状态
+openclaw agents:restart      # 重启 Agent 服务
+
+# 数据库诊断
+openclaw db:check            # 检查数据库连接
+openclaw db:migrate:status   # 查看迁移状态
+openclaw db:backup           # 创建备份
+
+# 清理命令
+openclaw cleanup:logs        # 清理旧日志
+openclaw cleanup:cache       # 清理缓存
+openclaw cleanup:temp        # 清理临时文件</code></pre>
+
+            <h3>B.2 外部工具推荐</h3>
+            <table>
+                <tr>
+                    <th>工具</th>
+                    <th>用途</th>
+                    <th>安装命令</th>
+                </tr>
+                <tr>
+                    <td>k9s</td>
+                    <td>Kubernetes TUI 管理工具</td>
+                    <td>snap install k9s</td>
+                </tr>
+                <tr>
+                    <td>htop</td>
+                    <td>交互式进程查看器</td>
+                    <td>apt install htop</td>
+                </tr>
+                <tr>
+                    <td>ncdu</td>
+                    <td>磁盘使用分析</td>
+                    <td>apt install ncdu</td>
+                </tr>
+                <tr>
+                    <td>wireshark</td>
+                    <td>网络抓包分析</td>
+                    <td>apt install wireshark</td>
+                </tr>
+                <tr>
+                    <td>postman</td>
+                    <td>API 测试调试</td>
+                    <td>snap install postman</td>
+                </tr>
+            </table>
+
+            <h3>B.3 监控仪表盘</h3>
+            <p>系统集成了 Prometheus + Grafana 监控，可通过以下地址访问：</p>
+            <ul>
+                <li><strong>Grafana:</strong> http://grafana.openclaw.local/dashboards</li>
+                <li><strong>Prometheus:</strong> http://prometheus.openclaw.local/graph</li>
+                <li><strong>KubeSphere 监控:</strong> https://kubesphere.openclaw.local/monitoring</li>
+            </ul>
+        </section>
+
+        <footer>
+            <p><strong>📖 文档版本：</strong>v2.0 | <strong>📅 最后更新：</strong>2026 年 3 月 14 日</p>
+            <p><strong>🔗 相关链接：</strong>
+                <a href="user_manual.html" style="color: var(--primary-color);">用户使用手册</a> | 
+                <a href="api_docs.html" style="color: var(--primary-color);">API 开发文档</a>
+            </p>
+            <p style="margin-top: 20px; font-size: 0.9em;">
+                © 2026 OpenClaw + Claude Code End-to-End R&D Automation System.<br>
+                🆘 24/7 技术支持：support-emergency@openclaw-cocode.system | 紧急热线：+86-400-XXX-XXXX
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+
+        // 复制代码功能
+        document.querySelectorAll('pre').forEach(pre => {
+            const btn = document.createElement('button');
+            btn.className = 'copy-btn';
+            btn.style.cssText = 'background: rgba(0, 245, 255, 0.2); border: 1px solid var(--primary-color); color: var(--primary-color); padding: 5px 15px; border-radius: 6px; cursor: pointer; font-size: 0.85em; float: right; margin-bottom: 10px;';
+            btn.textContent = '复制';
+            btn.onclick = () => {
+                const code = pre.querySelector('code');
+                navigator.clipboard.writeText(code.textContent);
+                btn.textContent = '已复制!';
+                setTimeout(() => btn.textContent = '复制', 2000);
+            };
+            pre.appendChild(btn);
+        });
+
+        console.log('🚨 故障排查指南已加载 | Troubleshooting Guide v2.0');
+    </script>
+</body>
+</html>

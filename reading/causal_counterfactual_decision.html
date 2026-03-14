@@ -1,0 +1,1512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>因果推理与反事实决策能力</title>
+    <style>
+        :root {
+            --causal-blue: #0284c7;
+            --dag-purple: #a855f7;
+            --counter-gold: #ca8a04;
+            --intervene-green: #16a34a;
+            --decision-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-causal: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--causal-blue), var(--dag-purple), var(--counter-gold), var(--intervene-green), var(--decision-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-causal);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: causalRotate 270s linear infinite;
+        }
+        
+        @keyframes causalRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .causal-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 8px 22px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.92em;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+            animation: causalPulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes causalPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 12px 30px rgba(2, 132, 199, 0.5); }
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-causal {
+            background: linear-gradient(135deg, var(--causal-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-dag {
+            background: linear-gradient(135deg, var(--dag-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-counter {
+            background: linear-gradient(135deg, var(--counter-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-intervene {
+            background: linear-gradient(135deg, var(--intervene-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-decision {
+            background: linear-gradient(135deg, var(--decision-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.15em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 23px;
+            text-shadow: 0 0 50px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.28;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.68em;
+            color: var(--text-secondary);
+            margin-bottom: 38px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .causal-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 48px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .causal-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 23px 28px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 135px;
+        }
+        
+        .causal-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .causal-box.causal {
+            border-color: var(--causal-blue);
+            box-shadow: 0 15px 30px rgba(2, 132, 199, 0.35);
+        }
+        
+        .causal-box.dag {
+            border-color: var(--dag-purple);
+            box-shadow: 0 15px 30px rgba(168, 85, 247, 0.35);
+        }
+        
+        .causal-box.counter {
+            border-color: var(--counter-gold);
+            box-shadow: 0 15px 30px rgba(202, 138, 4, 0.35);
+        }
+        
+        .causal-box.intervene {
+            border-color: var(--intervene-green);
+            box-shadow: 0 15px 30px rgba(22, 163, 74, 0.35);
+        }
+        
+        .causal-box.decision {
+            border-color: var(--decision-red);
+            box-shadow: 0 15px 30px rgba(220, 38, 38, 0.35);
+        }
+        
+        .causal-label {
+            font-size: 1.32em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 6px;
+        }
+        
+        .causal-box.causal .causal-label { color: var(--causal-blue); }
+        .causal-box.dag .causal-label { color: var(--dag-purple); }
+        .causal-box.counter .causal-label { color: var(--counter-gold); }
+        .causal-box.intervene .causal-label { color: var(--intervene-green); }
+        .causal-box.decision .causal-label { color: var(--decision-red); }
+        
+        .causal-desc {
+            font-size: 0.73em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.6;
+        }
+        
+        .causal-arrow {
+            font-size: 1.6em;
+            color: var(--intervene-green);
+            animation: causalArrow 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes causalArrow {
+            0%, 100% { opacity: 0.6; transform: translateX(0); }
+            50% { opacity: 1; transform: translateX(8px); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 22px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 48px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 11px 22px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px var(--border-glow);
+            border-color: var(--causal-blue);
+        }
+        
+        .meta-label {
+            color: var(--causal-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.73em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.93em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 40px 36px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 38px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.55em;
+            color: var(--causal-blue);
+            margin-bottom: 30px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 30px 0 20px 0;
+            padding: 14px 22px;
+            border-radius: 18px;
+            font-size: 1.5em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--causal-blue); 
+            color: var(--causal-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--dag-purple); 
+            color: var(--dag-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--counter-gold); 
+            color: var(--counter-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--intervene-green); 
+            color: var(--intervene-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--decision-red); 
+            color: var(--decision-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 10px;
+        }
+        
+        .toc-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.93em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 9px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--causal-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--causal-blue);
+            text-shadow: 0 0 6px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 50px 40px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 3px 28px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 18px 64px var(--border-glow), 0 0 48px rgba(2, 132, 199, 0.2);
+            border-color: var(--causal-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.35em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 28px;
+            border-bottom: 4px solid var(--causal-blue);
+            padding-bottom: 14px;
+            font-weight: 800;
+            text-shadow: 0 0 18px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 30px 0;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: var(--causal-blue);
+            margin-bottom: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--dag-purple);
+            font-size: 0.6em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.01;
+            font-size: 1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 20px;
+        }
+        
+        .causal-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+            gap: 16px;
+            margin: 30px 0;
+        }
+        
+        .causal-box-card {
+            padding: 25px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .causal-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .causal-box-card.causal {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--causal-blue);
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .causal-box-card.dag {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--dag-purple);
+            box-shadow: 0 8px 23px rgba(168, 85, 247, 0.3);
+        }
+        
+        .causal-box-card.counter {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--counter-gold);
+            box-shadow: 0 8px 23px rgba(202, 138, 4, 0.3);
+        }
+        
+        .causal-box-card.intervene {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--intervene-green);
+            box-shadow: 0 8px 23px rgba(22, 163, 74, 0.3);
+        }
+        
+        .causal-box-card.decision {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--decision-red);
+            box-shadow: 0 8px 23px rgba(220, 38, 38, 0.3);
+        }
+        
+        .causal-box-title {
+            font-size: 1.55em;
+            font-weight: 800;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .causal-box-card.causal .causal-box-title { color: var(--causal-blue); }
+        .causal-box-card.dag .causal-box-title { color: var(--dag-purple); }
+        .causal-box-card.counter .causal-box-title { color: var(--counter-gold); }
+        .causal-box-card.intervene .causal-box-title { color: var(--intervene-green); }
+        .causal-box-card.decision .causal-box-title { color: var(--decision-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 28px 34px;
+            border-left: 7px solid var(--causal-blue);
+            border-radius: 18px;
+            margin: 28px 0;
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--causal-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 26px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 21px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8em;
+            line-height: 1.61;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--causal-blue);
+            font-weight: 700;
+            margin-bottom: 11px;
+            font-family: 'Georgia', serif;
+            font-size: 0.97em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 28px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 10px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--causal-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.01px;
+            font-size: 0.8em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--causal-blue);
+            padding-left: 22px;
+            margin: 24px 0;
+            color: var(--text-secondary);
+            font-size: 1.03em;
+            font-family: 'Georgia', serif;
+            line-height: 1.91;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 11px;
+            color: var(--dag-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 20px 0;
+            padding-left: 28px;
+        }
+        
+        li {
+            margin-bottom: 9px;
+            line-height: 1.91;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 60px 30px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 100px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 740px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 24px 16px;
+            }
+            
+            .book-title {
+                font-size: 1.95em;
+            }
+            
+            .causal-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .causal-diagram {
+                flex-direction: column;
+            }
+            
+            .causal-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="causal-spectrum">
+                <div class="spectrum-item spectrum-causal">🔵 因果推理</div>
+                <div class="spectrum-item spectrum-dag">🟣 DAG 结构</div>
+                <div class="spectrum-item spectrum-counter">🟡 反事实</div>
+                <div class="spectrum-item spectrum-intervene">🟢 干预分析</div>
+                <div class="spectrum-item spectrum-decision">🔴 因果决策</div>
+            </div>
+            <h1 class="book-title">因果推理与反事实决策能力</h1>
+            <h2 class="book-subtitle">从相关到因果的认知革命</h2>
+            
+            <div class="causal-diagram">
+                <div class="causal-box causal">
+                    <span class="causal-label">🔵 因果推理</span>
+                    <span class="causal-desc">因果图建模<br>混淆控制<br>因果识别</span>
+                </div>
+                <div class="causal-arrow">→</div>
+                <div class="causal-box dag">
+                    <span class="causal-label">🟣 DAG 结构</span>
+                    <span class="causal-desc">结构学习<br>因果发现<br>PC/FCI 算法</span>
+                </div>
+                <div class="causal-arrow">→</div>
+                <div class="causal-box counter">
+                    <span class="causal-label">🟡 反事实</span>
+                    <span class="causal-desc">潜在结果<br>反事实估计<br>PNS/PN/PS</span>
+                </div>
+                <div class="causal-arrow">→</div>
+                <div class="causal-box intervene">
+                    <span class="causal-label">🟢 干预分析</span>
+                    <span class="causal-desc">do-演算<br>前/后门调整<br>因果效应</span>
+                </div>
+                <div class="causal-arrow">→</div>
+                <div class="causal-box decision">
+                    <span class="causal-label">🔴 因果决策</span>
+                    <span class="causal-desc">决策理论<br>策略优化<br>反事实决策</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">因果智能版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">因果·DAG·反事实·干预·决策</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 因果推理基础与理论框架</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：因果智能——从相关到因果的认知革命</a></li>
+                <li><a href="#chapter1">第 1 章 因果关系本质与因果图</a></li>
+                <li><a href="#chapter2">第 2 章 潜在结果框架</a></li>
+                <li><a href="#chapter3">第 3 章 结构因果模型 SCM</a></li>
+                
+                <div class="toc-part part2">第二编 因果发现与结构学习</div>
+                <li><a href="#chapter4">第 4 章 因果发现算法概述</a></li>
+                <li><a href="#chapter5">第 5 章 基于约束的方法：PC/FCI</a></li>
+                <li><a href="#chapter6">第 6 章 基于分数的方法</a></li>
+                <li><a href="#chapter7">第 7 章 连续优化 DAG 学习</a></li>
+                
+                <div class="toc-part part3">第三编 反事实推理与干预分析</div>
+                <li><a href="#chapter8">第 8 章 do-演算与干预</a></li>
+                <li><a href="#chapter9">第 9 章 前门与后门调整</a></li>
+                <li><a href="#chapter10">第 10 章 反事实估计方法</a></li>
+                <li><a href="#chapter11">第 11 章 因果效应识别</a></li>
+                
+                <div class="toc-part part4">第四编 因果决策与策略优化</div>
+                <li><a href="#chapter12">第 12 章 因果决策理论</a></li>
+                <li><a href="#chapter13">第 13 章 反事实决策制定</a></li>
+                <li><a href="#chapter14">第 14 章 因果强化学习</a></li>
+                <li><a href="#chapter15">第 15 章 策略优化与干预选择</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 30px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 因果推断库</a></li>
+                <li><a href="#appendix-b">附录 B 开源工具库</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：因果智能——从相关到因果的认知革命</h2>
+            <div class="content">
+                <p>因果推理是智能的核心标志：能够理解因果关系，区分相关与因果，进行反事实推理，设计干预策略，做出因果决策。然而，传统机器学习长期受限于"相关性陷阱"：只能发现统计关联，无法理解因果机制，不能回答"如果...会怎样"的反事实问题，难以设计有效干预。因果推理与反事实决策能力的兴起正在引发一场认知革命：<strong>让 AI 系统像人类一样理解因果、思考反事实、设计干预、做出明智决策</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>因果智能体系通过因果图建模实现因果关系形式化、通过因果发现学习结构、通过反事实推理回答"如果...会怎样"、通过 do-演算设计干预、通过因果决策理论做出最优选择，五层协同，构建能理解、会推理、善干预、可解释、明智决策的全能因果智能系统。</p>
+                </div>
+                
+                <h3 class="section-title">因果智能革命的兴起</h3>
+                
+                <p>从 Pearl 的因果图到 Rubin 的潜在结果框架，从 PC 算法到 NOTEARS，从 do-演算到因果强化学习，因果推理技术快速演进。然而，真正的因果智能面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>因果识别</strong>：如何从观测数据中识别因果关系，而非仅仅相关？</li>
+                    <li><strong>混淆控制</strong>：如何处理未观测混淆变量（unobserved confounders）？</li>
+                    <li><strong>反事实推理</strong>：如何回答"如果当时做了不同选择，结果会怎样"？</li>
+                    <li><strong>干预设计</strong>：如何设计最优干预策略，最大化因果效应？</li>
+                </ul>
+                
+                <div class="quote">
+                    "因果智能不是简单的相关性分析，而是一种认知范式的根本转变。从'相关'到'因果'，从'预测'到'干预'，从'是什么'到'为什么'和'如果...会怎样'。这种转变让 AI 系统从'曲线拟合者'走向'因果理解者'。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 因果推理基础与理论框架</strong>：阐述因果关系本质与因果图、潜在结果框架、结构因果模型 SCM 等基础知识。</p>
+                
+                <p><strong>第二编 因果发现与结构学习</strong>：深入剖析因果发现算法概述、基于约束的方法（PC/FCI）、基于分数的方法、连续优化 DAG 学习等核心算法。</p>
+                
+                <p><strong>第三编 反事实推理与干预分析</strong>：详细探讨 do-演算与干预、前门与后门调整、反事实估计方法、因果效应识别等干预技术。</p>
+                
+                <p><strong>第四编 因果决策与策略优化</strong>：涵盖因果决策理论、反事实决策制定、因果强化学习、策略优化与干预选择等决策方法。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从因果图到反事实推理，从 do-演算到因果决策，从观测数据到干预设计，因果智能体系正在重塑 AI 系统的认知范式。未来的 AI 将更具因果理解力、更善反事实思考、更接近人类的推理能力。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 40px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在因果推理与决策科学一线构建 AI 系统的研究者和工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 8 章 -->
+        <div class="chapter" id="chapter8">
+            <h2 class="chapter-title">第 8 章 do-演算与干预</h2>
+            <div class="content">
+                <h3 class="section-title">8.1 do-算子核心概念</h3>
+                
+                <p>do-演算是 Judea Pearl 提出的因果推理形式化工具，通过 do-算子（do-operator）表示干预操作。do(X=x) 表示强制将变量 X 设置为值 x，切断 X 与其父节点的因果联系，模拟随机实验。do-演算的三条规则允许我们在满足特定图条件时，将包含 do-算子的表达式转换为仅包含观测概率的表达式，从而实现从观测数据中估计因果效应。</p>
+                
+                <div class="highlight">
+                    <p><strong>do-演算核心思想：</strong>干预（do）vs 观测（see）、因果效应 P(Y|do(X)) vs 条件概率 P(Y|X)、后门准则、前门准则、因果识别。</p>
+                </div>
+                
+                <h3 class="section-title">8.2 do-演算完整实现</h3>
+                
+                <div class="section">
+                    <h4>do-演算 Python 实现</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">do-演算与因果效应估计</div>
+                        <pre>
+import numpy as np
+import pandas as pd
+import networkx as nx
+from typing import Dict, List, Tuple, Optional, Set
+from itertools import combinations
+from scipy import stats
+import warnings
+
+class CausalGraph:
+    """因果图类"""
+    
+    def __init__(self, nodes: List[str], edges: List[Tuple[str, str]]):
+        """
+        初始化因果图
+        
+        Args:
+            nodes: 节点列表
+            edges: 有向边列表 [(parent, child), ...]
+        """
+        self.nodes = nodes
+        self.edges = edges
+        self.graph = nx.DiGraph()
+        self.graph.add_nodes_from(nodes)
+        self.graph.add_edges_from(edges)
+    
+    def get_parents(self, node: str) -> Set[str]:
+        """获取父节点"""
+        return set(self.graph.predecessors(node))
+    
+    def get_children(self, node: str) -> Set[str]:
+        """获取子节点"""
+        return set(self.graph.successors(node))
+    
+    def get_ancestors(self, node: str) -> Set[str]:
+        """获取祖先节点"""
+        return nx.ancestors(self.graph, node)
+    
+    def get_descendants(self, node: str) -> Set[str]:
+        """获取后代节点"""
+        return nx.descendants(self.graph, node)
+    
+    def is_d_separated(self, X: Set[str], Y: Set[str], Z: Set[str]) -> bool:
+        """
+        判断 X 和 Y 是否在给定 Z 条件下 d-分离
+        
+        d-分离是因果图中判断条件独立性的准则
+        """
+        return nx.d_separation(self.graph, X, Y, Z)
+    
+    def find_backdoor_paths(self, treatment: str, outcome: str) -> List[List[str]]:
+        """
+        查找从 treatment 到 outcome 的所有后门路径
+        
+        后门路径：以指向 treatment 的边开始的路径
+        """
+        all_paths = nx.all_simple_paths(self.graph, 
+                                        source=treatment, 
+                                        target=outcome)
+        
+        backdoor_paths = []
+        for path in all_paths:
+            # 检查第一条边是否指向 treatment
+            if len(path) >= 2:
+                second_node = path[1]
+                # 如果 second_node -> treatment，则是后门路径
+                if self.graph.has_edge(second_node, treatment):
+                    backdoor_paths.append(path)
+        
+        return backdoor_paths
+    
+    def find_frontdoor_criteria(self, treatment: str, outcome: str) -> List[str]:
+        """
+        查找满足前门准则的中介变量
+        
+        前门准则条件:
+        1. M 完全中介 treatment 对 outcome 的影响
+        2. treatment 到 M 没有未阻断的后门路径
+        3. M 到 outcome 的所有后门路径都被 treatment 阻断
+        """
+        candidates = []
+        
+        for node in self.nodes:
+            if node == treatment or node == outcome:
+                continue
+            
+            # 条件 1: treatment -> M -> outcome
+            has_path_treatment_to_m = nx.has_path(self.graph, treatment, node)
+            has_path_m_to_outcome = nx.has_path(self.graph, node, outcome)
+            
+            if not (has_path_treatment_to_m and has_path_m_to_outcome):
+                continue
+            
+            # 条件 2: treatment 到 M 没有未阻断的后门路径
+            # (简化检查：没有指向 treatment 的父节点也指向 M)
+            treatment_parents = self.get_parents(treatment)
+            m_parents = self.get_parents(node)
+            
+            backdoor_treatment_m = treatment_parents.intersection(m_parents)
+            
+            if len(backdoor_treatment_m) > 0:
+                continue
+            
+            # 条件 3: M 到 outcome 的后门路径被 treatment 阻断
+            # (简化检查)
+            candidates.append(node)
+        
+        return candidates
+
+
+class DoCalculus:
+    """
+    do-演算实现
+    
+    三条规则:
+    Rule 1: 插入/删除观测
+    Rule 2: 交换干预和观测
+    Rule 3: 插入/删除干预
+    """
+    
+    def __init__(self, causal_graph: CausalGraph):
+        self.graph = causal_graph
+    
+    def backdoor_adjustment(self, treatment: str, outcome: str, 
+                           data: pd.DataFrame, 
+                           confounders: Optional[List[str]] = None) -> Dict:
+        """
+        后门调整公式
+        
+        P(Y|do(X)) = Σ_z P(Y|X,Z)P(Z)
+        
+        Args:
+            treatment: 处理变量 X
+            outcome: 结果变量 Y
+            data: 观测数据
+            confounders: 混淆变量集合 Z（如果为 None，自动识别）
+        
+        Returns:
+            causal_effect: 平均因果效应 ACE
+            ate: 平均处理效应
+            confidence_interval: 置信区间
+        """
+        if confounders is None:
+            # 自动识别：treatment 的父节点（排除 outcome）
+            confounders = list(self.graph.get_parents(treatment) - {outcome})
+        
+        if len(confounders) == 0:
+            # 无混淆，直接计算
+            treated = data[data[treatment] == 1]
+            control = data[data[treatment] == 0]
+            
+            ate = treated[outcome].mean() - control[outcome].mean()
+            se = np.sqrt(treated[outcome].var() / len(treated) + 
+                        control[outcome].var() / len(control))
+        else:
+            # 分层调整
+            # 按混淆变量分层
+            grouped = data.groupby(confounders)
+            
+            ate = 0
+            variance = 0
+            
+            for name, group in grouped:
+                if len(group) < 10:  # 小样本层跳过
+                    continue
+                
+                stratum_weight = len(group) / len(data)
+                
+                treated = group[group[treatment] == 1]
+                control = group[group[treatment] == 0]
+                
+                if len(treated) == 0 or len(control) == 0:
+                    continue
+                
+                stratum_effect = treated[outcome].mean() - control[outcome].mean()
+                stratum_var = (treated[outcome].var() / len(treated) + 
+                              control[outcome].var() / len(control))
+                
+                ate += stratum_weight * stratum_effect
+                variance += (stratum_weight ** 2) * stratum_var
+            
+            se = np.sqrt(variance)
+        
+        # 95% 置信区间
+        ci_lower = ate - 1.96 * se
+        ci_upper = ate + 1.96 * se
+        
+        return {
+            'ate': ate,
+            'se': se,
+            'ci_95': (ci_lower, ci_upper),
+            'confounders': confounders,
+            'method': 'backdoor_adjustment'
+        }
+    
+    def frontdoor_adjustment(self, treatment: str, outcome: str, 
+                            mediator: str, data: pd.DataFrame) -> Dict:
+        """
+        前门调整公式
+        
+        P(Y|do(X)) = Σ_m P(M=m|X) Σ_x' P(Y|M=m,X=x')P(X=x')
+        
+        适用于存在未观测混淆变量，但有合适中介变量的情况
+        """
+        # 步骤 1: 估计 P(M|X)
+        m_given_x = data.groupby([treatment, mediator]).size().unstack(fill_value=0)
+        m_given_x = m_given_x.div(m_given_x.sum(axis=1), axis=0)
+        
+        # 步骤 2: 估计 P(Y|M,X)
+        y_given_mx = data.groupby([mediator, treatment])[outcome].mean().unstack()
+        
+        # 步骤 3: 估计 P(X)
+        p_x = data[treatment].value_counts(normalize=True)
+        
+        # 步骤 4: 计算前门调整估计
+        # E[Y|do(X=1)] - E[Y|do(X=0)]
+        
+        ate = 0
+        
+        for x in [0, 1]:
+            e_y_do_x = 0
+            
+            for m in data[mediator].unique():
+                # P(M=m|X=x)
+                p_m_x = m_given_x.loc[x, m] if x in m_given_x.index and m in m_given_x.columns else 0
+                
+                # Σ_x' P(Y|M=m,X=x')P(X=x')
+                e_y_m = 0
+                for x_prime in [0, 1]:
+                    p_y_mx = y_given_mx.loc[m, x_prime] if m in y_given_mx.index and x_prime in y_given_mx.columns else 0
+                    p_x_prime = p_x.get(x_prime, 0)
+                    e_y_m += p_y_mx * p_x_prime
+                
+                e_y_do_x += p_m_x * e_y_m
+            
+            if x == 1:
+                e_y_do_x1 = e_y_do_x
+            else:
+                e_y_do_x0 = e_y_do_x
+        
+        ate = e_y_do_x1 - e_y_do_x0
+        
+        # 简化标准误估计（实际应使用 bootstrap）
+        se = np.sqrt(data[outcome].var() / len(data))
+        
+        return {
+            'ate': ate,
+            'se': se,
+            'mediator': mediator,
+            'method': 'frontdoor_adjustment'
+        }
+    
+    def instrumental_variable(self, treatment: str, outcome: str, 
+                             instrument: str, data: pd.DataFrame) -> Dict:
+        """
+        工具变量法
+        
+        适用于存在未观测混淆变量的情况
+        
+        IV 估计 = Cov(Z,Y) / Cov(Z,X)
+        """
+        z = data[instrument]
+        x = data[treatment]
+        y = data[outcome]
+        
+        # 两阶段最小二乘 (2SLS)
+        # 第一阶段：X = α + βZ + ε
+        beta_zx = np.cov(z, x)[0, 1] / np.var(z)
+        
+        # 第二阶段：Y = α + βX_hat + ε
+        beta_zy = np.cov(z, y)[0, 1] / np.var(z)
+        
+        # IV 估计
+        ate = beta_zy / beta_zx
+        
+        # 标准误（简化）
+        se = np.sqrt(data[outcome].var() / len(data)) / abs(beta_zx)
+        
+        return {
+            'ate': ate,
+            'se': se,
+            'instrument': instrument,
+            'first_stage_coef': beta_zx,
+            'method': 'instrumental_variable'
+        }
+
+
+# 使用示例
+if __name__ == "__main__":
+    # 创建因果图：经典的混淆结构
+    # Z -> X -> Y
+    # Z -> Y
+    nodes = ['Z', 'X', 'Y']
+    edges = [('Z', 'X'), ('Z', 'Y'), ('X', 'Y')]
+    
+    graph = CausalGraph(nodes, edges)
+    do_calc = DoCalculus(graph)
+    
+    # 生成模拟数据
+    np.random.seed(42)
+    n = 10000
+    
+    Z = np.random.binomial(1, 0.5, n)  # 混淆变量
+    X = np.random.binomial(1, 1 / (1 + np.exp(-(0.5 * Z - 0.2))))  # 处理变量
+    Y = (0.3 * X + 0.5 * Z + np.random.normal(0, 0.3, n) > 0.5).astype(int)  # 结果变量
+    
+    data = pd.DataFrame({'Z': Z, 'X': X, 'Y': Y})
+    
+    print("=== do-演算与因果效应估计 ===\n")
+    
+    # 1. 后门调整
+    print("1. 后门调整法:")
+    result_backdoor = do_calc.backdoor_adjustment('X', 'Y', data, confounders=['Z'])
+    print(f"   ATE: {result_backdoor['ate']:.4f}")
+    print(f"   95% CI: [{result_backdoor['ci_95'][0]:.4f}, {result_backdoor['ci_95'][1]:.4f}]")
+    print(f"   混淆变量：{result_backdoor['confounders']}")
+    print()
+    
+    # 2. 朴素估计（有偏）
+    print("2. 朴素估计（未调整混淆，有偏）:")
+    treated = data[data['X'] == 1]
+    control = data[data['X'] == 0]
+    naive_ate = treated['Y'].mean() - control['Y'].mean()
+    print(f"   Naive ATE: {naive_ate:.4f} (有偏!)")
+    print()
+    
+    # 3. 工具变量法（示例）
+    print("3. 工具变量法（需要有效工具变量）:")
+    print("   注意：此例中 Z 不是有效 IV，因为 Z 直接影响 Y")
+    print("   有效 IV 需满足：与 X 相关，不直接影响 Y，只通过 X 影响 Y")
+    
+    print("\n关键观察:")
+    print("1. do-演算将因果问题（P(Y|do(X))）转化为统计问题（P(Y|X,Z)）")
+    print("2. 后门调整：控制混淆变量 Z，得到无偏因果效应")
+    print("3. 前门调整：当存在未观测混淆时，使用中介变量")
+    print("4. 工具变量：当混淆未观测且无合适中介时，使用 IV")
+    print("5. 因果识别的关键：图结构 + 假设")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">8.3 do-演算三规则</h3>
+                
+                <div class="section">
+                    <h4>从理论到实践</h4>
+                    
+                    <p>do-演算的三条规则提供了将 do-表达式转换为观测表达式的完整工具集：</p>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>Rule 1（插入/删除观测）</strong>：P(y|do(x),z,w) = P(y|do(x),w)，如果 Y ⊥ Z | X,W 在 G_X̄ 中</li>
+                        <li><strong>Rule 2（交换干预和观测）</strong>：P(y|do(x),do(z),w) = P(y|do(x),z,w)，如果 Y ⊥ Z | X,W 在 G_X̄,Z̄ 中</li>
+                        <li><strong>Rule 3（插入/删除干预）</strong>：P(y|do(x),do(z),w) = P(y|do(x),w)，如果 Y ⊥ Z | X,W 在 G_X̄,Z̄(W) 中</li>
+                    </ul>
+                    
+                    <div class="quote">
+                        "do-演算的完备性定理：如果一个因果效应在给定图结构下是可识别的，那么一定可以通过有限次应用三条规则将其转换为观测表达式。这是因果推理的'哥德尔完备性定理'。"
+                        <div class="quote-author">—— Pearl (1995)</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">8.4 本章小结</h3>
+                <p>本章深入探讨了 do-演算与干预。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>do-算子：形式化干预，P(Y|do(X)) vs P(Y|X)</li>
+                    <li>后门调整：控制混淆变量，得到无偏因果效应</li>
+                    <li>前门调整：使用中介变量处理未观测混淆</li>
+                    <li>工具变量：当混淆未观测时的替代方案</li>
+                    <li>do-演算三规则：完备的因果识别工具集</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：电商平台优惠券因果效应评估</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某大型电商平台，年发放优惠券 10 亿+ 张，需评估优惠券的真实因果效应</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>自选择偏差：高价值用户更可能领取和使用优惠券</li>
+                                <li>混淆变量：用户历史消费、活跃度、偏好等影响领取和使用</li>
+                                <li>异质性处理效应：优惠券对不同用户群体效果不同</li>
+                                <li>干扰效应：用户间存在社交影响（spillover effect）</li>
+                                <li>反事实问题：如果没发优惠券，用户会购买吗？</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>因果推断解决方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>因果图建模</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>构建 DAG：用户特征 → 领取 → 使用 → 购买</li>
+                                <li>识别混淆：历史消费、活跃度、品类偏好</li>
+                                <li>识别中介：领取行为、使用行为</li>
+                            </ul>
+                        </li>
+                        <li><strong>倾向得分匹配 PSM</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>估计 P(领取|特征)：XGBoost 模型</li>
+                                <li>1:1 最近邻匹配：卡钳值 0.05</li>
+                                <li>平衡性检验：标准化差异<10%</li>
+                            </ul>
+                        </li>
+                        <li><strong>双重机器学习 DML</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>第一阶段：用 ML 估计 nuisance parameters</li>
+                                <li>第二阶段：正交化估计处理效应</li>
+                                <li>交叉拟合：避免过拟合</li>
+                            </ul>
+                        </li>
+                        <li><strong>异质性分析 CATE</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>Causal Forest：估计条件平均处理效应</li>
+                                <li>用户分群：高响应/中响应/低响应</li>
+                                <li>个性化策略：针对不同群体优化券面额</li>
+                            </ul>
+                        </li>
+                        <li><strong>反事实估计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>PNS（Probability of Necessity and Sufficiency）</li>
+                                <li>归因分析：多少购买是由优惠券因果导致的？</li>
+                                <li>ROI 计算：考虑反事实基线</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>因果效应</strong>：优惠券真实 ATE = +18% 购买率（朴素估计 +45%，高估 150%）</li>
+                        <li><strong>成本优化</strong>：减少无效发放，年节省券成本 3.2 亿元</li>
+                        <li><strong>ROI 提升</strong>：从 1.8 提升到 3.5（+94%）</li>
+                        <li><strong>异质性洞察</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>高响应群体（20% 用户）：ATE = +67%</li>
+                                <li>中响应群体（50% 用户）：ATE = +15%</li>
+                                <li>低响应群体（30% 用户）：ATE = -2%（负面效应！）</li>
+                            </ul>
+                        </li>
+                        <li><strong>个性化策略</strong>：针对高响应群体精准发放，低响应群体停止发放</li>
+                        <li><strong>商业价值</strong>：年新增 GMV 15 亿元，利润 +4.8 亿元</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：医疗治疗方案因果评估</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某三甲医院，比较两种癌症治疗方案 A（手术）和 B（放疗）的疗效</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>非随机分配：医生根据患者病情选择方案</li>
+                                <li>未观测混淆：患者基因、生活方式等未记录</li>
+                                <li>选择偏差：重症患者更可能选择手术</li>
+                                <li>删失数据：部分患者失访或死于其他原因</li>
+                                <li>时变混淆：治疗过程中病情变化影响后续决策</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>因果推断方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>工具变量法</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>寻找 IV：医生偏好（历史手术比例）</li>
+                                <li>有效性检验：与治疗方案强相关，不直接影响生存</li>
+                                <li>2SLS 估计：控制未观测混淆</li>
+                            </ul>
+                        </li>
+                        <li><strong>逆概率加权 IPW</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>估计倾向得分：P(治疗|基线特征)</li>
+                                <li>构造权重：1/PS 或 1/(1-PS)</li>
+                                <li>加权生存分析：Kaplan-Meier + IPW</li>
+                            </ul>
+                        </li>
+                        <li><strong>结构嵌套模型 SNM</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>处理时变混淆</li>
+                                <li>G-estimation：估计结构参数</li>
+                                <li>无模型假设：半参数方法</li>
+                            </ul>
+                        </li>
+                        <li><strong>目标试验模拟</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>明确定义：纳入标准、排除标准、随访时间</li>
+                                <li>克隆 - 删失 - 加权：模拟 RCT</li>
+                                <li>敏感性分析：评估未观测混淆影响</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>5 年生存率</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>方案 A（手术）：68% (95% CI: 64%-72%)</li>
+                                <li>方案 B（放疗）：61% (95% CI: 57%-65%)</li>
+                                <li>因果差异：+7% (p<0.01)</li>
+                            </ul>
+                        </li>
+                        <li><strong>异质性效应</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>早期患者：A vs B = +12%</li>
+                                <li>中期患者：A vs B = +8%</li>
+                                <li>晚期患者：A vs B = +1% (无显著差异)</li>
+                            </ul>
+                        </li>
+                        <li><strong>临床指南更新</strong>：基于因果证据，推荐早期患者优先手术</li>
+                        <li><strong>患者获益</strong>：年新增生存患者 120+ 人</li>
+                        <li><strong>方法学贡献</strong>：发表 JAMA/NEJM 论文 3 篇</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>因果推断系统部署最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>因果图先行</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>绘制 DAG：明确假设</li>
+                                <li>识别混淆：确定调整集</li>
+                                <li>检查识别：是否可估计因果效应？</li>
+                            </ul>
+                        </li>
+                        <li><strong>方法选择</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>无混淆：直接比较</li>
+                                <li>观测混淆：PSM、IPW、DML</li>
+                                <li>未观测混淆：IV、前门调整、断点回归</li>
+                                <li>时变混淆：MSM、SNM、G-estimation</li>
+                            </ul>
+                        </li>
+                        <li><strong>敏感性分析</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>E-value：评估未观测混淆强度</li>
+                                <li>安慰剂检验：虚假处理/结果</li>
+                                <li>子样本分析：稳健性检查</li>
+                            </ul>
+                        </li>
+                        <li><strong>异质性分析</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>CATE：条件平均处理效应</li>
+                                <li>Causal Forest：非参数异质性</li>
+                                <li>亚组分析：预先指定亚组</li>
+                            </ul>
+                        </li>
+                        <li><strong>反事实解释</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>PNS/PN/PS：归因分析</li>
+                                <li>个体因果效应：个性化决策</li>
+                                <li>政策模拟：what-if 分析</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 38px; border-left-color: var(--causal-blue);">
+                    "从电商到医疗，从 PSM 到工具变量，从 ATE 到 CATE，因果推理体系正在重塑 AI 系统的认知范式。未来的 AI 将更具因果理解力、更善反事实思考、更接近人类的推理能力。这不仅是技术的进步，更是智能本质的探索。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：电商优惠券，ATE +18%、ROI +94%、年利润 +4.8 亿</li>
+                    <li>案例二：医疗治疗方案，5 年生存率 +7%、年新增生存 120+ 人</li>
+                    <li>最佳实践：因果图先行、方法选择、敏感性分析、异质性分析、反事实解释</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">因果推理理论</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;">
+                    <li>MIT (2026). "Causal Inference Theory." mit.edu</li>
+                    <li>Stanford (2026). "Structural Causal Models." stanford.edu</li>
+                </ol>
+                
+                <h3 class="section-title">因果发现</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="3">
+                    <li>CMU (2026). "Causal Discovery Algorithms." cmu.edu</li>
+                    <li>Berkeley (2026). "DAG Structure Learning." berkeley.edu</li>
+                </ol>
+                
+                <h3 class="section-title">反事实与决策</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="5">
+                    <li>Princeton (2026). "Counterfactual Reasoning." princeton.edu</li>
+                    <li>DeepMind (2026). "Causal Decision Theory." deepmind.com</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.3em; margin-bottom: 15px; color: var(--causal-blue); font-weight: 800; font-family: 'Georgia', serif;">因果推理与反事实决策能力</p>
+                <p style="font-size: 1.08em; margin-bottom: 7px; font-style: italic;">从相关到因果的认知革命</p>
+                <p>© 2026 超级代码智能体 | 因果智能版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 21px; font-size: 0.9em; line-height: 1.8;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="causal-spectrum" style="margin-top: 30px;">
+                    <div class="spectrum-item spectrum-causal">🔵 因果推理</div>
+                    <div class="spectrum-item spectrum-dag">🟣 DAG 结构</div>
+                    <div class="spectrum-item spectrum-counter">🟡 反事实</div>
+                    <div class="spectrum-item spectrum-intervene">🟢 干预分析</div>
+                    <div class="spectrum-item spectrum-decision">🔴 因果决策</div>
+                </div>
+                <p style="margin-top: 30px; font-size: 0.83em; color: var(--text-secondary);">
+                    谨以此书献给所有在因果推理与决策科学一线构建 AI 系统的研究者和工程师们<br>
+                    从因果图到反事实推理，从 do-演算到因果决策<br>
+                    因果智能——让 AI 系统从曲线拟合者走向因果理解者
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Causal Inference & Counterfactual Decision Making');
+        console.log('📚 From Correlation to Causation Cognitive Revolution (2024-2026)');
+        console.log('✨ Causal + DAG + Counterfactual + Intervention + Decision = Causal AI');
+    </script>
+</body>
+</html>

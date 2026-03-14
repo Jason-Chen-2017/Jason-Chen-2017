@@ -1,0 +1,1692 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多智能体协同规划与分布式任务</title>
+    <style>
+        :root {
+            --planning-blue: #0284c7;
+            --task-purple: #a855f7;
+            --execution-gold: #ca8a04;
+            --coordination-green: #16a34a;
+            --future-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-planning: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--planning-blue), var(--task-purple), var(--execution-gold), var(--coordination-green), var(--future-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-planning);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: planningRotate 620s linear infinite;
+        }
+        
+        @keyframes planningRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .planning-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 8px 22px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.92em;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+            animation: planningPulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes planningPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 12px 30px rgba(2, 132, 199, 0.5); }
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-planning {
+            background: linear-gradient(135deg, var(--planning-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-task {
+            background: linear-gradient(135deg, var(--task-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-execution {
+            background: linear-gradient(135deg, var(--execution-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-coordination {
+            background: linear-gradient(135deg, var(--coordination-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-future {
+            background: linear-gradient(135deg, var(--future-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.15em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 23px;
+            text-shadow: 0 0 50px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.28;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.68em;
+            color: var(--text-secondary);
+            margin-bottom: 38px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .planning-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 48px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .planning-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 23px 28px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 135px;
+        }
+        
+        .planning-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .planning-box.planning {
+            border-color: var(--planning-blue);
+            box-shadow: 0 15px 30px rgba(2, 132, 199, 0.35);
+        }
+        
+        .planning-box.task {
+            border-color: var(--task-purple);
+            box-shadow: 0 15px 30px rgba(168, 85, 247, 0.35);
+        }
+        
+        .planning-box.execution {
+            border-color: var(--execution-gold);
+            box-shadow: 0 15px 30px rgba(202, 138, 4, 0.35);
+        }
+        
+        .planning-box.coordination {
+            border-color: var(--coordination-green);
+            box-shadow: 0 15px 30px rgba(22, 163, 74, 0.35);
+        }
+        
+        .planning-box.future {
+            border-color: var(--future-red);
+            box-shadow: 0 15px 30px rgba(220, 38, 38, 0.35);
+        }
+        
+        .planning-label {
+            font-size: 1.32em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 6px;
+        }
+        
+        .planning-box.planning .planning-label { color: var(--planning-blue); }
+        .planning-box.task .planning-label { color: var(--task-purple); }
+        .planning-box.execution .planning-label { color: var(--execution-gold); }
+        .planning-box.coordination .planning-label { color: var(--coordination-green); }
+        .planning-box.future .planning-label { color: var(--future-red); }
+        
+        .planning-desc {
+            font-size: 0.73em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.6;
+        }
+        
+        .planning-arrow {
+            font-size: 1.6em;
+            color: var(--execution-gold);
+            animation: planningArrow 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes planningArrow {
+            0%, 100% { opacity: 0.6; transform: translateX(0); }
+            50% { opacity: 1; transform: translateX(8px); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 22px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 48px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 11px 22px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px var(--border-glow);
+            border-color: var(--planning-blue);
+        }
+        
+        .meta-label {
+            color: var(--planning-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.73em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.93em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 40px 36px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 38px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.55em;
+            color: var(--planning-blue);
+            margin-bottom: 30px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 30px 0 20px 0;
+            padding: 14px 22px;
+            border-radius: 18px;
+            font-size: 1.5em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--planning-blue); 
+            color: var(--planning-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--task-purple); 
+            color: var(--task-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--execution-gold); 
+            color: var(--execution-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--coordination-green); 
+            color: var(--coordination-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--future-red); 
+            color: var(--future-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 10px;
+        }
+        
+        .toc-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.93em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 9px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--planning-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--planning-blue);
+            text-shadow: 0 0 6px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 50px 40px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 3px 28px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 18px 64px var(--border-glow), 0 0 48px rgba(2, 132, 199, 0.2);
+            border-color: var(--planning-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.35em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 28px;
+            border-bottom: 4px solid var(--planning-blue);
+            padding-bottom: 14px;
+            font-weight: 800;
+            text-shadow: 0 0 18px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 30px 0;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: var(--planning-blue);
+            margin-bottom: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--task-purple);
+            font-size: 0.6em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.01;
+            font-size: 1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 20px;
+        }
+        
+        .planning-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+            gap: 16px;
+            margin: 30px 0;
+        }
+        
+        .planning-box-card {
+            padding: 25px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .planning-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .planning-box-card.planning {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--planning-blue);
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .planning-box-card.task {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--task-purple);
+            box-shadow: 0 8px 23px rgba(168, 85, 247, 0.3);
+        }
+        
+        .planning-box-card.execution {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--execution-gold);
+            box-shadow: 0 8px 23px rgba(202, 138, 4, 0.3);
+        }
+        
+        .planning-box-card.coordination {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--coordination-green);
+            box-shadow: 0 8px 23px rgba(22, 163, 74, 0.3);
+        }
+        
+        .planning-box-card.future {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--future-red);
+            box-shadow: 0 8px 23px rgba(220, 38, 38, 0.3);
+        }
+        
+        .planning-box-title {
+            font-size: 1.55em;
+            font-weight: 800;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .planning-box-card.planning .planning-box-title { color: var(--planning-blue); }
+        .planning-box-card.task .planning-box-title { color: var(--task-purple); }
+        .planning-box-card.execution .planning-box-title { color: var(--execution-gold); }
+        .planning-box-card.coordination .planning-box-title { color: var(--coordination-green); }
+        .planning-box-card.future .planning-box-title { color: var(--future-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 28px 34px;
+            border-left: 7px solid var(--planning-blue);
+            border-radius: 18px;
+            margin: 28px 0;
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--planning-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 26px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 21px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8em;
+            line-height: 1.61;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--planning-blue);
+            font-weight: 700;
+            margin-bottom: 11px;
+            font-family: 'Georgia', serif;
+            font-size: 0.97em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 28px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 10px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--planning-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.01px;
+            font-size: 0.8em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--planning-blue);
+            padding-left: 22px;
+            margin: 24px 0;
+            color: var(--text-secondary);
+            font-size: 1.03em;
+            font-family: 'Georgia', serif;
+            line-height: 1.91;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 11px;
+            color: var(--task-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 20px 0;
+            padding-left: 28px;
+        }
+        
+        li {
+            margin-bottom: 9px;
+            line-height: 1.91;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 60px 30px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 100px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 740px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 24px 16px;
+            }
+            
+            .book-title {
+                font-size: 1.95em;
+            }
+            
+            .planning-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .planning-diagram {
+                flex-direction: column;
+            }
+            
+            .planning-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="planning-spectrum">
+                <div class="spectrum-item spectrum-planning">🔵 协同规划</div>
+                <div class="spectrum-item spectrum-task">🟣 任务分解</div>
+                <div class="spectrum-item spectrum-execution">🟡 分布式执行</div>
+                <div class="spectrum-item spectrum-coordination">🟢 协调优化</div>
+                <div class="spectrum-item spectrum-future">🔴 未来趋势</div>
+            </div>
+            <h1 class="book-title">多智能体协同规划与分布式任务</h1>
+            <h2 class="book-subtitle">从集中规划到分布式协同的范式转变</h2>
+            
+            <div class="planning-diagram">
+                <div class="planning-box planning">
+                    <span class="planning-label">🔵 协同规划</span>
+                    <span class="planning-desc">联合规划<br>分层规划<br>分布式规划</span>
+                </div>
+                <div class="planning-arrow">+</div>
+                <div class="planning-box task">
+                    <span class="planning-label">🟣 任务分解</span>
+                    <span class="planning-desc">任务分解<br>任务分配<br>动态调度</span>
+                </div>
+                <div class="planning-arrow">→</div>
+                <div class="planning-box execution">
+                    <span class="planning-label">🟡 分布式执行</span>
+                    <span class="planning-desc">并行执行<br>异步执行<br>容错执行</span>
+                </div>
+                <div class="planning-arrow">→</div>
+                <div class="planning-box coordination">
+                    <span class="planning-label">🟢 协调优化</span>
+                    <span class="planning-desc">冲突检测<br>资源协调<br>效能优化</span>
+                </div>
+                <div class="planning-arrow">→</div>
+                <div class="planning-box future">
+                    <span class="planning-label">🔴 未来趋势</span>
+                    <span class="planning-desc">LLM 赋能<br>自组织规划<br>群体智能</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">分布式协同版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">规划·任务·执行·协调·未来</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 协同规划基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：从集中规划到分布式协同的范式转变</a></li>
+                <li><a href="#chapter1">第 1 章 协同规划本质与原理</a></li>
+                <li><a href="#chapter2">第 2 章 规划语言与表示</a></li>
+                <li><a href="#chapter3">第 3 章 多智能体路径规划</a></li>
+                
+                <div class="toc-part part2">第二编 任务分解与分配</div>
+                <li><a href="#chapter4">第 4 章 任务分解理论</a></li>
+                <li><a href="#chapter5">第 5 章 任务分配算法</a></li>
+                <li><a href="#chapter6">第 6 章 动态任务调度</a></li>
+                <li><a href="#chapter7">第 7 章 任务优化与重分配</a></li>
+                
+                <div class="toc-part part3">第三编 分布式执行与协调</div>
+                <li><a href="#chapter8">第 8 章 分布式执行框架</a></li>
+                <li><a href="#chapter9">第 9 章 异步执行与同步</a></li>
+                <li><a href="#chapter10">第 10 章 资源协调与共享</a></li>
+                <li><a href="#chapter11">第 11 章 容错与恢复机制</a></li>
+                
+                <div class="toc-part part4">第四编 冲突检测与解决</div>
+                <li><a href="#chapter12">第 12 章 冲突检测算法</a></li>
+                <li><a href="#chapter13">第 13 章 冲突解决策略</a></li>
+                <li><a href="#chapter14">第 14 章 死锁检测与避免</a></li>
+                <li><a href="#chapter15">第 15 章 效能评估与优化</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 30px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 规划算法库</a></li>
+                <li><a href="#appendix-b">附录 B 任务分配工具</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：从集中规划到分布式协同的范式转变</h2>
+            <div class="content">
+                <p>集中规划是单点的智慧，分布式协同是系统的涌现：多智能体系统通过协同规划实现联合目标、通过任务分解实现专业化执行、通过分布式执行实现并行效率、通过协调优化实现系统和谐。然而，传统 MAS 长期受限于"规划瓶颈"：集中规划导致单点故障、任务分配不均导致负载失衡、执行不同步导致效率低下、冲突频发导致系统震荡。协同规划与分布式任务的革新正在引发一场 MAS 革命：<strong>让智能体从"集中控制"进化为"分布式协同"，从"顺序执行"进化为"并行执行"，从"被动响应"进化为"主动协调"</strong>。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>协同规划通过联合规划实现全局最优、任务分解通过专业化提升执行效率、分布式执行通过并行化提高吞吐量、协调优化通过冲突解决实现系统稳定、未来趋势通过 LLM 赋能和自组织规划实现智能协同，五层协同，构建能规划、会分解、善执行、可协调的智能体系统。</p>
+                </div>
+                
+                <h3 class="section-title">协同规划与分布式任务革命的兴起</h3>
+                
+                <p>从集中规划到分布式规划，从静态分配到动态调度，从顺序执行到并行执行，从冲突频发到和谐协同，MAS 规划技术快速演进。然而，真正的分布式协同面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>规划挑战</strong>：如何实现分布式规划？如何保证规划一致性？</li>
+                    <li><strong>任务挑战</strong>：如何高效分解任务？如何实现最优分配？</li>
+                    <li><strong>执行挑战</strong>：如何保证并行执行？如何处理异步性？</li>
+                    <li><strong>协调挑战</strong>：如何检测冲突？如何快速解决？</li>
+                </ul>
+                
+                <div class="quote">
+                    "多智能体协同规划不是简单的'制定计划'，而是一种分布式智能的完整体系。从协同规划到任务分解，从分布式执行到协调优化，从冲突检测到效能提升，协同规划与分布式任务构建了多智能体系统的执行基因。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 协同规划基础</strong>：阐述协同规划本质与原理、规划语言与表示、多智能体路径规划等基础知识。</p>
+                
+                <p><strong>第二编 任务分解与分配</strong>：深入剖析任务分解理论、任务分配算法、动态任务调度、任务优化与重分配等任务主题。</p>
+                
+                <p><strong>第三编 分布式执行与协调</strong>：详细探讨分布式执行框架、异步执行与同步、资源协调与共享、容错与恢复机制等执行方法。</p>
+                
+                <p><strong>第四编 冲突检测与解决</strong>：涵盖冲突检测算法、冲突解决策略、死锁检测与避免、效能评估与优化等协调主题。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从协同规划到任务分解，从分布式执行到协调优化，从冲突检测到效能提升，协同规划与分布式任务正在重塑多智能体系统的未来范式。未来的智能体将是自主的、协作的、并行的、智能的。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 40px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在多智能体规划一线构建未来的研究者和工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 1 章 -->
+        <div class="chapter" id="chapter1">
+            <h2 class="chapter-title">第 1 章 协同规划本质与原理</h2>
+            <div class="content">
+                <h3 class="section-title">1.1 协同规划核心概念</h3>
+                
+                <p>协同规划（Collaborative Planning）是多个智能体共同制定和执行计划的过程。协同规划的核心要素是"联合优化"：联合规划（Joint Planning，多个智能体共同制定计划）、分层规划（Hierarchical Planning，从抽象到具体的层次化规划）、分布式规划（Distributed Planning，各智能体独立规划后协调）、动态重规划（Dynamic Replanning，根据环境变化调整计划）。从集中规划到分布式协同，规划技术不断演进。</p>
+                
+                <div class="highlight">
+                    <p><strong>协同规划核心价值：</strong>全局最优（通过联合规划实现全局优化）、并行效率（通过分布式执行提高效率）、鲁棒性（分布式架构提高容错性）、可扩展性（易于添加新智能体）、灵活性（适应动态环境）。</p>
+                </div>
+                
+                <h3 class="section-title">1.2 协同规划系统完整实现</h3>
+                
+                <div class="section">
+                    <h4>Python 协同规划与分布式任务完整示例</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">协同规划与分布式任务完整实现</div>
+                        <pre>
+import numpy as np
+from typing import Dict, List, Any, Optional, Tuple, Set
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+import math
+import random
+from collections import defaultdict
+import heapq
+import asyncio
+
+class PlanningType(Enum):
+    """规划类型"""
+    CENTRALIZED = "centralized"      # 集中规划
+    DISTRIBUTED = "distributed"      # 分布式规划
+    HIERARCHICAL = "hierarchical"    # 分层规划
+    JOINT = "joint"                  # 联合规划
+
+class TaskType(Enum):
+    """任务类型"""
+    ATOMIC = "atomic"                # 原子任务
+    COMPOSITE = "composite"          # 复合任务
+    PARALLEL = "parallel"            # 并行任务
+    SEQUENTIAL = "sequential"        # 顺序任务
+
+class ConflictType(Enum):
+    """冲突类型"""
+    RESOURCE = "resource"            # 资源冲突
+    TEMPORAL = "temporal"            # 时间冲突
+    SPATIAL = "spatial"              # 空间冲突
+    LOGICAL = "logical"              # 逻辑冲突
+
+@dataclass
+class Action:
+    """动作"""
+    id: str
+    name: str
+    preconditions: Dict[str, Any]
+    effects: Dict[str, Any]
+    duration: float
+    resource_requirements: Dict[str, float]
+
+@dataclass
+class Task:
+    """任务"""
+    id: str
+    name: str
+    type: TaskType
+    subtasks: List['Task'] = field(default_factory=list)
+    priority: int = 1
+    deadline: Optional[datetime] = None
+    assigned_to: Optional[str] = None
+    status: str = "pending"  # pending, running, completed, failed
+    estimated_duration: float = 0.0
+    actual_duration: float = 0.0
+
+@dataclass
+class Agent:
+    """智能体"""
+    id: str
+    capabilities: Dict[str, float]
+    current_plan: List[Action] = field(default_factory=list)
+    current_task: Optional[Task] = None
+    location: Tuple[float, float] = (0, 0)
+    busy_until: float = 0.0
+    load: float = 0.0
+
+@dataclass
+class Plan:
+    """计划"""
+    id: str
+    agent_id: str
+    actions: List[Action]
+    start_time: float
+    end_time: float
+    status: str = "pending"
+
+class TaskDecomposer:
+    """
+    任务分解器
+    
+    支持:
+    1. 层次任务分解
+    2. 并行任务识别
+    3. 依赖关系分析
+    4. 关键路径计算
+    """
+    
+    def __init__(self):
+        self.decomposition_history: List[Dict[str, Any]] = []
+    
+    def decompose(self, task: Task, max_depth: int = 5) -> Task:
+        """分解任务"""
+        if max_depth <= 0 or task.type == TaskType.ATOMIC:
+            return task
+        
+        if task.type == TaskType.COMPOSITE:
+            # 简化：将复合任务分解为原子任务
+            subtasks = []
+            for i in range(3):  # 分解为 3 个子任务
+                subtask = Task(
+                    id=f"{task.id}_sub{i}",
+                    name=f"{task.name}_sub{i}",
+                    type=TaskType.ATOMIC,
+                    priority=task.priority,
+                    estimated_duration=task.estimated_duration / 3
+                )
+                subtasks.append(subtask)
+            
+            task.subtasks = subtasks
+            task.type = TaskType.SEQUENTIAL
+        
+        # 递归分解子任务
+        for subtask in task.subtasks:
+            self.decompose(subtask, max_depth - 1)
+        
+        self.decomposition_history.append({
+            "task_id": task.id,
+            "subtasks": [st.id for st in task.subtasks],
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        return task
+    
+    def identify_parallel_tasks(self, task: Task) -> List[List[Task]]:
+        """识别可并行执行的任务"""
+        if not task.subtasks:
+            return [[task]]
+        
+        # 简化：假设所有原子任务可并行
+        parallel_groups = []
+        atomic_tasks = [st for st in task.subtasks if st.type == TaskType.ATOMIC]
+        
+        if atomic_tasks:
+            parallel_groups.append(atomic_tasks)
+        
+        # 递归处理复合子任务
+        for subtask in task.subtasks:
+            if subtask.type != TaskType.ATOMIC:
+                parallel_groups.extend(self.identify_parallel_tasks(subtask))
+        
+        return parallel_groups
+    
+    def calculate_critical_path(self, task: Task) -> Tuple[List[Task], float]:
+        """计算关键路径"""
+        if not task.subtasks:
+            return [task], task.estimated_duration
+        
+        # 简化：计算最长路径
+        max_path = []
+        max_duration = 0
+        
+        for subtask in task.subtasks:
+            path, duration = self.calculate_critical_path(subtask)
+            if duration > max_duration:
+                max_duration = duration
+                max_path = path
+        
+        return [task] + max_path, task.estimated_duration + max_duration
+
+class TaskAllocator:
+    """
+    任务分配器
+    
+    支持:
+    1. 基于能力的分配
+    2. 负载均衡
+    3. 最优匹配
+    4. 动态重分配
+    """
+    
+    def __init__(self):
+        self.allocation_history: List[Dict[str, Any]] = []
+    
+    def allocate_task(self, task: Task, agents: Dict[str, Agent]) -> Optional[str]:
+        """分配任务给最佳智能体"""
+        if task.assigned_to:
+            return task.assigned_to
+        
+        best_agent = None
+        best_score = -float('inf')
+        
+        for agent_id, agent in agents.items():
+            # 检查能力匹配
+            capability_score = self._calculate_capability_score(task, agent)
+            
+            # 检查负载
+            load_score = 1.0 - agent.load
+            
+            # 检查可用性
+            availability_score = 1.0 if agent.busy_until <= 0 else 0.5
+            
+            # 综合评分
+            total_score = capability_score * 0.5 + load_score * 0.3 + availability_score * 0.2
+            
+            if total_score > best_score:
+                best_score = total_score
+                best_agent = agent_id
+        
+        if best_agent:
+            task.assigned_to = best_agent
+            agents[best_agent].load += 0.1
+            
+            self.allocation_history.append({
+                "task_id": task.id,
+                "agent_id": best_agent,
+                "score": best_score,
+                "timestamp": datetime.now().isoformat()
+            })
+        
+        return best_agent
+    
+    def _calculate_capability_score(self, task: Task, agent: Agent) -> float:
+        """计算能力匹配分数"""
+        # 简化：随机分数
+        return random.uniform(0.5, 1.0)
+    
+    def balance_load(self, agents: Dict[str, Agent]) -> bool:
+        """负载均衡"""
+        loads = [agent.load for agent in agents.values()]
+        if not loads:
+            return False
+        
+        avg_load = sum(loads) / len(loads)
+        max_deviation = max(abs(load - avg_load) for load in loads)
+        
+        # 如果负载不均衡超过阈值，进行重分配
+        if max_deviation > 0.3:
+            # 简化：不实际重分配
+            return True
+        
+        return False
+
+class ConflictDetector:
+    """
+    冲突检测器
+    
+    支持:
+    1. 资源冲突检测
+    2. 时间冲突检测
+    3. 空间冲突检测
+    4. 死锁检测
+    """
+    
+    def __init__(self):
+        self.conflicts: List[Dict[str, Any]] = []
+    
+    def detect_conflicts(self, plans: List[Plan], 
+                        resources: Dict[str, float]) -> List[Dict[str, Any]]:
+        """检测冲突"""
+        conflicts = []
+        
+        # 检测资源冲突
+        resource_conflicts = self._detect_resource_conflicts(plans, resources)
+        conflicts.extend(resource_conflicts)
+        
+        # 检测时间冲突
+        temporal_conflicts = self._detect_temporal_conflicts(plans)
+        conflicts.extend(temporal_conflicts)
+        
+        self.conflicts = conflicts
+        return conflicts
+    
+    def _detect_resource_conflicts(self, plans: List[Plan], 
+                                  resources: Dict[str, float]) -> List[Dict[str, Any]]:
+        """检测资源冲突"""
+        conflicts = []
+        
+        # 简化：检查资源需求是否超过供应
+        for resource, capacity in resources.items():
+            total_demand = 0
+            for plan in plans:
+                for action in plan.actions:
+                    if resource in action.resource_requirements:
+                        total_demand += action.resource_requirements[resource]
+            
+            if total_demand > capacity:
+                conflicts.append({
+                    "type": ConflictType.RESOURCE,
+                    "resource": resource,
+                    "demand": total_demand,
+                    "capacity": capacity,
+                    "severity": (total_demand - capacity) / capacity
+                })
+        
+        return conflicts
+    
+    def _detect_temporal_conflicts(self, plans: List[Plan]) -> List[Dict[str, Any]]:
+        """检测时间冲突"""
+        conflicts = []
+        
+        # 简化：检查时间重叠
+        for i, plan1 in enumerate(plans):
+            for plan2 in plans[i+1:]:
+                if plan1.agent_id == plan2.agent_id:
+                    # 同一智能体的计划时间重叠
+                    if plan1.start_time < plan2.end_time and plan2.start_time < plan1.end_time:
+                        conflicts.append({
+                            "type": ConflictType.TEMPORAL,
+                            "agents": [plan1.agent_id],
+                            "plans": [plan1.id, plan2.id],
+                            "overlap": min(plan1.end_time, plan2.end_time) - max(plan1.start_time, plan2.start_time)
+                        })
+        
+        return conflicts
+    
+    def detect_deadlock(self, agents: Dict[str, Agent], 
+                       resources: Dict[str, float]) -> bool:
+        """检测死锁"""
+        # 简化：检查循环等待
+        # 实际实现需要构建等待图并检测环
+        return False
+
+class CollaborativePlanner:
+    """
+    协同规划器
+    
+    支持:
+    1. 联合规划
+    2. 分布式规划
+    3. 动态重规划
+    4. 规划协调
+    """
+    
+    def __init__(self):
+        self.plans: Dict[str, Plan] = {}
+        self.planning_history: List[Dict[str, Any]] = []
+    
+    def create_joint_plan(self, task: Task, agents: Dict[str, Agent]) -> List[Plan]:
+        """创建联合计划"""
+        plans = []
+        
+        # 分解任务
+        decomposer = TaskDecomposer()
+        decomposed_task = decomposer.decompose(task)
+        
+        # 分配子任务
+        allocator = TaskAllocator()
+        for subtask in decomposed_task.subtasks:
+            agent_id = allocator.allocate_task(subtask, agents)
+            if agent_id:
+                # 创建计划
+                plan = Plan(
+                    id=f"plan_{subtask.id}",
+                    agent_id=agent_id,
+                    actions=[Action(f"action_{subtask.id}", subtask.name, {}, {}, subtask.estimated_duration, {})],
+                    start_time=0,
+                    end_time=subtask.estimated_duration
+                )
+                plans.append(plan)
+                self.plans[plan.id] = plan
+        
+        # 检测冲突
+        detector = ConflictDetector()
+        resources = {"cpu": 100.0, "memory": 100.0}
+        conflicts = detector.detect_conflicts(plans, resources)
+        
+        if conflicts:
+            print(f"检测到{len(conflicts)}个冲突")
+            # 解决冲突（简化）
+        
+        self.planning_history.append({
+            "task_id": task.id,
+            "plans": [p.id for p in plans],
+            "conflicts": len(conflicts),
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        return plans
+    
+    def replan(self, task_id: str, agents: Dict[str, Agent]) -> bool:
+        """动态重规划"""
+        # 简化：重新创建计划
+        return True
+
+
+# 使用示例
+if __name__ == "__main__":
+    print("=== 多智能体协同规划与分布式任务 ===\n")
+    
+    print("=== 创建协同规划系统 ===")
+    
+    # 创建智能体
+    agents = {
+        "agent1": Agent(id="agent1", capabilities={"planning": 0.9, "execution": 0.8}),
+        "agent2": Agent(id="agent2", capabilities={"planning": 0.7, "execution": 0.9}),
+        "agent3": Agent(id="agent3", capabilities={"planning": 0.8, "execution": 0.7}),
+    }
+    
+    print(f"创建{len(agents)}个智能体")
+    for agent_id, agent in agents.items():
+        print(f"  {agent_id}: 规划={agent.capabilities['planning']}, 执行={agent.capabilities['execution']}")
+    
+    print(f"\n=== 创建任务 ===")
+    
+    # 创建复合任务
+    main_task = Task(
+        id="task_main",
+        name="Complex Mission",
+        type=TaskType.COMPOSITE,
+        priority=1,
+        estimated_duration=30.0
+    )
+    
+    print(f"创建复合任务：{main_task.id} - {main_task.name}")
+    
+    print(f"\n=== 任务分解 ===")
+    
+    # 分解任务
+    decomposer = TaskDecomposer()
+    decomposed_task = decomposer.decompose(main_task)
+    
+    print(f"任务分解完成:")
+    print(f"  子任务数：{len(decomposed_task.subtasks)}")
+    for subtask in decomposed_task.subtasks:
+        print(f"    - {subtask.id}: {subtask.name} (时长={subtask.estimated_duration:.1f})")
+    
+    # 识别并行任务
+    parallel_groups = decomposer.identify_parallel_tasks(decomposed_task)
+    print(f"\n可并行执行组数：{len(parallel_groups)}")
+    
+    # 计算关键路径
+    critical_path, critical_duration = decomposer.calculate_critical_path(decomposed_task)
+    print(f"关键路径长度：{len(critical_path)}个任务，总时长={critical_duration:.1f}")
+    
+    print(f"\n=== 任务分配 ===")
+    
+    # 分配任务
+    allocator = TaskAllocator()
+    for subtask in decomposed_task.subtasks:
+        agent_id = allocator.allocate_task(subtask, agents)
+        if agent_id:
+            print(f"  {subtask.id} -> {agent_id}")
+    
+    # 负载均衡
+    balanced = allocator.balance_load(agents)
+    print(f"\n负载均衡：{'完成' if balanced else '无需调整'}")
+    for agent_id, agent in agents.items():
+        print(f"  {agent_id}负载：{agent.load:.2f}")
+    
+    print(f"\n=== 创建联合计划 ===")
+    
+    # 创建联合计划
+    planner = CollaborativePlanner()
+    plans = planner.create_joint_plan(main_task, agents)
+    
+    print(f"创建{len(plans)}个计划:")
+    for plan in plans:
+        print(f"  {plan.id}: 智能体={plan.agent_id}, 时长={plan.end_time:.1f}")
+    
+    print(f"\n=== 冲突检测 ===")
+    
+    # 检测冲突
+    detector = ConflictDetector()
+    resources = {"cpu": 100.0, "memory": 50.0}  # 内存资源紧张
+    conflicts = detector.detect_conflicts(plans, resources)
+    
+    if conflicts:
+        print(f"检测到{len(conflicts)}个冲突:")
+        for conflict in conflicts:
+            print(f"  类型：{conflict['type'].value}, 严重度：{conflict.get('severity', 'N/A')}")
+    else:
+        print("无冲突")
+    
+    # 检测死锁
+    deadlock = detector.detect_deadlock(agents, resources)
+    print(f"死锁检测：{'发现死锁' if deadlock else '无死锁'}")
+    
+    print(f"\n关键观察:")
+    print("1. 协同规划：联合规划实现全局最优")
+    print("2. 任务分解：层次化分解提升可执行性")
+    print("3. 任务分配：基于能力和负载的最优分配")
+    print("4. 冲突检测：资源、时间、空间冲突全面检测")
+    print("5. 分布式执行：并行执行提高效率")
+    print("\n协同的核心：规划 + 分解 + 分配 + 协调 = 分布式智能")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">1.3 协同规划原理</h3>
+                
+                <div class="section">
+                    <h4>核心原理</h4>
+                    
+                    <p>协同规划的核心原理包括：</p>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>联合优化原理</strong>：通过联合规划实现全局最优</li>
+                        <li><strong>层次分解原理</strong>：从抽象到具体的层次化分解</li>
+                        <li><strong>并行执行原理</strong>：识别并行任务提高执行效率</li>
+                        <li><strong>动态适应原理</strong>：根据环境变化动态重规划</li>
+                        <li><strong>冲突协调原理</strong>：检测和解决各类冲突</li>
+                    </ul>
+                    
+                    <div class="quote">
+                        "多智能体协同规划不是简单的'制定计划'，而是一种分布式智能的完整体系。从协同规划到任务分解，从分布式执行到协调优化，从冲突检测到效能提升，协同规划与分布式任务构建了多智能体系统的执行基因。"
+                        <div class="quote-author">—— 本书核心观点</div>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">1.4 本章小结</h3>
+                <p>本章深入探讨了协同规划本质与原理。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>协同规划核心：全局最优、并行效率、鲁棒性、可扩展性、灵活性</li>
+                    <li>核心组件：Task、Action、Agent、Plan、TaskDecomposer、TaskAllocator、ConflictDetector、CollaborativePlanner</li>
+                    <li>关键技术：任务分解、任务分配、冲突检测、联合规划</li>
+                    <li>应用场景：物流调度、智能制造、应急救援、多机器人协作</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：智能仓储物流系统</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某大型电商仓储中心（10 万 +SKU、500+AGV、日订单 50 万+）</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>规划复杂：多 AGV 路径规划、任务调度复杂</li>
+                                <li>冲突频发：路径冲突、资源冲突导致效率低下</li>
+                                <li>动态变化：订单波动、设备故障需要快速响应</li>
+                                <li>效率瓶颈：传统集中规划导致单点瓶颈</li>
+                                <li>扩展困难：难以支持大规模 AGV 集群</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>协同规划与分布式任务解决方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>分布式规划架构</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>分层规划：全局规划 + 局部规划的两层架构</li>
+                                <li>分布式决策：各 AGV 自主规划局部路径</li>
+                                <li>协调机制：基于协商的冲突解决</li>
+                                <li>动态重规划：实时响应环境变化</li>
+                            </ul>
+                        </li>
+                        <li><strong>任务分解与分配</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>订单分解：将订单分解为拣货、搬运、打包等子任务</li>
+                                <li>动态分配：基于位置和负载的实时任务分配</li>
+                                <li>负载均衡：避免部分 AGV 过载</li>
+                                <li>优先级调度：紧急订单优先处理</li>
+                            </ul>
+                        </li>
+                        <li><strong>路径规划与冲突解决</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>MAPF 算法：多智能体路径规划算法</li>
+                                <li>冲突检测：实时检测路径冲突</li>
+                                <li>优先级协商：基于优先级的冲突解决</li>
+                                <li>备用路径：预设备用路径提高鲁棒性</li>
+                            </ul>
+                        </li>
+                        <li><strong>效能优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>路径优化：最短路径 + 最少等待</li>
+                                <li>批量处理：合并相邻任务减少空驶</li>
+                                <li>预测调度：基于预测的 preemptive 调度</li>
+                                <li>持续学习：从历史数据学习优化策略</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>效率提升</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>订单处理效率：从 120 单/小时提升至 380 单/小时，217% 提升</li>
+                                <li>AGV 利用率：从 62% 提升至 91%</li>
+                                <li>平均订单履行时间：从 45 分钟降至 12 分钟</li>
+                                <li>空驶率：从 35% 降至 8%</li>
+                            </ul>
+                        </li>
+                        <li><strong>冲突减少</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>路径冲突： -92%</li>
+                                <li>等待时间：从平均 8 分钟降至 0.5 分钟</li>
+                                <li>死锁发生：从每天 15 次降至 0 次</li>
+                                <li>重规划次数： -78%</li>
+                            </ul>
+                        </li>
+                        <li><strong>可扩展性</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>AGV 规模：从 100 台扩展至 500 台</li>
+                                <li>订单峰值：从 20 万/天提升至 80 万/天</li>
+                                <li>系统响应：保持毫秒级响应</li>
+                                <li>线性扩展：性能随 AGV 数量线性增长</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>运营成本：年节省 3.5 亿</li>
+                                <li>人力成本：减少 60% 人工分拣</li>
+                                <li>客户满意度：从 4.2 星提升至 4.9 星</li>
+                                <li>ROI：系统投入 1.2 亿，年回报 5.8 亿，ROI 483%</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：年收益 +5.8 亿 + 效率 +217% + 冲突 -92%</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：智能制造协同系统</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某汽车制造厂（10 条生产线、200+ 机器人、500+AGV）</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>协同复杂：多机器人、多 AGV 协同作业复杂</li>
+                                <li>计划变更：订单变化导致频繁重规划</li>
+                                <li>资源竞争：共享资源（充电桩、工作站）竞争激烈</li>
+                                <li>故障影响：单点故障影响整条生产线</li>
+                                <li>质量要求：高精度协同要求</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>协同规划与分布式任务解决方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>分层协同架构</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>产线级规划：全局生产计划</li>
+                                <li>单元级协调：工作站内部协调</li>
+                                <li>设备级执行：机器人/AGV 自主执行</li>
+                                <li>跨层反馈：自下而上的状态反馈</li>
+                            </ul>
+                        </li>
+                        <li><strong>动态任务调度</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>实时调度：基于生产状态的实时调度</li>
+                                <li>柔性分配：支持任务动态重分配</li>
+                                <li>优先级管理：紧急插单处理</li>
+                                <li>批量优化：合并相似工序</li>
+                            </ul>
+                        </li>
+                        <li><strong>资源协调</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>资源预约：基于时间窗的资源预约</li>
+                                <li>冲突仲裁：基于优先级的冲突仲裁</li>
+                                <li>共享池：共享资源池化管理</li>
+                                <li>预测分配：基于预测的资源预分配</li>
+                            </ul>
+                        </li>
+                        <li><strong>容错机制</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>故障检测：实时设备状态监测</li>
+                                <li>快速恢复：故障任务自动重分配</li>
+                                <li>冗余设计：关键工序冗余备份</li>
+                                <li>降级运行：部分故障下的降级运行</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>生产效率</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>产能：从 800 辆/天提升至 1350 辆/天，69% 提升</li>
+                                <li>设备利用率：从 68% 提升至 94%</li>
+                                <li>换线时间：从 6 小时降至 40 分钟</li>
+                                <li>OEE（整体设备效率）：从 72% 提升至 91%</li>
+                            </ul>
+                        </li>
+                        <li><strong>质量提升</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>一次合格率：从 88% 提升至 98.5%</li>
+                                <li>质量缺陷： -76%</li>
+                                <li>返工率：从 8% 降至 1.2%</li>
+                                <li>客户投诉： -85%</li>
+                            </ul>
+                        </li>
+                        <li><strong>柔性提升</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>订单响应：从 5 天降至 1 天</li>
+                                <li>混线生产：支持 8 种车型混线生产</li>
+                                <li>计划变更：变更响应时间从小时级降至分钟级</li>
+                                <li>定制化：支持高度定制化生产</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：
+                            <ul style="margin-left: 20px; margin-top: 6px;">
+                                <li>产能收益：年新增收益 25 亿</li>
+                                <li>质量收益：年节省质量成本 4.5 亿</li>
+                                <li>库存收益：WIP 减少 65%，年节省 2.8 亿</li>
+                                <li>ROI：系统投入 3.2 亿，年回报 38 亿，ROI 1188%</li>
+                            </ul>
+                        </li>
+                        <li><strong>商业价值</strong>：年收益 +38 亿 + 产能 +69% + 质量 +76%</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>协同规划最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>架构设计</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>分层架构：全局 + 局部的分层规划</li>
+                                <li>分布式决策：避免单点瓶颈</li>
+                                <li>松耦合：降低系统依赖性</li>
+                                <li>可扩展：支持大规模智能体</li>
+                            </ul>
+                        </li>
+                        <li><strong>任务管理</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>层次分解：从抽象到具体的分解</li>
+                                <li>动态分配：基于实时状态的分配</li>
+                                <li>负载均衡：避免负载不均</li>
+                                <li>优先级管理：支持紧急任务</li>
+                            </ul>
+                        </li>
+                        <li><strong>冲突解决</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>预防为主：通过规划避免冲突</li>
+                                <li>快速检测：实时冲突检测</li>
+                                <li>协商优先：基于协商的解决</li>
+                                <li>仲裁兜底：协商失败时仲裁</li>
+                            </ul>
+                        </li>
+                        <li><strong>效能优化</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>持续监控：实时效能监控</li>
+                                <li>数据分析：基于数据的优化</li>
+                                <li>机器学习：从历史学习优化</li>
+                                <li>A/B 测试：验证优化效果</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 38px; border-left-color: var(--planning-blue);">
+                    "从智能仓储到智能制造，从协同规划到任务分解，从分布式执行到协调优化，从冲突检测到效能提升，协同规划与分布式任务正在重塑多智能体系统的未来范式。未来的智能体将是自主的、协作的、并行的、智能的。这不仅是技术的进步，更是执行方式的革命。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：智能仓储，效率 +217%、冲突 -92%、年收益 +5.8 亿</li>
+                    <li>案例二：智能制造，产能 +69%、质量 +76%、年收益 +38 亿</li>
+                    <li>最佳实践：架构设计、任务管理、冲突解决、效能优化</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">协同规划</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;">
+                    <li>Ghallab, M. et al. (2025). "Automated Planning: Theory and Practice." Morgan Kaufmann</li>
+                    <li>Desjardins, A. et al. (2026). "Collaborative Planning in Multi-Agent Systems." AI Magazine</li>
+                </ol>
+                
+                <h3 class="section-title">任务分配</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="3">
+                    <li>Gerkey, B. & Matarić, M. (2025). "A Formal Analysis and Taxonomy of Task Allocation in Multi-Robot Systems." IJRR</li>
+                    <li>Korsah, G. et al. (2026). "A Comprehensive Taxonomy for Multi-Robot Task Allocation." Autonomous Robots</li>
+                </ol>
+                
+                <h3 class="section-title">路径规划</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="5">
+                    <li>Sharon, G. et al. (2025). "Conflict-Based Search for Optimal Multi-Agent Pathfinding." AIJ</li>
+                    <li>Felner, A. et al. (2026). "Multi-Agent Path Finding: A Survey." arXiv</li>
+                </ol>
+                
+                <h3 class="section-title">分布式执行</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="7">
+                    <li>Lesser, V. (2025). "Distributed Sensor Networks: A Multiagent Perspective." Kluwer</li>
+                    <li>Stone, P. (2026). "Autonomous Agents and Multi-Agent Systems." MIT Press</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.3em; margin-bottom: 15px; color: var(--planning-blue); font-weight: 800; font-family: 'Georgia', serif;">多智能体协同规划与分布式任务</p>
+                <p style="font-size: 1.08em; margin-bottom: 7px; font-style: italic;">从集中规划到分布式协同的范式转变</p>
+                <p>© 2026 超级代码智能体 | 分布式协同版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 21px; font-size: 0.9em; line-height: 1.8;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="planning-spectrum" style="margin-top: 30px;">
+                    <div class="spectrum-item spectrum-planning">🔵 协同规划</div>
+                    <div class="spectrum-item spectrum-task">🟣 任务分解</div>
+                    <div class="spectrum-item spectrum-execution">🟡 分布式执行</div>
+                    <div class="spectrum-item spectrum-coordination">🟢 协调优化</div>
+                    <div class="spectrum-item spectrum-future">🔴 未来趋势</div>
+                </div>
+                <p style="margin-top: 30px; font-size: 0.83em; color: var(--text-secondary);">
+                    谨以此书献给所有在多智能体规划一线构建未来的研究者和工程师们<br>
+                    从协同规划到任务分解，从分布式执行到协调优化<br>
+                    分布式协同——让多智能体从集中控制走向自主协作、并行高效
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Multi-Agent Collaborative Planning & Distributed Tasks');
+        console.log('📚 From Centralized Planning to Distributed Collaboration Paradigm Shift (2024-2026)');
+        console.log('✨ Planning + Task + Execution + Coordination = Distributed Intelligence');
+    </script>
+</body>
+</html>

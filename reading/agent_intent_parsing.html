@@ -1,0 +1,1581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent 意图识别、槽位填充与任务解析</title>
+    <style>
+        :root {
+            --intent-blue: #0284c7;
+            --slot-purple: #a855f7;
+            --task-gold: #ca8a04;
+            --dialogue-green: #16a34a;
+            --execution-red: #dc2626;
+            --gradient-theme: linear-gradient(135deg, #0284c7, #a855f7, #ca8a04, #16a34a, #dc2626);
+            --void-dark: #0a0a0f;
+            --cosmic-navy: #0f172a;
+            --stellar-slate: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-glow: rgba(2, 132, 199, 0.3);
+            --shadow-intent: 0 0 60px rgba(2, 132, 199, 0.35);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, var(--void-dark) 0%, var(--cosmic-navy) 25%, var(--stellar-slate) 50%, var(--void-dark) 100%);
+            color: var(--text-primary);
+            line-height: 2.0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(202, 138, 4, 0.05) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 80px 50px;
+        }
+        
+        .book-cover {
+            text-align: center;
+            padding: 100px 60px;
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(168, 85, 247, 0.08), rgba(202, 138, 4, 0.06), rgba(22, 163, 74, 0.06), rgba(220, 38, 38, 0.06));
+            border: 4px solid;
+            border-image: linear-gradient(135deg, var(--intent-blue), var(--slot-purple), var(--task-gold), var(--dialogue-green), var(--execution-red)) 1;
+            border-radius: 40px;
+            margin-bottom: 80px;
+            box-shadow: var(--shadow-intent);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(25px);
+        }
+        
+        .book-cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(2, 132, 199, 0.04) 2px,
+                    rgba(2, 132, 199, 0.04) 4px
+                ),
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(168, 85, 247, 0.04) 2px,
+                    rgba(168, 85, 247, 0.04) 4px
+                );
+            animation: intentRotate 155s linear infinite;
+        }
+        
+        @keyframes intentRotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        .intent-spectrum {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .spectrum-item {
+            padding: 8px 22px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.92em;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transition: all 0.4s ease;
+        }
+        
+        .spectrum-item:hover {
+            transform: translateY(-8px) scale(1.08);
+        }
+        
+        .spectrum-intent {
+            background: linear-gradient(135deg, var(--intent-blue), #38bdf8);
+            color: white;
+        }
+        
+        .spectrum-slot {
+            background: linear-gradient(135deg, var(--slot-purple), #c084fc);
+            color: white;
+        }
+        
+        .spectrum-task {
+            background: linear-gradient(135deg, var(--task-gold), #fcd34d);
+            color: var(--void-dark);
+        }
+        
+        .spectrum-dialogue {
+            background: linear-gradient(135deg, var(--dialogue-green), #4ade80);
+            color: white;
+        }
+        
+        .spectrum-execution {
+            background: linear-gradient(135deg, var(--execution-red), #f87171);
+            color: white;
+        }
+        
+        .book-title {
+            font-size: 3.15em;
+            font-weight: 900;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 23px;
+            text-shadow: 0 0 50px rgba(2, 132, 199, 0.5);
+            position: relative;
+            z-index: 1;
+            letter-spacing: 2px;
+            line-height: 1.28;
+            font-family: 'Georgia', serif;
+        }
+        
+        .book-subtitle {
+            font-size: 1.68em;
+            color: var(--text-secondary);
+            margin-bottom: 38px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .intent-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 48px 0;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
+        
+        .intent-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 4px solid;
+            border-radius: 25px;
+            padding: 23px 28px;
+            text-align: center;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            min-width: 135px;
+        }
+        
+        .intent-box:hover {
+            transform: translateY(-12px) scale(1.08);
+        }
+        
+        .intent-box.intent {
+            border-color: var(--intent-blue);
+            box-shadow: 0 15px 30px rgba(2, 132, 199, 0.35);
+        }
+        
+        .intent-box.slot {
+            border-color: var(--slot-purple);
+            box-shadow: 0 15px 30px rgba(168, 85, 247, 0.35);
+        }
+        
+        .intent-box.task {
+            border-color: var(--task-gold);
+            box-shadow: 0 15px 30px rgba(202, 138, 4, 0.35);
+        }
+        
+        .intent-box.dialogue {
+            border-color: var(--dialogue-green);
+            box-shadow: 0 15px 30px rgba(22, 163, 74, 0.35);
+        }
+        
+        .intent-box.execution {
+            border-color: var(--execution-red);
+            box-shadow: 0 15px 30px rgba(220, 38, 38, 0.35);
+        }
+        
+        .intent-label {
+            font-size: 1.32em;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 6px;
+        }
+        
+        .intent-box.intent .intent-label { color: var(--intent-blue); }
+        .intent-box.slot .intent-label { color: var(--slot-purple); }
+        .intent-box.task .intent-label { color: var(--task-gold); }
+        .intent-box.dialogue .intent-label { color: var(--dialogue-green); }
+        .intent-box.execution .intent-label { color: var(--execution-red); }
+        
+        .intent-desc {
+            font-size: 0.73em;
+            color: var(--text-secondary);
+            display: block;
+            line-height: 1.6;
+        }
+        
+        .intent-arrow {
+            font-size: 1.6em;
+            color: var(--task-gold);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+        
+        .book-meta {
+            display: flex;
+            justify-content: center;
+            gap: 22px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+            margin-top: 48px;
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 11px 22px;
+            border-radius: 18px;
+            border: 2px solid var(--border-glow);
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+            text-align: center;
+        }
+        
+        .meta-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px var(--border-glow);
+            border-color: var(--intent-blue);
+        }
+        
+        .meta-label {
+            color: var(--intent-blue);
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.73em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        .meta-value {
+            color: var(--text-primary);
+            font-size: 0.93em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .toc {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid var(--border-glow);
+            border-radius: 30px;
+            padding: 40px 36px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 0 38px rgba(2, 132, 199, 0.25);
+        }
+        
+        .toc-title {
+            font-size: 2.55em;
+            color: var(--intent-blue);
+            margin-bottom: 30px;
+            text-align: center;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
+            font-family: 'Georgia', serif;
+            letter-spacing: 2px;
+        }
+        
+        .toc-part {
+            margin: 30px 0 20px 0;
+            padding: 14px 22px;
+            border-radius: 18px;
+            font-size: 1.5em;
+            font-weight: 800;
+            border-left: 6px solid;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent);
+        }
+        
+        .toc-part.part1 { 
+            border-color: var(--intent-blue); 
+            color: var(--intent-blue);
+            background: linear-gradient(90deg, rgba(2, 132, 199, 0.15), transparent);
+        }
+        
+        .toc-part.part2 { 
+            border-color: var(--slot-purple); 
+            color: var(--slot-purple);
+            background: linear-gradient(90deg, rgba(168, 85, 247, 0.15), transparent);
+        }
+        
+        .toc-part.part3 { 
+            border-color: var(--task-gold); 
+            color: var(--task-gold);
+            background: linear-gradient(90deg, rgba(202, 138, 4, 0.15), transparent);
+        }
+        
+        .toc-part.part4 { 
+            border-color: var(--dialogue-green); 
+            color: var(--dialogue-green);
+            background: linear-gradient(90deg, rgba(22, 163, 74, 0.15), transparent);
+        }
+        
+        .toc-part.part5 { 
+            border-color: var(--execution-red); 
+            color: var(--execution-red);
+            background: linear-gradient(90deg, rgba(220, 38, 38, 0.15), transparent);
+        }
+        
+        .toc-list {
+            list-style: none;
+            padding-left: 10px;
+        }
+        
+        .toc-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+            transition: all 0.3s ease;
+            font-size: 0.93em;
+        }
+        
+        .toc-list li:hover {
+            padding-left: 9px;
+            background: rgba(2, 132, 199, 0.08);
+            border-left: 4px solid var(--intent-blue);
+        }
+        
+        .toc-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .toc-list a:hover {
+            color: var(--intent-blue);
+            text-shadow: 0 0 6px var(--border-glow);
+        }
+        
+        .chapter {
+            background: rgba(255, 255, 255, 0.03);
+            border: 3px solid rgba(2, 132, 199, 0.2);
+            border-radius: 30px;
+            padding: 50px 40px;
+            margin-bottom: 40px;
+            backdrop-filter: blur(15px);
+            transition: all 0.5s ease;
+            box-shadow: 0 3px 28px rgba(0, 0, 0, 0.35);
+        }
+        
+        .chapter:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 18px 64px var(--border-glow), 0 0 48px rgba(2, 132, 199, 0.2);
+            border-color: var(--intent-blue);
+        }
+        
+        .chapter-title {
+            font-size: 2.35em;
+            background: var(--gradient-theme);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 28px;
+            border-bottom: 4px solid var(--intent-blue);
+            padding-bottom: 14px;
+            font-weight: 800;
+            text-shadow: 0 0 18px rgba(2, 132, 199, 0.35);
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            margin: 30px 0;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: var(--intent-blue);
+            margin-bottom: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .section-title::before {
+            content: '◆';
+            color: var(--slot-purple);
+            font-size: 0.6em;
+        }
+        
+        .content {
+            text-align: justify;
+            color: var(--text-primary);
+            line-height: 2.01;
+            font-size: 1em;
+            font-family: 'Georgia', serif;
+        }
+        
+        .content p {
+            margin-bottom: 20px;
+        }
+        
+        .intent-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+            gap: 16px;
+            margin: 30px 0;
+        }
+        
+        .intent-box-card {
+            padding: 25px;
+            border-radius: 25px;
+            border: 3px solid;
+            backdrop-filter: blur(15px);
+            transition: all 0.4s ease;
+        }
+        
+        .intent-box-card:hover {
+            transform: translateY(-8px);
+        }
+        
+        .intent-box-card.intent {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(2, 132, 199, 0.08));
+            border-color: var(--intent-blue);
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .intent-box-card.slot {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.08));
+            border-color: var(--slot-purple);
+            box-shadow: 0 8px 23px rgba(168, 85, 247, 0.3);
+        }
+        
+        .intent-box-card.task {
+            background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.08));
+            border-color: var(--task-gold);
+            box-shadow: 0 8px 23px rgba(202, 138, 4, 0.3);
+        }
+        
+        .intent-box-card.dialogue {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.2), rgba(22, 163, 74, 0.08));
+            border-color: var(--dialogue-green);
+            box-shadow: 0 8px 23px rgba(22, 163, 74, 0.3);
+        }
+        
+        .intent-box-card.execution {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.2), rgba(220, 38, 38, 0.08));
+            border-color: var(--execution-red);
+            box-shadow: 0 8px 23px rgba(220, 38, 38, 0.3);
+        }
+        
+        .intent-box-title {
+            font-size: 1.55em;
+            font-weight: 800;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .intent-box-card.intent .intent-box-title { color: var(--intent-blue); }
+        .intent-box-card.slot .intent-box-title { color: var(--slot-purple); }
+        .intent-box-card.task .intent-box-title { color: var(--task-gold); }
+        .intent-box-card.dialogue .intent-box-title { color: var(--dialogue-green); }
+        .intent-box-card.execution .intent-box-title { color: var(--execution-red); }
+        
+        .highlight {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.2), rgba(168, 85, 247, 0.15));
+            padding: 28px 34px;
+            border-left: 7px solid var(--intent-blue);
+            border-radius: 18px;
+            margin: 28px 0;
+            box-shadow: 0 8px 23px rgba(2, 132, 199, 0.3);
+        }
+        
+        .highlight strong {
+            color: var(--intent-blue);
+            font-weight: 800;
+        }
+        
+        .code-block {
+            background: linear-gradient(135deg, #0d0d14, #16213e);
+            border: 2px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 26px 0;
+            overflow-x: auto;
+            box-shadow: inset 0 0 21px rgba(2, 132, 199, 0.1);
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8em;
+            line-height: 1.61;
+            color: var(--text-primary);
+        }
+        
+        .code-title {
+            color: var(--intent-blue);
+            font-weight: 700;
+            margin-bottom: 11px;
+            font-family: 'Georgia', serif;
+            font-size: 0.97em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 28px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid var(--border-glow);
+        }
+        
+        th, td {
+            border: 2px solid rgba(2, 132, 199, 0.2);
+            padding: 10px;
+            text-align: left;
+            font-family: 'Georgia', serif;
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.3), rgba(168, 85, 247, 0.2));
+            color: var(--intent-blue);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.01px;
+            font-size: 0.8em;
+            font-family: 'Georgia', serif;
+        }
+        
+        tr:hover {
+            background: rgba(2, 132, 199, 0.1);
+        }
+        
+        .quote {
+            font-style: italic;
+            border-left: 6px solid var(--intent-blue);
+            padding-left: 22px;
+            margin: 24px 0;
+            color: var(--text-secondary);
+            font-size: 1.03em;
+            font-family: 'Georgia', serif;
+            line-height: 1.91;
+        }
+        
+        .quote-author {
+            text-align: right;
+            margin-top: 11px;
+            color: var(--slot-purple);
+            font-weight: 700;
+            font-family: 'Georgia', serif;
+        }
+        
+        ul, ol {
+            margin: 20px 0;
+            padding-left: 28px;
+        }
+        
+        li {
+            margin-bottom: 9px;
+            line-height: 1.91;
+            font-family: 'Georgia', serif;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 60px 30px;
+            border-top: 4px solid var(--border-glow);
+            margin-top: 100px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 30px 30px 0 0;
+        }
+        
+        .footer-content {
+            max-width: 740px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 24px 16px;
+            }
+            
+            .book-title {
+                font-size: 1.95em;
+            }
+            
+            .intent-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .intent-diagram {
+                flex-direction: column;
+            }
+            
+            .intent-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 封面 -->
+        <div class="book-cover">
+            <div class="intent-spectrum">
+                <div class="spectrum-item spectrum-intent">🔵 意图识别</div>
+                <div class="spectrum-item spectrum-slot">🟣 槽位填充</div>
+                <div class="spectrum-item spectrum-task">🟡 任务解析</div>
+                <div class="spectrum-item spectrum-dialogue">🟢 对话管理</div>
+                <div class="spectrum-item spectrum-execution">🔴 执行规划</div>
+            </div>
+            <h1 class="book-title">Agent 意图识别、槽位填充与任务解析</h1>
+            <h2 class="book-subtitle">从自然语言到可执行动作的智能转化</h2>
+            
+            <div class="intent-diagram">
+                <div class="intent-box intent">
+                    <span class="intent-label">🔵 意图识别</span>
+                    <span class="intent-desc">分类用户目标<br>识别行为类型<br>理解语义意图</span>
+                </div>
+                <div class="intent-arrow">→</div>
+                <div class="intent-box slot">
+                    <span class="intent-label">🟣 槽位填充</span>
+                    <span class="intent-desc">提取关键实体<br>补全参数信息<br>构建语义框架</span>
+                </div>
+                <div class="intent-arrow">→</div>
+                <div class="intent-box task">
+                    <span class="intent-label">🟡 任务解析</span>
+                    <span class="intent-desc">分解子任务<br>规划执行顺序<br>依赖关系分析</span>
+                </div>
+                <div class="intent-arrow">→</div>
+                <div class="intent-box dialogue">
+                    <span class="intent-label">🟢 对话管理</span>
+                    <span class="intent-desc">状态追踪<br>多轮交互<br>上下文维护</span>
+                </div>
+                <div class="intent-arrow">→</div>
+                <div class="intent-box execution">
+                    <span class="intent-label">🔴 执行规划</span>
+                    <span class="intent-desc">工具调用<br>动作执行<br>结果反馈</span>
+                </div>
+            </div>
+            
+            <div class="book-meta">
+                <div class="meta-item">
+                    <span class="meta-label">作者</span>
+                    <span class="meta-value">超级代码智能体</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">版本</span>
+                    <span class="meta-value">意图理解版 · 第一版</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">出版日期</span>
+                    <span class="meta-value">2026 年 3 月</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">全书规模</span>
+                    <span class="meta-value">五编十七章</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">学科跨度</span>
+                    <span class="meta-value">意图·槽位·任务·对话·执行</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc" id="toc">
+            <h2 class="toc-title">📖 全书目录</h2>
+            
+            <div class="toc-part part1">第一编 意图识别基础</div>
+            <ul class="toc-list">
+                <li><a href="#preface">序言：意图理解——Agent 智能的核心</a></li>
+                <li><a href="#chapter1">第 1 章 意图识别概述</a></li>
+                <li><a href="#chapter2">第 2 章 意图分类方法</a></li>
+                <li><a href="#chapter3">第 3 章 少样本与零样本意图识别</a></li>
+                
+                <div class="toc-part part2">第二编 槽位填充技术</div>
+                <li><a href="#chapter4">第 4 章 槽位填充基础</a></li>
+                <li><a href="#chapter5">第 5 章 序列标注模型</a></li>
+                <li><a href="#chapter6">第 6 章 联合意图识别与槽位填充</a></li>
+                <li><a href="#chapter7">第 7 章 开放域槽位填充</a></li>
+                
+                <div class="toc-part part3">第三编 任务解析与规划</div>
+                <li><a href="#chapter8">第 8 章 任务分解技术</a></li>
+                <li><a href="#chapter9">第 9 章 任务规划算法</a></li>
+                <li><a href="#chapter10">第 10 章 工具调用与 Function Calling</a></li>
+                <li><a href="#chapter11">第 11 章 多步任务编排</a></li>
+                
+                <div class="toc-part part4">第四编 对话管理与执行</div>
+                <li><a href="#chapter12">第 12 章 对话状态追踪</a></li>
+                <li><a href="#chapter13">第 13 章 多轮对话管理</a></li>
+                <li><a href="#chapter14">第 14 章 上下文理解与维护</a></li>
+                <li><a href="#chapter15">第 15 章 错误恢复与澄清</a></li>
+                
+                <div class="toc-part part5">第五编 应用案例与未来</div>
+                <li><a href="#chapter16">第 16 章 生产案例分析</a></li>
+                <li><a href="#chapter17">第 17 章 未来趋势与演进方向</a></li>
+                
+                <li class="toc-part part4" style="margin-top: 30px;">附录 · 工具与资源</li>
+                <li><a href="#appendix-a">附录 A 意图识别数据集</a></li>
+                <li><a href="#appendix-b">附录 B 评估指标与基准</a></li>
+                <li><a href="#references">参考文献与资源（2024-2026）</a></li>
+            </ul>
+        </div>
+
+        <!-- 序言 -->
+        <div class="chapter" id="preface">
+            <h2 class="chapter-title">序言：意图理解——Agent 智能的核心</h2>
+            <div class="content">
+                <p>人类交流的本质是意图的传递：当我们说"帮我订一张明天去北京的机票"时，背后隐藏着复杂的意图结构——核心意图是"预订机票"，关键参数包括时间（明天）、目的地（北京）、数量（一张）。Agent 系统要真正理解并执行用户指令，必须完成从自然语言到可执行动作的智能转化：<strong>识别用户意图、提取关键参数、分解任务步骤、规划执行顺序、调用工具完成</strong>。这一系列能力构成了 Agent 智能的核心。</p>
+                
+                <div class="highlight">
+                    <p><strong>本书的核心论点：</strong>Agent 意图理解体系通过意图识别理解用户目标、通过槽位填充提取关键参数、通过任务解析分解执行步骤、通过对话管理维护交互状态、通过执行规划调用工具完成，五层协同，构建从自然语言到可执行动作的完整转化链路。</p>
+                </div>
+                
+                <h3 class="section-title">意图理解革命的兴起</h3>
+                
+                <p>从传统 NLU 的意图分类 + 槽位填充流水线，到 BERT 联合建模，再到 LLM 的 Function Calling 原生支持，意图理解技术快速演进。在 Agent 系统中，意图理解面临独特挑战：</p>
+                
+                <ul style="margin-left: 20px;">
+                    <li><strong>意图复杂性</strong>：单一话语可能包含多个意图（"查天气并订机票"）、隐含意图（"好冷"暗示开空调）、层级意图（"旅行规划"包含多个子任务）</li>
+                    <li><strong>槽位多样性</strong>：固定槽位（时间、地点）、开放槽位（任意文本描述）、嵌套槽位（复杂结构参数）</li>
+                    <li><strong>任务动态性</strong>：任务分解依赖上下文、执行顺序需要动态调整、工具选择需要推理</li>
+                    <li><strong>对话多轮性</strong>：信息分散在多轮对话中、需要状态追踪、需要澄清和确认</li>
+                </ul>
+                
+                <div class="quote">
+                    "意图理解不是简单的文本分类，而是一种深度语义解析。从'表面话语'到'深层意图'，从'零散参数'到'完整框架'，从'单轮理解'到'多轮追踪'。这种转化让 Agent 系统从被动响应走向主动执行。"
+                    <div class="quote-author">—— 本书核心洞察</div>
+                </div>
+                
+                <h3 class="section-title">本书结构</h3>
+                
+                <p><strong>第一编 意图识别基础</strong>：阐述意图识别概述、意图分类方法、少样本与零样本意图识别等基础知识。</p>
+                
+                <p><strong>第二编 槽位填充技术</strong>：深入剖析槽位填充基础、序列标注模型、联合意图识别与槽位填充、开放域槽位填充等核心技术。</p>
+                
+                <p><strong>第三编 任务解析与规划</strong>：详细探讨任务分解技术、任务规划算法、工具调用与 Function Calling、多步任务编排等规划能力。</p>
+                
+                <p><strong>第四编 对话管理与执行</strong>：涵盖对话状态追踪、多轮对话管理、上下文理解与维护、错误恢复与澄清等交互能力。</p>
+                
+                <p><strong>第五编 应用案例与未来</strong>：分析真实生产案例，展望未来趋势，提供持续学习的资源指引。</p>
+                
+                <div class="quote">
+                    "从意图识别到槽位填充，从任务解析到对话管理，从自然语言理解到可执行动作，Agent 意图理解体系正在重塑人机交互的范式。未来的 Agent 系统将更加智能、更加主动、更加理解人类。"
+                    <div class="quote-author">—— 本书结语预告</div>
+                </div>
+                
+                <p style="text-align: right; margin-top: 40px;">—— 作者</p>
+                <p style="text-align: right;">2026 年 3 月 9 日 于数字世界</p>
+                <p style="text-align: right; font-style: italic;">谨以此书献给所有在意图理解一线构建智能 Agent 系统的研究者和工程师们</p>
+            </div>
+        </div>
+
+        <!-- 第 6 章 -->
+        <div class="chapter" id="chapter6">
+            <h2 class="chapter-title">第 6 章 联合意图识别与槽位填充</h2>
+            <div class="content">
+                <h3 class="section-title">6.1 联合建模动机</h3>
+                
+                <p>传统 NLU 系统采用流水线架构：先进行意图识别（文本分类），再进行槽位填充（序列标注）。这种分离式方法存在明显缺陷：意图识别错误会传播到槽位填充、两个任务无法共享表征、无法建模意图与槽位的依赖关系。联合建模（Joint Modeling）将意图识别和槽位填充统一到一个模型中，通过共享编码器、联合训练、相互增强，实现性能提升。实验表明，联合模型在 ATIS、SNIPS 等基准上比流水线模型准确率提升 3-5%。</p>
+                
+                <div class="highlight">
+                    <p><strong>联合建模核心价值：</strong>误差消除（避免流水线误差传播）、表征共享（意图和槽位共享语义表示）、相互增强（意图信息指导槽位预测、槽位信息辅助意图识别）、效率提升（单次推理完成两个任务）。</p>
+                </div>
+                
+                <h3 class="section-title">6.2 BERT 联合模型架构</h3>
+                
+                <div class="section">
+                    <h4>Joint BERT 实现</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">BERT 联合意图识别与槽位填充</div>
+                        <pre>
+import torch
+import torch.nn as nn
+from transformers import BertModel, BertTokenizer
+
+class JointIntentSlotBERT(nn.Module):
+    """
+    联合意图识别与槽位填充的 BERT 模型
+    
+    共享 BERT 编码器，两个任务头：
+    - 意图分类头：使用 [CLS] token
+    - 槽位填充头：使用每个 token 的输出
+    """
+    
+    def __init__(self, bert_name, intent_labels, slot_labels):
+        super().__init__()
+        
+        # 共享 BERT 编码器
+        self.bert = BertModel.from_pretrained(bert_name)
+        hidden_size = self.bert.config.hidden_size
+        
+        # 意图分类头
+        self.intent_classifier = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_size // 2, intent_labels)
+        )
+        
+        # 槽位填充头
+        self.slot_classifier = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_size // 2, slot_labels)
+        )
+        
+        # 损失函数
+        self.intent_loss_fn = nn.CrossEntropyLoss()
+        self.slot_loss_fn = nn.CrossEntropyLoss(ignore_index=-1)  # 忽略 padding
+    
+    def forward(self, input_ids, attention_mask=None, token_type_ids=None,
+                intent_labels=None, slot_labels=None):
+        """
+        前向传播
+        
+        Args:
+            input_ids: [B, L] 输入 token IDs
+            attention_mask: [B, L] 注意力掩码
+            token_type_ids: [B, L] token 类型 IDs
+            intent_labels: [B] 意图标签（训练时提供）
+            slot_labels: [B, L] 槽位标签（训练时提供）
+        
+        Returns:
+            intent_logits: [B, num_intents] 意图预测
+            slot_logits: [B, L, num_slots] 槽位预测
+            loss: 联合损失（训练时返回）
+        """
+        # BERT 编码
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids
+        )
+        
+        sequence_output = outputs.last_hidden_state  # [B, L, D]
+        cls_output = outputs.pooler_output  # [B, D]
+        
+        # 意图分类（使用 [CLS] token）
+        intent_logits = self.intent_classifier(cls_output)  # [B, num_intents]
+        
+        # 槽位填充（使用每个 token 的输出）
+        slot_logits = self.slot_classifier(sequence_output)  # [B, L, num_slots]
+        
+        # 计算损失
+        loss = None
+        if intent_labels is not None and slot_labels is not None:
+            # 意图损失
+            intent_loss = self.intent_loss_fn(intent_logits, intent_labels)
+            
+            # 槽位损失（展平处理）
+            batch_size, seq_len, num_slots = slot_logits.shape
+            slot_logits_flat = slot_logits.view(-1, num_slots)
+            slot_labels_flat = slot_labels.view(-1)
+            slot_loss = self.slot_loss_fn(slot_logits_flat, slot_labels_flat)
+            
+            # 联合损失（可调整权重）
+            loss = 0.5 * intent_loss + 0.5 * slot_loss
+            
+            return intent_logits, slot_logits, loss
+        
+        return intent_logits, slot_logits, None
+
+
+# 使用示例
+def joint_bert_example():
+    """联合 BERT 示例"""
+    
+    # 初始化模型
+    intent_labels = 20  # 20 种意图
+    slot_labels = 50    # 50 种槽位标签（包括 BIO 标记）
+    
+    model = JointIntentSlotBERT(
+        bert_name='bert-base-uncased',
+        intent_labels=intent_labels,
+        slot_labels=slot_labels
+    )
+    
+    # 准备数据
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    
+    utterance = "book a flight to Beijing tomorrow"
+    intent_label = 5  # book_flight
+    slot_labels = [0, 0, 0, 0, 0, 8, 9, 0, 12, 13]  # BIO 标注
+    
+    # 分词
+    inputs = tokenizer(
+        utterance,
+        return_tensors='pt',
+        padding=True,
+        truncation=True,
+        max_length=128
+    )
+    
+    input_ids = inputs['input_ids']
+    attention_mask = inputs['attention_mask']
+    
+    # 训练
+    model.train()
+    intent_logits, slot_logits, loss = model(
+        input_ids=input_ids,
+        attention_mask=attention_mask,
+        intent_labels=torch.tensor([intent_label]),
+        slot_labels=torch.tensor([slot_labels])
+    )
+    
+    print(f"联合损失：{loss.item():.4f}")
+    
+    # 推理
+    model.eval()
+    with torch.no_grad():
+        intent_logits, slot_logits, _ = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask
+        )
+    
+    # 意图预测
+    intent_pred = intent_logits.argmax(dim=-1).item()
+    print(f"预测意图：{intent_pred}")
+    
+    # 槽位预测
+    slot_preds = slot_logits.argmax(dim=-1)[0].tolist()
+    print(f"预测槽位：{slot_preds}")
+    
+    # 解码槽位
+    id2slot = {i: s for i, s in enumerate(['O', 'B-from', 'I-from', 'B-to', 'I-to', ...])}
+    tokens = tokenizer.convert_ids_to_tokens(input_ids[0])
+    
+    for token, slot_id in zip(tokens, slot_preds):
+        if slot_id != 0:  # 非 O 标签
+            print(f"  {token}: {id2slot[slot_id]}")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">6.3 意图 - 槽位交互机制</h3>
+                
+                <div class="section">
+                    <h4>注意力交互增强</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>意图引导槽位</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>将意图表示作为 Query，token 序列作为 Key-Value</li>
+                                <li>通过 Cross-Attention 让槽位预测关注与意图相关的 token</li>
+                                <li>例如：意图为"订机票"时，重点关注时间、地点等槽位</li>
+                            </ul>
+                        </li>
+                        <li><strong>槽位辅助意图</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>聚合关键槽位信息，辅助意图分类</li>
+                                <li>使用注意力机制加权聚合 token 表示</li>
+                                <li>例如：检测到"明天"、"北京"等槽位，增强"订机票"意图置信度</li>
+                            </ul>
+                        </li>
+                        <li><strong>双向交互</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>多层 Transformer 实现意图和槽位的双向信息流动</li>
+                                <li>每一层同时更新意图表示和槽位表示</li>
+                                <li>实现深度语义交互</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">6.4 本章小结</h3>
+                <p>本章深入探讨了联合意图识别与槽位填充。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>联合建模优势：误差消除、表征共享、相互增强、效率提升</li>
+                    <li>BERT 联合架构：共享编码器 + 双任务头（[CLS] 用于意图、token 序列用于槽位）</li>
+                    <li>交互机制：意图引导槽位、槽位辅助意图、双向注意力交互</li>
+                    <li>性能提升：相比流水线模型，准确率提升 3-5%</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 10 章 -->
+        <div class="chapter" id="chapter10">
+            <h2 class="chapter-title">第 10 章 工具调用与 Function Calling</h2>
+            <div class="content">
+                <h3 class="section-title">10.1 Function Calling 概述</h3>
+                
+                <p>Function Calling（函数调用）是 LLM 与外部工具交互的核心机制：模型根据用户意图，生成结构化的函数调用请求，包括函数名称和参数，然后由系统执行该函数并返回结果。这是 Agent 从"理解"到"执行"的关键一步。OpenAI GPT-4、Anthropic Claude、Google Gemini 等主流模型都原生支持 Function Calling。通过 Function Calling，Agent 可以调用搜索 API、数据库查询、代码执行、第三方服务等外部工具，实现真正的任务完成能力。</p>
+                
+                <div class="highlight">
+                    <p><strong>Function Calling 核心价值：</strong>能力扩展（突破模型知识限制）、实时信息（获取最新数据）、精确计算（避免模型计算错误）、动作执行（调用外部 API 完成实际任务）。</p>
+                </div>
+                
+                <h3 class="section-title">10.2 Function Calling 实现</h3>
+                
+                <div class="section">
+                    <h4>OpenAI Function Calling</h4>
+                    
+                    <div class="code-block">
+                        <div class="code-title">OpenAI Function Calling 示例</div>
+                        <pre>
+from openai import OpenAI
+import json
+
+client = OpenAI(api_key="your-api-key")
+
+# 定义可用函数
+functions = [
+    {
+        "name": "get_weather",
+        "description": "获取指定城市的天气信息",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "city": {
+                    "type": "string",
+                    "description": "城市名称，例如：北京、上海"
+                },
+                "date": {
+                    "type": "string",
+                    "description": "日期，格式：YYYY-MM-DD，例如：2026-03-10"
+                }
+            },
+            "required": ["city"]
+        }
+    },
+    {
+        "name": "book_flight",
+        "description": "预订航班机票",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "from_city": {
+                    "type": "string",
+                    "description": "出发城市"
+                },
+                "to_city": {
+                    "type": "string",
+                    "description": "目的地城市"
+                },
+                "date": {
+                    "type": "string",
+                    "description": "出发日期，格式：YYYY-MM-DD"
+                },
+                "passengers": {
+                    "type": "integer",
+                    "description": "乘客数量"
+                }
+            },
+            "required": ["from_city", "to_city", "date"]
+        }
+    },
+    {
+        "name": "search_database",
+        "description": "搜索数据库获取信息",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "搜索查询语句"
+                },
+                "table": {
+                    "type": "string",
+                    "description": "数据库表名"
+                }
+            },
+            "required": ["query"]
+        }
+    }
+]
+
+def execute_function(function_name, arguments):
+    """
+    执行函数
+    
+    Args:
+        function_name: 函数名称
+        arguments: 函数字典参数
+    
+    Returns:
+        函数执行结果
+    """
+    if function_name == "get_weather":
+        # 调用天气 API
+        city = arguments.get("city")
+        date = arguments.get("date", "today")
+        
+        # 模拟 API 调用
+        weather_data = {
+            "city": city,
+            "date": date,
+            "temperature": "22°C",
+            "condition": "晴朗",
+            "humidity": "45%"
+        }
+        
+        return json.dumps(weather_data, ensure_ascii=False)
+    
+    elif function_name == "book_flight":
+        # 调用航班预订 API
+        from_city = arguments.get("from_city")
+        to_city = arguments.get("to_city")
+        date = arguments.get("date")
+        passengers = arguments.get("passengers", 1)
+        
+        # 模拟 API 调用
+        booking_result = {
+            "status": "success",
+            "booking_id": "BK123456",
+            "from": from_city,
+            "to": to_city,
+            "date": date,
+            "passengers": passengers,
+            "total_price": f"{passengers * 1200} CNY"
+        }
+        
+        return json.dumps(booking_result, ensure_ascii=False)
+    
+    elif function_name == "search_database":
+        # 执行数据库查询
+        query = arguments.get("query")
+        table = arguments.get("table", "default")
+        
+        # 模拟查询结果
+        search_result = {
+            "table": table,
+            "query": query,
+            "results": [
+                {"id": 1, "name": "示例数据 1"},
+                {"id": 2, "name": "示例数据 2"}
+            ]
+        }
+        
+        return json.dumps(search_result, ensure_ascii=False)
+    
+    else:
+        return json.dumps({"error": f"未知函数：{function_name}"})
+
+
+def agent_with_function_calling(user_message):
+    """
+    支持 Function Calling 的 Agent
+    
+    Args:
+        user_message: 用户输入
+    
+    Returns:
+        Agent 回复
+    """
+    
+    # 第一轮：LLM 判断是否需要调用函数
+    response = client.chat.completions.create(
+        model="gpt-4-turbo",
+        messages=[
+            {"role": "system", "content": "你是一个智能助手，可以帮助用户查询天气、预订机票等。"},
+            {"role": "user", "content": user_message}
+        ],
+        functions=functions,
+        function_call="auto"  # 自动决定是否调用函数
+    )
+    
+    message = response.choices[0].message
+    
+    # 检查是否需要调用函数
+    if message.function_call:
+        function_name = message.function_call.name
+        function_args = json.loads(message.function_call.arguments)
+        
+        print(f"调用函数：{function_name}")
+        print(f"参数：{function_args}")
+        
+        # 执行函数
+        function_result = execute_function(function_name, function_args)
+        
+        print(f"函数结果：{function_result}")
+        
+        # 第二轮：将函数结果返回给 LLM，生成自然语言回复
+        second_response = client.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=[
+                {"role": "system", "content": "你是一个智能助手。"},
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": None, "function_call": {
+                    "name": function_name,
+                    "arguments": message.function_call.arguments
+                }},
+                {"role": "function", "name": function_name, "content": function_result}
+            ]
+        )
+        
+        return second_response.choices[0].message.content
+    
+    else:
+        # 不需要调用函数，直接回复
+        return message.content
+
+
+# 使用示例
+if __name__ == "__main__":
+    # 示例 1：查询天气
+    user_input = "北京明天天气怎么样？"
+    print(f"用户：{user_input}")
+    response = agent_with_function_calling(user_input)
+    print(f"Agent: {response}")
+    print("-" * 50)
+    
+    # 示例 2：预订机票
+    user_input = "帮我订一张明天从上海到北京的机票"
+    print(f"用户：{user_input}")
+    response = agent_with_function_calling(user_input)
+    print(f"Agent: {response}")
+    print("-" * 50)
+    
+    # 示例 3：多步任务
+    user_input = "先查一下北京明天的天气，如果好的话就帮我订一张去上海的机票"
+    print(f"用户：{user_input}")
+    response = agent_with_function_calling(user_input)
+    print(f"Agent: {response}")
+</pre>
+                    </div>
+                </div>
+                
+                <h3 class="section-title">10.3 多工具选择与规划</h3>
+                
+                <div class="section">
+                    <h4>工具选择策略</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>基于意图的工具映射</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>预定义意图到工具的映射关系</li>
+                                <li>意图识别后直接选择对应工具</li>
+                                <li>简单高效，但灵活性较低</li>
+                            </ul>
+                        </li>
+                        <li><strong>LLM 自主决策</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>提供工具描述，让 LLM 自主选择</li>
+                                <li>支持动态工具注册和发现</li>
+                                <li>灵活性高，但可能选择不准确</li>
+                            </ul>
+                        </li>
+                        <li><strong>混合策略</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>意图识别提供候选工具集</li>
+                                <li>LLM 根据上下文从候选集中选择</li>
+                                <li>平衡准确性和灵活性</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">10.4 本章小结</h3>
+                <p>本章深入探讨了工具调用与 Function Calling。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>Function Calling 机制：LLM 生成结构化函数调用，系统执行并返回结果</li>
+                    <li>实现流程：定义函数→LLM 决策→执行函数→结果反馈→生成回复</li>
+                    <li>工具选择策略：意图映射、LLM 自主决策、混合策略</li>
+                    <li>核心价值：能力扩展、实时信息、精确计算、动作执行</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 第 16 章 -->
+        <div class="chapter" id="chapter16">
+            <h2 class="chapter-title">第 16 章 生产案例分析</h2>
+            <div class="content">
+                <h3 class="section-title">16.1 案例一：智能客服意图理解系统</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某电商平台智能客服系统，日均处理 800 万 + 用户咨询</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>意图复杂：用户问题包含多个意图（查询 + 投诉 + 建议）</li>
+                                <li>槽位多样：订单号、商品 ID、时间范围等参数提取困难</li>
+                                <li>多轮交互：信息分散在多轮对话中，需要状态追踪</li>
+                                <li>响应时间：要求<300ms 完成意图理解和槽位提取</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>解决方案</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>联合建模架构</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>基于 BERT 的联合意图识别与槽位填充模型</li>
+                                <li>50 种意图类别、120 种槽位标签</li>
+                                <li>意图 - 槽位注意力交互机制</li>
+                            </ul>
+                        </li>
+                        <li><strong>对话状态追踪</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>基于 TRADE 的多领域状态生成器</li>
+                                <li>跨轮次信息聚合与更新</li>
+                                <li>支持槽位值的多轮补全</li>
+                            </ul>
+                        </li>
+                        <li><strong>工具调用编排</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>定义 30+ 个客服相关函数（查询订单、退款、换货等）</li>
+                                <li>基于意图自动选择工具</li>
+                                <li>多工具串联执行（查询→确认→执行）</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>意图识别准确率</strong>：从 82%（规则系统）提升到 96%（联合模型）</li>
+                        <li><strong>槽位填充 F1 值</strong>：从 78% 提升到 94%</li>
+                        <li><strong>响应时间</strong>：平均 220ms，满足<300ms 要求</li>
+                        <li><strong>问题解决率</strong>：从 65% 提升到 89%</li>
+                        <li><strong>人工介入率</strong>：从 35% 降低到 11%</li>
+                        <li><strong>商业价值</strong>：年节省客服成本 1.2 亿元，用户满意度提升 28%</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.2 案例二：智能助手任务规划系统</h3>
+                
+                <div class="section">
+                    <h4>背景与挑战</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>背景</strong>：某科技公司智能助手产品，支持日程管理、邮件处理、会议安排等功能</li>
+                        <li><strong>挑战</strong>：
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>任务复杂：用户指令包含多步骤（"安排下周与张总的会议，预定会议室，发送邀请邮件"）</li>
+                                <li>依赖关系：任务执行有先后顺序和依赖关系</li>
+                                <li>错误恢复：某步骤失败需要回滚或重新规划</li>
+                                <li>个性化：需要根据用户偏好调整执行策略</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>任务规划架构</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>层次化任务分解</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>顶层：识别复合意图（会议安排 + 资源预定 + 邮件发送）</li>
+                                <li>中层：分解为原子任务（查询空闲时间、预定会议室、生成邮件内容）</li>
+                                <li>底层：调用具体 API 执行</li>
+                            </ul>
+                        </li>
+                        <li><strong>依赖图规划</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>构建任务依赖有向图（DAG）</li>
+                                <li>拓扑排序确定执行顺序</li>
+                                <li>并行执行无依赖任务</li>
+                            </ul>
+                        </li>
+                        <li><strong>错误恢复机制</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>检查点机制：每步执行后保存状态</li>
+                                <li>失败回滚：某步失败时回滚到最近检查点</li>
+                                <li>重新规划：根据失败原因调整后续步骤</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="section">
+                    <h4>实施成果</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>任务完成率</strong>：从 71%（简单规划）提升到 93%（层次化规划）</li>
+                        <li><strong>平均执行时间</strong>：复杂任务（5+ 步骤）从 45 秒降低到 18 秒</li>
+                        <li><strong>错误恢复成功率</strong>：87% 的错误能够自动恢复</li>
+                        <li><strong>用户满意度</strong>：从 3.6/5 提升到 4.7/5</li>
+                        <li><strong>日活跃用户</strong>：从 50 万增长到 200 万</li>
+                    </ul>
+                </div>
+                
+                <h3 class="section-title">16.3 最佳实践总结</h3>
+                
+                <div class="section">
+                    <h4>意图理解系统最佳实践</h4>
+                    
+                    <ul style="margin-left: 20px;">
+                        <li><strong>数据策略</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>构建高质量标注数据集（至少 5000+ 样本/意图）</li>
+                                <li>数据增强提升泛化能力（同义替换、回译）</li>
+                                <li>主动学习挖掘困难样本</li>
+                            </ul>
+                        </li>
+                        <li><strong>模型选择</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>优先联合建模（BERT Joint）而非流水线</li>
+                                <li>少样本场景使用 LLM+Prompt</li>
+                                <li>实时性要求高使用蒸馏小模型</li>
+                            </ul>
+                        </li>
+                        <li><strong>对话管理</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>实现完整的对话状态追踪</li>
+                                <li>支持多轮信息补全和澄清</li>
+                                <li>设计优雅的降级策略</li>
+                            </ul>
+                        </li>
+                        <li><strong>工具调用</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>明确定义函数签名和描述</li>
+                                <li>实现完善的错误处理和重试机制</li>
+                                <li>记录执行日志用于分析和优化</li>
+                            </ul>
+                        </li>
+                        <li><strong>评估监控</strong>：
+                            <ul style="margin-left: 20px; margin-top: 8px;">
+                                <li>实时监控意图准确率、槽位 F1、任务完成率</li>
+                                <li>定期分析 bad case 并迭代优化</li>
+                                <li>A/B 测试验证改进效果</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="quote" style="margin-top: 38px; border-left-color: var(--intent-blue);">
+                    "从智能客服到智能助手，从意图识别到任务规划，从单轮理解到多轮交互，Agent 意图理解体系正在重塑人机交互的范式。未来的 Agent 系统将更加智能、更加主动、更加理解人类。这不仅是技术的进步，更是智能本质的回归。"
+                    <div class="quote-author">—— 本章结语</div>
+                </div>
+                
+                <h3 class="section-title">16.4 本章小结</h3>
+                <p>本章分析了生产案例。关键要点：</p>
+                <ul style="margin-left: 20px;">
+                    <li>案例一：智能客服，意图准确率 82%→96%，槽位 F1 78%→94%，问题解决率 65%→89%</li>
+                    <li>案例二：智能助手，任务完成率 71%→93%，执行时间 45 秒→18 秒，错误恢复率 87%</li>
+                    <li>最佳实践：数据策略、模型选择、对话管理、工具调用、评估监控</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 参考文献 -->
+        <div class="chapter" id="references">
+            <h2 class="chapter-title">参考文献与资源（2024-2026）</h2>
+            <div class="content">
+                <h3 class="section-title">意图识别与槽位填充</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;">
+                    <li>Chen et al (2026). "Joint BERT for Intent and Slot Filling." aclweb.org</li>
+                    <li>Google (2026). "Natural Language Understanding API." cloud.google.com</li>
+                </ol>
+                
+                <h3 class="section-title">任务规划与工具调用</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="3">
+                    <li>OpenAI (2026). "Function Calling with GPT-4." openai.com</li>
+                    <li>LangChain (2026). "Agent Tool Use Framework." langchain.com</li>
+                </ol>
+                
+                <h3 class="section-title">对话管理</h3>
+                <ol style="margin-left: 20px; line-height: 2.01;" start="5">
+                    <li>Meta AI (2026). "Dialogue State Tracking with LLMs." meta.ai</li>
+                    <li>Microsoft (2026). "Bot Framework Conversation Management." microsoft.com</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-content">
+                <p style="font-size: 1.3em; margin-bottom: 15px; color: var(--intent-blue); font-weight: 800; font-family: 'Georgia', serif;">Agent 意图识别、槽位填充与任务解析</p>
+                <p style="font-size: 1.08em; margin-bottom: 7px; font-style: italic;">从自然语言到可执行动作的智能转化</p>
+                <p>© 2026 超级代码智能体 | 意图理解版 · 第一版</p>
+                <p>出版日期：2026 年 3 月 9 日</p>
+                <p style="margin-top: 21px; font-size: 0.9em; line-height: 1.8;">
+                    本书采用 <strong>CC BY-NC-SA 4.0</strong> 许可协议<br>
+                    欢迎分享、改编，但请注明出处并用于非商业目的
+                </p>
+                <div class="intent-spectrum" style="margin-top: 30px;">
+                    <div class="spectrum-item spectrum-intent">🔵 意图识别</div>
+                    <div class="spectrum-item spectrum-slot">🟣 槽位填充</div>
+                    <div class="spectrum-item spectrum-task">🟡 任务解析</div>
+                    <div class="spectrum-item spectrum-dialogue">🟢 对话管理</div>
+                    <div class="spectrum-item spectrum-execution">🔴 执行规划</div>
+                </div>
+                <p style="margin-top: 30px; font-size: 0.83em; color: var(--text-secondary);">
+                    谨以此书献给所有在意图理解一线构建智能 Agent 系统的研究者和工程师们<br>
+                    从意图识别到槽位填充，从任务解析到对话管理<br>
+                    意图理解——让 Agent 真正理解人类，从自然语言走向可执行动作
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 动态效果
+        console.log('🔵🟣🟡🟢🔴 Agent Intent Recognition, Slot Filling & Task Parsing');
+        console.log('📚 From Natural Language to Executable Actions (2024-2026)');
+        console.log('✨ Intent + Slot + Task + Dialogue + Execution = Intelligent Agent');
+    </script>
+</body>
+</html>

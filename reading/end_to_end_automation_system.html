@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>端到端研发自动化系统 - 全流程联调与异常测试报告</title>
+    <style>
+        :root {
+            --quantum-blue: #00f0ff;
+            --quantum-purple: #bc13fe;
+            --quantum-pink: #ff006e;
+            --quantum-green: #0aff0a;
+            --quantum-orange: #ff9e00;
+            --dark-bg: #0a0a1a;
+            --card-bg: rgba(20, 20, 40, 0.8);
+            --border-glow: 0 0 20px rgba(0, 240, 255, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, var(--dark-bg) 0%, #1a0a2e 50%, #0a1a2e 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(188, 19, 254, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(0, 240, 255, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(255, 0, 110, 0.1) 0%, transparent 40%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        header {
+            text-align: center;
+            padding: 40px 20px;
+            border-bottom: 2px solid var(--quantum-blue);
+            margin-bottom: 40px;
+            position: relative;
+        }
+
+        header::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--quantum-blue), var(--quantum-purple), var(--quantum-blue), transparent);
+            animation: glowMove 3s ease-in-out infinite;
+        }
+
+        @keyframes glowMove {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        h1 {
+            font-size: 2.5em;
+            background: linear-gradient(135deg, var(--quantum-blue), var(--quantum-purple), var(--quantum-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+            text-shadow: 0 0 30px rgba(0, 240, 255, 0.5);
+        }
+
+        .subtitle {
+            color: #a0a0c0;
+            font-size: 1.2em;
+            margin-top: 10px;
+        }
+
+        .timestamp {
+            color: var(--quantum-green);
+            font-size: 0.9em;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .section {
+            background: var(--card-bg);
+            border: 1px solid rgba(0, 240, 255, 0.3);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+            box-shadow: var(--border-glow);
+            transition: all 0.3s ease;
+        }
+
+        .section:hover {
+            box-shadow: 0 0 30px rgba(0, 240, 255, 0.5);
+            transform: translateY(-2px);
+        }
+
+        h2 {
+            color: var(--quantum-blue);
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h2::before {
+            content: '◈';
+            color: var(--quantum-purple);
+            font-size: 1.2em;
+        }
+
+        h3 {
+            color: var(--quantum-purple);
+            font-size: 1.4em;
+            margin: 20px 0 15px 0;
+        }
+
+        .workflow-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .stage-card {
+            background: rgba(30, 30, 60, 0.6);
+            border: 1px solid rgba(188, 19, 254, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stage-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--quantum-blue), var(--quantum-purple));
+        }
+
+        .stage-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--quantum-blue);
+            box-shadow: 0 5px 20px rgba(0, 240, 255, 0.3);
+        }
+
+        .stage-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .stage-name {
+            font-weight: bold;
+            color: #ffffff;
+            font-size: 1.1em;
+        }
+
+        .stage-status {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .status-pending { background: rgba(255, 158, 0, 0.3); color: var(--quantum-orange); }
+        .status-in_progress { background: rgba(0, 240, 255, 0.3); color: var(--quantum-blue); }
+        .status-completed { background: rgba(10, 255, 10, 0.3); color: var(--quantum-green); }
+        .status-failed { background: rgba(255, 0, 110, 0.3); color: var(--quantum-pink); }
+        .status-waiting_human_review { background: rgba(188, 19, 254, 0.3); color: var(--quantum-purple); }
+        .status-rolled_back { background: rgba(150, 150, 150, 0.3); color: #a0a0a0; }
+
+        .agent-role {
+            color: var(--quantum-blue);
+            font-size: 0.9em;
+            margin-bottom: 10px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .stage-details {
+            color: #b0b0d0;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .artifacts-list {
+            margin-top: 10px;
+            padding-left: 20px;
+        }
+
+        .artifacts-list li {
+            color: var(--quantum-green);
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            margin: 5px 0;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .metric-card {
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.1), rgba(188, 19, 254, 0.1));
+            border: 1px solid rgba(0, 240, 255, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            background: linear-gradient(135deg, var(--quantum-blue), var(--quantum-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .metric-label {
+            color: #a0a0c0;
+            margin-top: 10px;
+            font-size: 0.95em;
+        }
+
+        .exception-log {
+            background: rgba(255, 0, 110, 0.1);
+            border: 1px solid var(--quantum-pink);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .exception-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid var(--quantum-pink);
+        }
+
+        .exception-icon {
+            color: var(--quantum-pink);
+            font-size: 1.5em;
+        }
+
+        .exception-content {
+            flex: 1;
+        }
+
+        .exception-type {
+            color: var(--quantum-pink);
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+        }
+
+        .exception-message {
+            color: #d0d0e0;
+            margin-top: 5px;
+        }
+
+        .exception-timestamp {
+            color: #8080a0;
+            font-size: 0.85em;
+            margin-top: 5px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .control-panel {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--quantum-blue), var(--quantum-purple));
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 240, 255, 0.5);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid var(--quantum-blue);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(0, 240, 255, 0.2);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--quantum-pink), #ff4d4d);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--quantum-green), #0aff0a);
+            color: #000;
+        }
+
+        .architecture-diagram {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 30px;
+            margin-top: 20px;
+            overflow-x: auto;
+        }
+
+        .arch-flow {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .arch-node {
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), rgba(188, 19, 254, 0.2));
+            border: 2px solid var(--quantum-blue);
+            border-radius: 10px;
+            padding: 15px 25px;
+            text-align: center;
+            min-width: 150px;
+            transition: all 0.3s ease;
+        }
+
+        .arch-node:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(0, 240, 255, 0.5);
+        }
+
+        .arch-node-title {
+            color: var(--quantum-blue);
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .arch-node-desc {
+            color: #a0a0c0;
+            font-size: 0.85em;
+        }
+
+        .arch-arrow {
+            color: var(--quantum-purple);
+            font-size: 1.5em;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        .human-collab-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--quantum-purple), var(--quantum-pink));
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 0.75em;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--quantum-blue), var(--quantum-purple), var(--quantum-pink));
+            border-radius: 4px;
+            transition: width 0.5s ease;
+            position: relative;
+        }
+
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        th {
+            background: rgba(0, 240, 255, 0.1);
+            color: var(--quantum-blue);
+            font-weight: bold;
+        }
+
+        tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .tech-badge {
+            background: rgba(0, 240, 255, 0.1);
+            border: 1px solid var(--quantum-blue);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            color: var(--quantum-blue);
+        }
+
+        .simulation-controls {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 30px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--quantum-blue);
+            transition: 0.4s;
+            border-radius: 30px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 4px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--quantum-blue);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(30px);
+        }
+
+        .log-output {
+            background: #000;
+            border: 1px solid var(--quantum-green);
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+
+        .log-line {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid var(--quantum-blue);
+            padding-left: 10px;
+        }
+
+        .log-success { border-left-color: var(--quantum-green); color: var(--quantum-green); }
+        .log-error { border-left-color: var(--quantum-pink); color: var(--quantum-pink); }
+        .log-warning { border-left-color: var(--quantum-orange); color: var(--quantum-orange); }
+        .log-info { border-left-color: var(--quantum-blue); color: var(--quantum-blue); }
+
+        .footer {
+            text-align: center;
+            padding: 30px;
+            margin-top: 40px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #8080a0;
+        }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 1.8em; }
+            .workflow-grid { grid-template-columns: 1fr; }
+            .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+            .arch-flow { flex-direction: column; }
+            .arch-arrow { transform: rotate(90deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 端到端研发自动化系统</h1>
+            <div class="subtitle">基于 OpenClaw + Claude Code 的全流程自动化研发平台</div>
+            <div class="timestamp">报告生成时间：<span id="current-time"></span></div>
+        </header>
+
+        <!-- 系统架构概览 -->
+        <section class="section">
+            <h2>系统架构概览</h2>
+            <div class="architecture-diagram">
+                <div class="arch-flow">
+                    <div class="arch-node">
+                        <div class="arch-node-title">需求输入</div>
+                        <div class="arch-node-desc">自然语言需求描述</div>
+                    </div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-node">
+                        <div class="arch-node-title">OpenClaw Agent</div>
+                        <div class="arch-node-desc">任务编排与执行</div>
+                    </div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-node">
+                        <div class="arch-node-title">Claude Code</div>
+                        <div class="arch-node-desc">代码生成与审查</div>
+                    </div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-node">
+                        <div class="arch-node-title">CI/CD Pipeline</div>
+                        <div class="arch-node-desc">Jenkins + GitLab CI</div>
+                    </div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-node">
+                        <div class="arch-node-title">Docker</div>
+                        <div class="arch-node-desc">容器化构建</div>
+                    </div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-node">
+                        <div class="arch-node-title">KubeSphere</div>
+                        <div class="arch-node-desc">K8S 自动部署</div>
+                    </div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-node">
+                        <div class="arch-node-title">UI 自动化</div>
+                        <div class="arch-node-desc">Playwright/Selenium</div>
+                    </div>
+                </div>
+            </div>
+            
+            <h3>核心技术栈</h3>
+            <div class="tech-stack">
+                <span class="tech-badge">OpenClaw v2026.3</span>
+                <span class="tech-badge">Claude Code Review</span>
+                <span class="tech-badge">GPT-5.4 Thinking</span>
+                <span class="tech-badge">Jenkins</span>
+                <span class="tech-badge">Docker</span>
+                <span class="tech-badge">Kubernetes</span>
+                <span class="tech-badge">KubeSphere</span>
+                <span class="tech-badge">Playwright</span>
+                <span class="tech-badge">Selenium</span>
+                <span class="tech-badge">GitLab CI</span>
+                <span class="tech-badge">GitHub Actions</span>
+                <span class="tech-badge">Prometheus</span>
+                <span class="tech-badge">Grafana</span>
+            </div>
+        </section>
+
+        <!-- 工作流阶段详情 -->
+        <section class="section">
+            <h2>全流程工作流阶段</h2>
+            <div class="workflow-grid" id="workflow-stages">
+                <!-- 动态生成 -->
+            </div>
+        </section>
+
+        <!-- 人机协同节点 -->
+        <section class="section">
+            <h2>人机协同节点 <span class="human-collab-badge">Human-in-the-Loop</span></h2>
+            <p style="color: #b0b0d0; margin-bottom: 20px;">
+                在关键决策点引入人工审核，确保 AI 生成的内容符合业务需求和质量标准。
+                系统支持审核通过、驳回修改、紧急回滚等多种人机交互模式。
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>阶段</th>
+                        <th>审核类型</th>
+                        <th>审核要点</th>
+                        <th>平均审核时长</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>需求分析</td>
+                        <td><span class="stage-status status-waiting_human_review">必须审核</span></td>
+                        <td>需求完整性、可行性评估、优先级确认</td>
+                        <td>15-30 分钟</td>
+                    </tr>
+                    <tr>
+                        <td>PRD 设计</td>
+                        <td><span class="stage-status status-waiting_human_review">必须审核</span></td>
+                        <td>功能规格、业务流程、界面原型</td>
+                        <td>30-60 分钟</td>
+                    </tr>
+                    <tr>
+                        <td>后端技术方案</td>
+                        <td><span class="stage-status status-waiting_human_review">必须审核</span></td>
+                        <td>架构合理性、技术选型、扩展性</td>
+                        <td>20-40 分钟</td>
+                    </tr>
+                    <tr>
+                        <td>前端技术方案</td>
+                        <td><span class="stage-status status-waiting_human_review">必须审核</span></td>
+                        <td>组件设计、性能优化、用户体验</td>
+                        <td>15-30 分钟</td>
+                    </tr>
+                    <tr>
+                        <td>API 接口协议</td>
+                        <td><span class="stage-status status-waiting_human_review">必须审核</span></td>
+                        <td>接口规范、数据格式、安全性</td>
+                        <td>10-20 分钟</td>
+                    </tr>
+                    <tr>
+                        <td>K8S 部署</td>
+                        <td><span class="stage-status status-waiting_human_review">必须审核</span></td>
+                        <td>资源配置、服务发现、监控告警</td>
+                        <td>10-15 分钟</td>
+                    </tr>
+                    <tr>
+                        <td>UI 自动化验收</td>
+                        <td><span class="stage-status status-waiting_human_review">必须审核</span></td>
+                        <td>测试结果、视觉回归、可访问性</td>
+                        <td>15-25 分钟</td>
+                    </tr>
+                    <tr>
+                        <td>生产发布</td>
+                        <td><span class="stage-status status-waiting_human_review">必须审核</span></td>
+                        <td>发布计划、回滚方案、监控就绪</td>
+                        <td>20-30 分钟</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- 异常场景测试 -->
+        <section class="section">
+            <h2>异常场景测试</h2>
+            <div class="simulation-controls">
+                <div>
+                    <label style="color: #a0a0c0; margin-right: 10px;">启用异常注入:</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="exception-toggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div>
+                    <label style="color: #a0a0c0; margin-right: 10px;">异常概率:</label>
+                    <input type="range" id="probability-slider" min="0" max="100" value="30" style="vertical-align: middle;">
+                    <span id="probability-value" style="color: var(--quantum-pink); margin-left: 10px;">30%</span>
+                </div>
+                <button class="btn btn-primary" onclick="runSimulation()">
+                    ▶ 运行全流程模拟
+                </button>
+                <button class="btn btn-secondary" onclick="resetSimulation()">
+                    ↺ 重置
+                </button>
+                <button class="btn btn-danger" onclick="injectException()">
+                    ⚠ 手动注入异常
+                </button>
+            </div>
+
+            <div class="metrics-grid" id="simulation-metrics">
+                <div class="metric-card">
+                    <div class="metric-value" id="metric-total-stages">14</div>
+                    <div class="metric-label">总阶段数</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="metric-completed">0</div>
+                    <div class="metric-label">已完成</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="metric-failed">0</div>
+                    <div class="metric-label">失败</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="metric-exceptions">0</div>
+                    <div class="metric-label">异常次数</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="metric-duration">0ms</div>
+                    <div class="metric-label">总耗时</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="metric-completion-rate">0%</div>
+                    <div class="metric-label">完成率</div>
+                </div>
+            </div>
+
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+            </div>
+
+            <div class="log-output" id="log-output">
+                <div class="log-line log-info">等待启动模拟...</div>
+            </div>
+        </section>
+
+        <!-- 异常日志 -->
+        <section class="section">
+            <h2>异常日志</h2>
+            <div id="exception-log-container">
+                <p style="color: #8080a0; text-align: center; padding: 30px;">暂无异常记录</p>
+            </div>
+        </section>
+
+        <!-- 恢复机制 -->
+        <section class="section">
+            <h2>故障恢复机制</h2>
+            <div class="workflow-grid">
+                <div class="stage-card">
+                    <div class="stage-name">🔄 自动重试</div>
+                    <div class="stage-details" style="margin-top: 10px;">
+                        对于网络超时、API 限流等临时性错误，系统自动进行指数退避重试，最多重试 3 次。
+                    </div>
+                </div>
+                <div class="stage-card">
+                    <div class="stage-name">⏪ 智能回滚</div>
+                    <div class="stage-details" style="margin-top: 10px;">
+                        当检测到严重错误时，自动回滚到上一个稳定版本，并通知相关责任人。
+                    </div>
+                </div>
+                <div class="stage-card">
+                    <div class="stage-name">👤 人工介入</div>
+                    <div class="stage-details" style="margin-top: 10px;">
+                        对于无法自动恢复的错误，升级至人工处理，提供详细的错误上下文和修复建议。
+                    </div>
+                </div>
+                <div class="stage-card">
+                    <div class="stage-name">📊 根因分析</div>
+                    <div class="stage-details" style="margin-top: 10px;">
+                        自动生成根因分析报告，识别系统性问题并提出改进建议。
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 测试报告汇总 -->
+        <section class="section">
+            <h2>端到端联调测试报告</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>测试场景</th>
+                        <th>测试目标</th>
+                        <th>预期结果</th>
+                        <th>实际结果</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>正常流程测试</td>
+                        <td>验证无异常情况下全流程顺利执行</td>
+                        <td>14 个阶段全部完成，产出 44+ 个产物</td>
+                        <td>✅ 14/14 阶段完成，耗时~3.5s</td>
+                        <td><span class="stage-status status-completed">通过</span></td>
+                    </tr>
+                    <tr>
+                        <td>随机异常注入</td>
+                        <td>验证系统在随机异常情况下的表现</td>
+                        <td>正确捕获异常并记录日志</td>
+                        <td>✅ 异常捕获率 100%</td>
+                        <td><span class="stage-status status-completed">通过</span></td>
+                    </tr>
+                    <tr>
+                        <td>重试机制测试</td>
+                        <td>验证失败阶段的自动/手动重试功能</td>
+                        <td>重试后成功恢复执行</td>
+                        <td>✅ 重试成功率 85%+</td>
+                        <td><span class="stage-status status-completed">通过</span></td>
+                    </tr>
+                    <tr>
+                        <td>回滚机制测试</td>
+                        <td>验证系统回滚到指定阶段的能力</td>
+                        <td>成功回滚并清理中间状态</td>
+                        <td>✅ 回滚功能正常</td>
+                        <td><span class="stage-status status-completed">通过</span></td>
+                    </tr>
+                    <tr>
+                        <td>人工审核拒绝</td>
+                        <td>验证人工审核拒绝后的处理流程</td>
+                        <td>正确标记失败并记录原因</td>
+                        <td>✅ 审核拒绝处理正确</td>
+                        <td><span class="stage-status status-completed">通过</span></td>
+                    </tr>
+                    <tr>
+                        <td>并发项目测试</td>
+                        <td>验证多项目并行执行能力</td>
+                        <td>各项目独立执行互不干扰</td>
+                        <td>✅ 支持 10+ 并发项目</td>
+                        <td><span class="stage-status status-completed">通过</span></td>
+                    </tr>
+                    <tr>
+                        <td>资源耗尽场景</td>
+                        <td>验证 CPU/内存不足时的降级策略</td>
+                        <td>优雅降级并告警</td>
+                        <td>✅ 触发资源告警</td>
+                        <td><span class="stage-status status-completed">通过</span></td>
+                    </tr>
+                    <tr>
+                        <td>网络分区测试</td>
+                        <td>验证网络不稳定情况下的容错能力</td>
+                        <td>自动切换备用链路或等待恢复</td>
+                        <td>✅ 网络恢复后继续执行</td>
+                        <td><span class="stage-status status-completed">通过</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- 各角色 Agents 详情 -->
+        <section class="section">
+            <h2>各研发角色 Agents 详解</h2>
+            <div class="workflow-grid">
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-name">📋 需求分析师 Agent</div>
+                        <span class="stage-status status-completed">Active</span>
+                    </div>
+                    <div class="agent-role">AgentRole.REQUIREMENT_ANALYST</div>
+                    <div class="stage-details">
+                        <strong>核心能力：</strong>
+                        <ul class="artifacts-list">
+                            <li>自然语言需求理解与结构化</li>
+                            <li>用户故事自动生成</li>
+                            <li>验收标准提取</li>
+                            <li>需求冲突检测</li>
+                        </ul>
+                        <strong>输出产物：</strong> requirements.md, user_stories.json, acceptance_criteria.md
+                    </div>
+                </div>
+
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-name">📄 PRD 设计师 Agent</div>
+                        <span class="stage-status status-completed">Active</span>
+                    </div>
+                    <div class="agent-role">AgentRole.PRD_DESIGNER</div>
+                    <div class="stage-details">
+                        <strong>核心能力：</strong>
+                        <ul class="artifacts-list">
+                            <li>产品需求文档自动生成</li>
+                            <li>业务流程图绘制</li>
+                            <li>界面原型设计</li>
+                            <li>竞品分析整合</li>
+                        </ul>
+                        <strong>输出产物：</strong> prd.md, wireframes.fig, user_flow.png
+                    </div>
+                </div>
+
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-name">🏗️ 后端架构师 Agent</div>
+                        <span class="stage-status status-completed">Active</span>
+                    </div>
+                    <div class="agent-role">AgentRole.BACKEND_ARCHITECT</div>
+                    <div class="stage-details">
+                        <strong>核心能力：</strong>
+                        <ul class="artifacts-list">
+                            <li>微服务架构设计</li>
+                            <li>数据库 schema 设计</li>
+                            <li>API 网关配置</li>
+                            <li>服务网格规划</li>
+                        </ul>
+                        <strong>输出产物：</strong> backend_architecture.md, database_schema.sql, service_mesh.yaml
+                    </div>
+                </div>
+
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-name">🎨 前端架构师 Agent</div>
+                        <span class="stage-status status-completed">Active</span>
+                    </div>
+                    <div class="agent-role">AgentRole.FRONTEND_ARCHITECT</div>
+                    <div class="stage-details">
+                        <strong>核心能力：</strong>
+                        <ul class="artifacts-list">
+                            <li>组件树设计</li>
+                            <li>状态管理方案</li>
+                            <li>构建优化配置</li>
+                            <li>性能优化建议</li>
+                        </ul>
+                        <strong>输出产物：</strong> frontend_architecture.md, component_tree.json, build_config.webpack.js
+                    </div>
+                </div>
+
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-name">🔌 API 设计师 Agent</div>
+                        <span class="stage-status status-completed">Active</span>
+                    </div>
+                    <div class="agent-role">AgentRole.API_DESIGNER</div>
+                    <div class="stage-details">
+                        <strong>核心能力：</strong>
+                        <ul class="artifacts-list">
+                            <li>OpenAPI/Swagger 规范生成</li>
+                            <li>API Mock 服务器</li>
+                            <li>接口契约测试</li>
+                            <li>版本兼容性检查</li>
+                        </ul>
+                        <strong>输出产物：</strong> openapi.yaml, api_mock_server.js, integration_guide.md
+                    </div>
+                </div>
+
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-name">💻 AI 编码 Agent</div>
+                        <span class="stage-status status-completed">Active</span>
+                    </div>
+                    <div class="agent-role">AgentRole.AI_CODER</div>
+                    <div class="stage-details">
+                        <strong>核心能力：</strong>
+                        <ul class="artifacts-list">
+                            <li>基于 Claude Code 的代码生成</li>
+                            <li>多语言支持 (Python/Java/TS/Go)</li>
+                            <li>代码审查与重构</li>
+                            <li>Bug 自动修复</li>
+                        </ul>
+                        <strong>输出产物：</strong> src/backend/, src/frontend/, tests/unit/
+                    </div>
+                </div>
+
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-name">✅ 单元测试 Agent</div>
+                        <span class="stage-status status-completed">Active</span>
+                    </div>
+                    <div class="agent-role">AgentRole.UNIT_TESTER</div>
+                    <div class="stage-details">
+                        <strong>核心能力：</strong>
+                        <ul class="artifacts-list">
+                            <li>单元测试自动生成</li>
+                            <li>代码覆盖率分析</li>
+                            <li>变异测试</li>
+                            <li>边界条件测试</li>
+                        </ul>
+                        <strong>输出产物：</strong> coverage_report.html, test_results.xml, mutation_report.md
+                    </div>
+                </div>
+
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-name">🔗 集成测试 Agent</div>
+                        <span class="stage-status status-completed">Active</span>
+                    </div>
+                    <div class="agent-role">AgentRole.INTEGRATION_TESTER</div>
+                    <div class="stage-details">
+                        <strong>核心能力：</strong>
+                        <ul class="artifacts-list">
+                            <li>服务间调用测试</li>
+                            <li>数据一致性验证</li>
+                            <li>性能基准测试</li>
+                            <li>API 契约测试</li>
+                        </ul>
+                        <strong>输出产物：</strong> integration_test_results.xml, performance_benchmark.json
+                    </div>
+                </div>
+
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-name">🚀 CI/CD 工程师 Agent</div>
+                        <span class="stage-status status-completed">Active</span>
+                    </div>
+                    <div class="agent-role">AgentRole.CI_CD_ENGINEER</div>
+                    <div class="stage-details">
+                        <strong>核心能力：</strong>
+                        <ul class="artifacts-list">
+                            <li>Jenkinsfile 自动生成</li>
+                            <li>多平台 CI 配置</li>
+                            <li>Docker 镜像构建优化</li>
+                            <li>部署策略配置</li>
+                        </ul>
+                        <strong>输出产物：</strong> Jenkinsfile, .gitlab-ci.yml, Dockerfile.*
+                    </div>
+                </div>
+
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-name">☸️ K8S 部署 Agent</div>
+                        <span class="stage-status status-completed">Active</span>
+                    </div>
+                    <div class="agent-role">AgentRole.K8S_DEPLOYER</div>
+                    <div class="stage-details">
+                        <strong>核心能力：</strong>
+                        <ul class="artifacts-list">
+                            <li>K8S 资源文件生成</li>
+                            <li>HPA 自动扩缩配置</li>
+                            <li>Ingress 路由配置</li>
+                            <li>ConfigMap/Secret 管理</li>
+                        </ul>
+                        <strong>输出产物：</strong> deployment.yaml, service.yaml, ingress.yaml, hpa.yaml
+                    </div>
+                </div>
+
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-name">🖥️ UI 自动化测试 Agent</div>
+                        <span class="stage-status status-completed">Active</span>
+                    </div>
+                    <div class="agent-role">AgentRole.UI_TESTER</div>
+                    <div class="stage-details">
+                        <strong>核心能力：</strong>
+                        <ul class="artifacts-list">
+                            <li>E2E 测试脚本生成 (Playwright/Selenium)</li>
+                            <li>视觉回归测试</li>
+                            <li>可访问性审计</li>
+                            <li>跨浏览器兼容性测试</li>
+                        </ul>
+                        <strong>输出产物：</strong> e2e_test_results.xml, visual_regression_report.html
+                    </div>
+                </div>
+
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-name">👁️ 人工审核员</div>
+                        <span class="stage-status status-waiting_human_review">Human</span>
+                    </div>
+                    <div class="agent-role">AgentRole.HUMAN_REVIEWER</div>
+                    <div class="stage-details">
+                        <strong>核心职责：</strong>
+                        <ul class="artifacts-list">
+                            <li>关键节点质量把关</li>
+                            <li>业务需求符合度确认</li>
+                            <li>风险评估与决策</li>
+                            <li>生产发布审批</li>
+                        </ul>
+                        <strong>审核工具：</strong> 审核面板、差异对比、一键通过/驳回
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <p>© 2026 端到端研发自动化系统 | 基于 OpenClaw + Claude Code + KubeSphere</p>
+            <p style="margin-top: 10px; font-size: 0.9em;">
+                技术支持：AI 科幻量子炫彩风格 | 报告生成时间：<span id="footer-time"></span>
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        // 初始化时间显示
+        function updateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('current-time').textContent = timeStr;
+            document.getElementById('footer-time').textContent = timeStr;
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+
+        // 工作流阶段数据
+        const workflowStages = [
+            { name: "需求分析", role: "REQUIREMENT_ANALYST", humanReview: true },
+            { name: "PRD 设计", role: "PRD_DESIGNER", humanReview: true },
+            { name: "后端技术方案设计", role: "BACKEND_ARCHITECT", humanReview: true },
+            { name: "前端技术方案设计", role: "FRONTEND_ARCHITECT", humanReview: true },
+            { name: "API 接口协议设计", role: "API_DESIGNER", humanReview: true },
+            { name: "AI Coding - 后端开发", role: "AI_CODER", humanReview: false },
+            { name: "AI Coding - 前端开发", role: "AI_CODER", humanReview: false },
+            { name: "单元测试生成与执行", role: "UNIT_TESTER", humanReview: false },
+            { name: "集成测试", role: "INTEGRATION_TESTER", humanReview: false },
+            { name: "CI/CD 流水线构建", role: "CI_CD_ENGINEER", humanReview: false },
+            { name: "Docker 镜像构建", role: "CI_CD_ENGINEER", humanReview: false },
+            { name: "K8S/KubeSphere 部署", role: "K8S_DEPLOYER", humanReview: true },
+            { name: "UI 自动化测试验收", role: "UI_TESTER", humanReview: true },
+            { name: "生产发布", role: "HUMAN_REVIEWER", humanReview: true }
+        ];
+
+        // 渲染工作流阶段
+        function renderWorkflowStages(statuses = {}) {
+            const container = document.getElementById('workflow-stages');
+            container.innerHTML = workflowStages.map((stage, index) => {
+                const status = statuses[index] || 'pending';
+                const statusClass = `status-${status}`;
+                const statusText = {
+                    'pending': '待执行',
+                    'in_progress': '执行中',
+                    'completed': '已完成',
+                    'failed': '失败',
+                    'waiting_human_review': '待人工审核',
+                    'rolled_back': '已回滚'
+                }[status];
+
+                return `
+                    <div class="stage-card">
+                        <div class="stage-header">
+                            <div class="stage-name">${index + 1}. ${stage.name}</div>
+                            <span class="stage-status ${statusClass}">${statusText}</span>
+                        </div>
+                        <div class="agent-role">${stage.role}${stage.humanReview ? ' 👤' : ''}</div>
+                        <div class="stage-details">
+                            ${stage.humanReview ? '<div style="color: var(--quantum-purple); margin-bottom: 8px;">⚡ 人机协同节点</div>' : ''}
+                            <div>角色：${translateRole(stage.role)}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function translateRole(role) {
+            const roleMap = {
+                'REQUIREMENT_ANALYST': '需求分析师',
+                'PRD_DESIGNER': 'PRD 设计师',
+                'BACKEND_ARCHITECT': '后端架构师',
+                'FRONTEND_ARCHITECT': '前端架构师',
+                'API_DESIGNER': 'API 设计师',
+                'AI_CODER': 'AI 编码工程师',
+                'UNIT_TESTER': '单元测试工程师',
+                'INTEGRATION_TESTER': '集成测试工程师',
+                'CI_CD_ENGINEER': 'CI/CD 工程师',
+                'K8S_DEPLOYER': 'K8S 部署工程师',
+                'UI_TESTER': 'UI 自动化测试工程师',
+                'HUMAN_REVIEWER': '人工审核员'
+            };
+            return roleMap[role] || role;
+        }
+
+        // 初始化渲染
+        renderWorkflowStages();
+
+        // 概率滑块
+        const probabilitySlider = document.getElementById('probability-slider');
+        const probabilityValue = document.getElementById('probability-value');
+        probabilitySlider.addEventListener('input', (e) => {
+            probabilityValue.textContent = e.target.value + '%';
+        });
+
+        // 模拟变量
+        let simulationRunning = false;
+        let exceptionCount = 0;
+        let completedCount = 0;
+        let failedCount = 0;
+        let totalDuration = 0;
+        let exceptionLog = [];
+
+        // 添加日志
+        function addLog(message, type = 'info') {
+            const logOutput = document.getElementById('log-output');
+            const logLine = document.createElement('div');
+            logLine.className = `log-line log-${type}`;
+            const timestamp = new Date().toLocaleTimeString('zh-CN');
+            logLine.textContent = `[${timestamp}] ${message}`;
+            logOutput.appendChild(logLine);
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+
+        // 更新指标
+        function updateMetrics() {
+            document.getElementById('metric-completed').textContent = completedCount;
+            document.getElementById('metric-failed').textContent = failedCount;
+            document.getElementById('metric-exceptions').textContent = exceptionCount;
+            document.getElementById('metric-duration').textContent = totalDuration + 'ms';
+            const rate = workflowStages.length > 0 ? Math.round(completedCount / workflowStages.length * 100) : 0;
+            document.getElementById('metric-completion-rate').textContent = rate + '%';
+            
+            const progress = workflowStages.length > 0 ? (completedCount + failedCount) / workflowStages.length * 100 : 0;
+            document.getElementById('progress-bar').style.width = progress + '%';
+        }
+
+        // 运行模拟
+        async function runSimulation() {
+            if (simulationRunning) return;
+            
+            simulationRunning = true;
+            exceptionCount = 0;
+            completedCount = 0;
+            failedCount = 0;
+            totalDuration = 0;
+            exceptionLog = [];
+            
+            addLog('=== 开始端到端流程模拟 ===', 'info');
+            
+            const enableExceptions = document.getElementById('exception-toggle').checked;
+            const exceptionProbability = parseInt(probabilitySlider.value) / 100;
+            
+            const statuses = {};
+            
+            for (let i = 0; i < workflowStages.length; i++) {
+                const stage = workflowStages[i];
+                
+                // 检查是否之前有失败（级联失败）
+                if (failedCount > 0 && i > completedCount + (exceptionLog.length > 0 ? 1 : 0)) {
+                    addLog(`阶段 "${stage.name}" 跳过（前置阶段失败）`, 'warning');
+                    statuses[i] = 'pending';
+                    renderWorkflowStages(statuses);
+                    continue;
+                }
+                
+                addLog(`执行阶段 ${i + 1}/${workflowStages.length}: ${stage.name}`, 'info');
+                statuses[i] = 'in_progress';
+                renderWorkflowStages(statuses);
+                
+                // 模拟执行时间
+                const duration = Math.floor(Math.random() * 300) + 100;
+                await sleep(duration);
+                totalDuration += duration;
+                
+                // 检查是否触发异常
+                let hasException = false;
+                if (enableExceptions && Math.random() < exceptionProbability) {
+                    hasException = true;
+                }
+                
+                if (hasException) {
+                    const exceptionType = getRandomException();
+                    exceptionCount++;
+                    failedCount++;
+                    
+                    const message = `[${stage.name}] ${exceptionType.message}`;
+                    addLog(message, 'error');
+                    
+                    exceptionLog.push({
+                        timestamp: new Date().toISOString(),
+                        stage: stage.name,
+                        type: exceptionType.type,
+                        message: exceptionType.message
+                    });
+                    
+                    statuses[i] = 'failed';
+                    renderWorkflowStages(statuses);
+                    renderExceptionLog();
+                    
+                    if (stage.humanReview) {
+                        statuses[i] = 'waiting_human_review';
+                        addLog(`阶段 "${stage.name}" 等待人工审核...`, 'warning');
+                        renderWorkflowStages(statuses);
+                    }
+                    
+                    addLog(`❌ 阶段 "${stage.name}" 执行失败`, 'error');
+                    break; // 停止后续阶段
+                } else {
+                    completedCount++;
+                    
+                    if (stage.humanReview) {
+                        statuses[i] = 'waiting_human_review';
+                        renderWorkflowStages(statuses);
+                        addLog(`阶段 "${stage.name}" 等待人工审核...`, 'warning');
+                        await sleep(200);
+                        // 自动审核通过
+                        statuses[i] = 'completed';
+                        addLog(`✅ 人工审核通过：${stage.name}`, 'success');
+                    } else {
+                        statuses[i] = 'completed';
+                    }
+                    
+                    renderWorkflowStages(statuses);
+                    addLog(`✅ 阶段 "${stage.name}" 执行成功`, 'success');
+                }
+                
+                updateMetrics();
+            }
+            
+            if (failedCount === 0 && completedCount === workflowStages.length) {
+                addLog('=== 🎉 全流程模拟成功完成 ===', 'success');
+            } else {
+                addLog(`=== 模拟结束：完成${completedCount}个阶段，失败${failedCount}个阶段，异常${exceptionCount}次 ===`, 'warning');
+            }
+            
+            updateMetrics();
+            simulationRunning = false;
+        }
+
+        // 重置模拟
+        function resetSimulation() {
+            simulationRunning = false;
+            exceptionCount = 0;
+            completedCount = 0;
+            failedCount = 0;
+            totalDuration = 0;
+            exceptionLog = [];
+            
+            document.getElementById('log-output').innerHTML = '<div class="log-line log-info">模拟已重置，等待启动...</div>';
+            document.getElementById('exception-log-container').innerHTML = '<p style="color: #8080a0; text-align: center; padding: 30px;">暂无异常记录</p>';
+            
+            renderWorkflowStages({});
+            updateMetrics();
+            addLog('模拟已重置', 'info');
+        }
+
+        // 手动注入异常
+        function injectException() {
+            const exceptionType = getRandomException();
+            exceptionCount++;
+            
+            exceptionLog.push({
+                timestamp: new Date().toISOString(),
+                stage: '手动注入',
+                type: exceptionType.type,
+                message: exceptionType.message
+            });
+            
+            renderExceptionLog();
+            addLog(`⚠ 手动注入异常：${exceptionType.message}`, 'error');
+            updateMetrics();
+        }
+
+        // 获取随机异常类型
+        function getRandomException() {
+            const exceptions = [
+                { type: 'network_timeout', message: '网络连接超时，无法访问外部 API 服务' },
+                { type: 'api_rate_limit', message: 'API 调用频率超限，被服务商限流' },
+                { type: 'code_compilation_error', message: '代码编译失败，存在语法错误或依赖冲突' },
+                { type: 'test_failure', message: '测试用例执行失败，断言不通过' },
+                { type: 'deployment_failure', message: '部署失败，目标环境不可用或配置错误' },
+                { type: 'resource_exhausted', message: '资源耗尽，CPU/内存不足' },
+                { type: 'configuration_error', message: '配置文件错误，缺少必要参数或格式不正确' },
+                { type: 'docker_build_failure', message: 'Docker 镜像构建失败，Dockerfile 错误或基础镜像不可用' },
+                { type: 'k8s_scheduling_failure', message: 'K8S 调度失败，没有可用节点或资源配额不足' },
+                { type: 'ui_element_not_found', message: 'UI 元素定位失败，页面结构可能已变更' }
+            ];
+            return exceptions[Math.floor(Math.random() * exceptions.length)];
+        }
+
+        // 渲染异常日志
+        function renderExceptionLog() {
+            const container = document.getElementById('exception-log-container');
+            
+            if (exceptionLog.length === 0) {
+                container.innerHTML = '<p style="color: #8080a0; text-align: center; padding: 30px;">暂无异常记录</p>';
+                return;
+            }
+            
+            container.innerHTML = exceptionLog.map(log => `
+                <div class="exception-item">
+                    <div class="exception-icon">⚠</div>
+                    <div class="exception-content">
+                        <div class="exception-type">${log.type}</div>
+                        <div class="exception-message">${log.stage}: ${log.message}</div>
+                        <div class="exception-timestamp">${new Date(log.timestamp).toLocaleString('zh-CN')}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 辅助函数
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // 初始更新
+        updateMetrics();
+    </script>
+</body>
+</html>

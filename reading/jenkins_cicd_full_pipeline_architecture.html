@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jenkins CI/CD 全流程流水线架构设计 - 基于 OpenClaw + Claude Code 的端到端研发自动化系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --quantum-blue: #00f5ff;
+            --quantum-purple: #bd00ff;
+            --quantum-pink: #ff00e6;
+            --quantum-green: #00ff9d;
+            --quantum-orange: #ff6b00;
+            --dark-bg: #0a0a1a;
+            --card-bg: rgba(10, 10, 26, 0.8);
+            --neon-glow: 0 0 10px rgba(0, 245, 255, 0.5), 0 0 20px rgba(0, 245, 255, 0.3);
+            --purple-glow: 0 0 10px rgba(189, 0, 255, 0.5), 0 0 20px rgba(189, 0, 255, 0.3);
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a0a2e 50%, #0a1a2a 100%);
+            color: #e0e0e0;
+            line-height: 1.6;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(0, 245, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(189, 0, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(255, 0, 230, 0.05) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+            padding: 40px;
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(189, 0, 255, 0.1));
+            border-radius: 20px;
+            border: 2px solid rgba(0, 245, 255, 0.3);
+            box-shadow: var(--neon-glow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                45deg,
+                transparent 30%,
+                rgba(0, 245, 255, 0.1) 50%,
+                transparent 70%
+            );
+            animation: shimmer 3s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) rotate(45deg); }
+        }
+
+        h1 {
+            font-size: 2.8em;
+            background: linear-gradient(90deg, var(--quantum-blue), var(--quantum-purple), var(--quantum-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(0, 245, 255, 0.5);
+            position: relative;
+            z-index: 1;
+        }
+
+        .subtitle {
+            font-size: 1.3em;
+            color: var(--quantum-green);
+            margin-bottom: 15px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .version-info {
+            display: inline-block;
+            padding: 8px 20px;
+            background: rgba(0, 245, 255, 0.1);
+            border: 1px solid var(--quantum-blue);
+            border-radius: 20px;
+            font-size: 0.9em;
+            color: var(--quantum-blue);
+            position: relative;
+            z-index: 1;
+        }
+
+        .section {
+            margin-bottom: 50px;
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 30px;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+        }
+
+        .section-title {
+            font-size: 2em;
+            color: var(--quantum-blue);
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(0, 245, 255, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .section-title::before {
+            content: '◈';
+            color: var(--quantum-purple);
+            font-size: 1.2em;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.2); }
+        }
+
+        .workflow-diagram {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.05), rgba(189, 0, 255, 0.05));
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+        }
+
+        .workflow-step {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(10, 10, 26, 0.6);
+            border-radius: 10px;
+            border-left: 4px solid var(--quantum-blue);
+            transition: all 0.3s ease;
+        }
+
+        .workflow-step:hover {
+            transform: translateX(10px);
+            box-shadow: var(--neon-glow);
+            border-left-color: var(--quantum-purple);
+        }
+
+        .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--quantum-blue), var(--quantum-purple));
+            border-radius: 50%;
+            font-weight: bold;
+            color: white;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        .step-title {
+            font-size: 1.3em;
+            color: var(--quantum-green);
+            margin-bottom: 8px;
+        }
+
+        .step-description {
+            color: #b0b0b0;
+            font-size: 0.95em;
+        }
+
+        .agent-card {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.08), rgba(189, 0, 255, 0.08));
+            border-radius: 12px;
+            padding: 25px;
+            margin: 20px 0;
+            border: 1px solid rgba(189, 0, 255, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .agent-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--purple-glow);
+            border-color: var(--quantum-pink);
+        }
+
+        .agent-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .agent-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--quantum-purple), var(--quantum-pink));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            box-shadow: 0 4px 15px rgba(189, 0, 255, 0.4);
+        }
+
+        .agent-name {
+            font-size: 1.4em;
+            color: var(--quantum-blue);
+            font-weight: bold;
+        }
+
+        .agent-role {
+            color: var(--quantum-green);
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .agent-responsibilities {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .agent-responsibilities li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+            color: #d0d0d0;
+        }
+
+        .agent-responsibilities li::before {
+            content: '▸';
+            position: absolute;
+            left: 0;
+            color: var(--quantum-orange);
+        }
+
+        .tech-stack {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .tech-item {
+            background: rgba(10, 10, 26, 0.6);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .tech-item:hover {
+            transform: scale(1.05);
+            border-color: var(--quantum-blue);
+            box-shadow: var(--neon-glow);
+        }
+
+        .tech-icon {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .tech-name {
+            font-size: 1.2em;
+            color: var(--quantum-blue);
+            margin-bottom: 8px;
+        }
+
+        .tech-desc {
+            font-size: 0.9em;
+            color: #a0a0a0;
+        }
+
+        .pipeline-code {
+            background: #1a1a2e;
+            border-radius: 10px;
+            padding: 20px;
+            overflow-x: auto;
+            margin: 20px 0;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        .code-keyword {
+            color: var(--quantum-purple);
+        }
+
+        .code-string {
+            color: var(--quantum-green);
+        }
+
+        .code-comment {
+            color: #6a6a8a;
+        }
+
+        .code-function {
+            color: var(--quantum-blue);
+        }
+
+        .human-machine-collab {
+            background: linear-gradient(135deg, rgba(255, 107, 0, 0.1), rgba(255, 0, 230, 0.1));
+            border: 2px solid var(--quantum-orange);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 30px 0;
+        }
+
+        .collab-title {
+            color: var(--quantum-orange);
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .collab-points {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+
+        .collab-point {
+            background: rgba(10, 10, 26, 0.6);
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 3px solid var(--quantum-orange);
+        }
+
+        .collab-point h4 {
+            color: var(--quantum-pink);
+            margin-bottom: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: rgba(10, 10, 26, 0.4);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(0, 245, 255, 0.1);
+        }
+
+        th {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.2), rgba(189, 0, 255, 0.2));
+            color: var(--quantum-blue);
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        tr:hover {
+            background: rgba(0, 245, 255, 0.05);
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(0, 255, 157, 0.1));
+            border-left: 4px solid var(--quantum-green);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 60px;
+            padding: 30px;
+            background: rgba(10, 10, 26, 0.8);
+            border-radius: 15px;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+        }
+
+        .footer-text {
+            color: #808080;
+            font-size: 0.9em;
+        }
+
+        .quantum-divider {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--quantum-blue), var(--quantum-purple), var(--quantum-pink), transparent);
+            margin: 40px 0;
+            position: relative;
+        }
+
+        .quantum-divider::before {
+            content: '◈';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--quantum-blue);
+            font-size: 1.5em;
+            background: var(--dark-bg);
+            padding: 0 15px;
+        }
+
+        ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        li {
+            margin: 8px 0;
+            color: #c0c0c0;
+        }
+
+        strong {
+            color: var(--quantum-blue);
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+            
+            .workflow-step {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .step-number {
+                margin-bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Jenkins CI/CD 全流程流水线架构设计</h1>
+            <p class="subtitle">基于 OpenClaw + Claude Code 的端到端研发自动化系统</p>
+            <div class="version-info">
+                📅 2026 年 3 月 | 🚀 v2.0 | ⚡ AI-Driven DevOps
+            </div>
+        </header>
+
+        <div class="section">
+            <h2 class="section-title">系统总体架构概览</h2>
+            <p style="font-size: 1.1em; margin-bottom: 20px;">
+                本系统设计了一个完整的<span style="color: var(--quantum-green); font-weight: bold;">从需求到部署</span>的端到端自动化研发流程，
+                通过<span style="color: var(--quantum-blue);">AI Agent 集群</span>协同工作，实现人机高效协作的现代化软件工程体系。
+            </p>
+            
+            <div class="workflow-diagram">
+                <h3 style="color: var(--quantum-purple); margin-bottom: 20px; text-align: center;">🔄 全流程自动化研发链路</h3>
+                
+                <div class="workflow-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <div class="step-title">需求分析与 PRD 设计</div>
+                        <div class="step-description">需求分析 Agent → PRD 自动生成 → 需求评审与优化</div>
+                    </div>
+                </div>
+
+                <div class="workflow-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <div class="step-title">技术方案设计</div>
+                        <div class="step-description">后端架构设计 Agent + 前端架构设计 Agent → 技术方案文档生成</div>
+                    </div>
+                </div>
+
+                <div class="workflow-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <div class="step-title">API 接口协议设计</div>
+                        <div class="step-description">前后端 API 接口开发协议设计 Agent → OpenAPI/Swagger 规范生成</div>
+                    </div>
+                </div>
+
+                <div class="workflow-step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <div class="step-title">AI Coding 代码实现</div>
+                        <div class="step-description">OpenClaw + Claude Code 协同编码 → 前后端代码自动生成</div>
+                    </div>
+                </div>
+
+                <div class="workflow-step">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <div class="step-title">单元测试与质量保障</div>
+                        <div class="step-description">Unit Test Agent → 测试用例生成 → 代码覆盖率分析</div>
+                    </div>
+                </div>
+
+                <div class="workflow-step">
+                    <div class="step-number">6</div>
+                    <div class="step-content">
+                        <div class="step-title">集成测试</div>
+                        <div class="step-description">集成测试 Agent → 接口联调测试 → 性能压力测试</div>
+                    </div>
+                </div>
+
+                <div class="workflow-step">
+                    <div class="step-number">7</div>
+                    <div class="step-content">
+                        <div class="step-title">CI/CD 流水线执行</div>
+                        <div class="step-description">Jenkins Pipeline → Docker 容器化 → K8S/KubeSphere 自动部署</div>
+                    </div>
+                </div>
+
+                <div class="workflow-step">
+                    <div class="step-number">8</div>
+                    <div class="step-content">
+                        <div class="step-title">UI 自动化测试验收</div>
+                        <div class="step-description">UI 测试 Agent → E2E 测试 → 验收报告生成 → 上线发布</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="quantum-divider"></div>
+
+        <div class="section">
+            <h2 class="section-title">各研发角色岗位 Agents 详解</h2>
+            
+            <div class="agent-card">
+                <div class="agent-header">
+                    <div class="agent-icon">📋</div>
+                    <div>
+                        <div class="agent-name">需求分析 Agent</div>
+                        <div class="agent-role">岗位职责：需求挖掘、业务分析、PRD 文档自动生成</div>
+                    </div>
+                </div>
+                <ul class="agent-responsibilities">
+                    <li><strong>输入处理：</strong>接收产品原始需求描述（自然语言/语音/文档）</li>
+                    <li><strong>需求拆解：</strong>使用 NLP 技术进行需求实体识别、业务场景分析、用户故事映射</li>
+                    <li><strong>PRD 生成：</strong>自动生成标准化 PRD 文档，包含功能列表、业务流程图、数据字典</li>
+                    <li><strong>需求评审：</strong>与产品经理进行人机协同评审，支持多轮迭代优化</li>
+                    <li><strong>需求追踪：</strong>建立需求 - 功能点 - 测试用例的追溯矩阵</li>
+                    <li><strong>技术栈：</strong>Claude Code + 自定义 Prompt 工程 + 业务知识库 RAG</li>
+                </ul>
+            </div>
+
+            <div class="agent-card">
+                <div class="agent-header">
+                    <div class="agent-icon">🏗️</div>
+                    <div>
+                        <div class="agent-name">后端架构设计 Agent</div>
+                        <div class="agent-role">岗位职责：系统架构设计、技术选型、数据库设计、微服务拆分</div>
+                    </div>
+                </div>
+                <ul class="agent-responsibilities">
+                    <li><strong>架构模式选择：</strong>根据业务场景推荐单体/微服务/Serverless 架构</li>
+                    <li><strong>技术栈选型：</strong>基于项目规模、团队能力、性能要求推荐最优技术组合</li>
+                    <li><strong>数据库设计：</strong>ER 图自动生成、表结构设计、索引优化建议</li>
+                    <li><strong>API 规划：</strong>RESTful/gRPC/GraphQL接口设计规范制定</li>
+                    <li><strong>安全设计：</strong>认证授权机制、数据加密、防攻击策略设计</li>
+                    <li><strong>输出产物：</strong>《后端技术方案设计文档》《数据库设计文档》《API 接口规范》</li>
+                </ul>
+            </div>
+
+            <div class="agent-card">
+                <div class="agent-header">
+                    <div class="agent-icon">🎨</div>
+                    <div>
+                        <div class="agent-name">前端架构设计 Agent</div>
+                        <div class="agent-role">岗位职责：前端技术选型、组件架构设计、UI/UX 规范制定</div>
+                    </div>
+                </div>
+                <ul class="agent-responsibilities">
+                    <li><strong>框架选型：</strong>React/Vue/Angular技术栈对比与推荐</li>
+                    <li><strong>组件设计：</strong>可复用组件库规划、状态管理方案设计</li>
+                    <li><strong>UI 规范：</strong>设计系统 (Design System) 生成、主题配置、响应式布局策略</li>
+                    <li><strong>性能优化：</strong>代码分割、懒加载、缓存策略、首屏优化方案</li>
+                    <li><strong>跨端适配：</strong>PWA、小程序、移动端 H5 多端解决方案</li>
+                    <li><strong>输出产物：</strong>《前端技术方案设计文档》《组件库文档》《UI 设计规范》</li>
+                </ul>
+            </div>
+
+            <div class="agent-card">
+                <div class="agent-header">
+                    <div class="agent-icon">🔌</div>
+                    <div>
+                        <div class="agent-name">API 接口协议设计 Agent</div>
+                        <div class="agent-role">岗位职责：前后端接口契约设计、OpenAPI 规范生成、Mock 服务搭建</div>
+                    </div>
+                </div>
+                <ul class="agent-responsibilities">
+                    <li><strong>接口定义：</strong>基于 PRD 和技术方案自动生成 API 接口定义</li>
+                    <li><strong>OpenAPI 规范：</strong>生成符合 OpenAPI 3.0 标准的 YAML/JSON 文档</li>
+                    <li><strong>Mock 服务：</strong>自动搭建 Mock Server，支持前端并行开发</li>
+                    <li><strong>接口文档：</strong>生成 Swagger UI/ReDoc 可视化接口文档</li>
+                    <li><strong>版本管理：</strong>API 版本控制策略、向后兼容性检查</li>
+                    <li><strong>输出产物：</strong>《API 接口文档》《Mock 服务》《接口测试用例》</li>
+                </ul>
+            </div>
+
+            <div class="agent-card">
+                <div class="agent-header">
+                    <div class="agent-icon">💻</div>
+                    <div>
+                        <div class="agent-name">AI Coding 实现 Agent (OpenClaw + Claude Code)</div>
+                        <div class="agent-role">岗位职责：基于设计文档进行前后端代码自动生成、代码审查、重构优化</div>
+                    </div>
+                </div>
+                <ul class="agent-responsibilities">
+                    <li><strong>OpenClaw 集成：</strong>本地化 AI 模型部署、私有代码库训练、安全隔离环境</li>
+                    <li><strong>Claude Code 协同：</strong>利用 Claude 的代码理解与生成能力进行复杂逻辑实现</li>
+                    <li><strong>后端代码生成：</strong>Controller/Service/DAO 层代码、业务逻辑实现、单元测试</li>
+                    <li><strong>前端代码生成：</strong>组件开发、页面搭建、状态管理、API 调用封装</li>
+                    <li><strong>代码审查：</strong>自动 Code Review、代码规范检查、潜在 Bug 检测</li>
+                    <li><strong>智能重构：</strong>代码异味检测、性能优化建议、重复代码消除</li>
+                    <li><strong>人机协同：</strong>开发者可通过自然语言指令调整代码实现策略</li>
+                </ul>
+            </div>
+
+            <div class="agent-card">
+                <div class="agent-header">
+                    <div class="agent-icon">✅</div>
+                    <div>
+                        <div class="agent-name">单元测试 Agent</div>
+                        <div class="agent-role">岗位职责：测试用例自动生成、单元测试执行、代码覆盖率分析</div>
+                    </div>
+                </div>
+                <ul class="agent-responsibilities">
+                    <li><strong>测试用例生成：</strong>基于代码逻辑自动生成 JUnit/Pytest/Jest测试用例</li>
+                    <li><strong>边界条件测试：</strong>自动识别边界值、异常场景、极端情况测试</li>
+                    <li><strong>Mock 数据生成：</strong>智能生成测试数据、Mock 对象、Fixture 配置</li>
+                    <li><strong>覆盖率分析：</strong>行覆盖率、分支覆盖率、路径覆盖率统计与可视化</li>
+                    <li><strong>测试报告：</strong>生成详细测试报告，标注未覆盖代码块和改进建议</li>
+                    <li><strong>持续监控：</strong>代码变更时自动触发回归测试，确保质量不下降</li>
+                </ul>
+            </div>
+
+            <div class="agent-card">
+                <div class="agent-header">
+                    <div class="agent-icon">🔗</div>
+                    <div>
+                        <div class="agent-name">集成测试 Agent</div>
+                        <div class="agent-role">岗位职责：接口联调测试、性能压力测试、稳定性验证</div>
+                    </div>
+                </div>
+                <ul class="agent-responsibilities">
+                    <li><strong>接口集成测试：</strong>多服务接口联调、数据流验证、异常场景测试</li>
+                    <li><strong>性能测试：</strong>负载测试、压力测试、并发测试、响应时间分析</li>
+                    <li><strong>数据库测试：</strong>事务一致性验证、锁机制测试、查询性能优化</li>
+                    <li><strong>消息队列测试：</strong>Kafka/RabbitMQ消息传递可靠性验证</li>
+                    <li><strong>缓存测试：</strong>Redis/Memcached缓存命中率、失效策略验证</li>
+                    <li><strong>输出产物：</strong>《集成测试报告》《性能测试报告》《瓶颈分析报告》</li>
+                </ul>
+            </div>
+
+            <div class="agent-card">
+                <div class="agent-header">
+                    <div class="agent-icon">🚀</div>
+                    <div>
+                        <div class="agent-name">CI/CD 部署 Agent</div>
+                        <div class="agent-role">岗位职责：Jenkins Pipeline 编排、Docker 容器化、K8S 自动部署</div>
+                    </div>
+                </div>
+                <ul class="agent-responsibilities">
+                    <li><strong>Pipeline 编排：</strong>声明式 Jenkinsfile 编写、多阶段流水线设计</li>
+                    <li><strong>Docker 构建：</strong>Dockerfile 优化、多阶段构建、镜像体积压缩</li>
+                    <li><strong>镜像管理：</strong>私有镜像仓库推送、版本标签管理、安全扫描</li>
+                    <li><strong>K8S 部署：</strong>Deployment/Service/Ingress资源配置、Helm Chart 管理</li>
+                    <li><strong>KubeSphere 集成：</strong>多集群管理、灰度发布、蓝绿部署策略</li>
+                    <li><strong>监控告警：</strong>Prometheus+Grafana监控配置、异常告警规则设置</li>
+                    <li><strong>回滚机制：</strong>一键回滚策略、版本快照管理、灾难恢复预案</li>
+                </ul>
+            </div>
+
+            <div class="agent-card">
+                <div class="agent-header">
+                    <div class="agent-icon">🖥️</div>
+                    <div>
+                        <div class="agent-name">UI 自动化测试验收 Agent</div>
+                        <div class="agent-role">岗位职责：E2E 测试、UI 自动化验证、用户体验测试、验收报告生成</div>
+                    </div>
+                </div>
+                <ul class="agent-responsibilities">
+                    <li><strong>E2E 测试：</strong>Selenium/Cypress/Playwright端到端测试脚本生成</li>
+                    <li><strong>UI 自动化：</strong>元素定位、交互操作、断言验证、截图对比</li>
+                    <li><strong>跨浏览器测试：</strong>Chrome/Firefox/Safari/Edge多浏览器兼容性验证</li>
+                    <li><strong>移动端测试：</strong>Appium 移动设备自动化、手势操作测试</li>
+                    <li><strong>视觉回归：</strong>像素级 UI 对比、样式变更检测、布局异常发现</li>
+                    <li><strong>无障碍测试：</strong>WCAG 标准合规性检查、屏幕阅读器兼容性</li>
+                    <li><strong>验收报告：</strong>生成可视化测试报告、缺陷追踪、上线决策建议</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="quantum-divider"></div>
+
+        <div class="section">
+            <h2 class="section-title">核心技术栈</h2>
+            <div class="tech-stack">
+                <div class="tech-item">
+                    <div class="tech-icon">🤖</div>
+                    <div class="tech-name">OpenClaw</div>
+                    <div class="tech-desc">本地化 AI Agent 框架，支持私有化部署和安全隔离的代码生成环境</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">🧠</div>
+                    <div class="tech-name">Claude Code</div>
+                    <div class="tech-desc">Anthropic 先进代码模型，提供强大的代码理解与生成能力</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">⚙️</div>
+                    <div class="tech-name">Jenkins</div>
+                    <div class="tech-desc">开源 CI/CD 自动化服务器，支持丰富的插件生态和 Pipeline 编排</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">🐳</div>
+                    <div class="tech-name">Docker</div>
+                    <div class="tech-desc">容器化技术，提供一致的运行环境和高效的资源利用</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">☸️</div>
+                    <div class="tech-name">Kubernetes</div>
+                    <div class="tech-desc">容器编排平台，支持自动扩缩容、服务发现和负载均衡</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">🌐</div>
+                    <div class="tech-name">KubeSphere</div>
+                    <div class="tech-desc">企业级 K8S 管理平台，提供多租户、DevOps、监控等完整功能</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">📝</div>
+                    <div class="tech-name">OpenAPI</div>
+                    <div class="tech-desc">RESTful API 规范标准，支持接口文档自动生成和 Mock 服务</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">🧪</div>
+                    <div class="tech-name">Selenium/Playwright</div>
+                    <div class="tech-desc">UI 自动化测试框架，支持多浏览器和多语言绑定</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="quantum-divider"></div>
+
+        <div class="section">
+            <h2 class="section-title">Jenkins Pipeline 核心配置</h2>
+            
+            <h3 style="color: var(--quantum-blue); margin: 25px 0 15px;">声明式 Pipeline 示例</h3>
+            <div class="pipeline-code">
+<span class="code-comment">// Jenkinsfile - 全流程 CI/CD 流水线</span>
+<span class="code-keyword">pipeline</span> {
+    <span class="code-keyword">agent</span> {
+        kubernetes {
+            yaml <span class="code-string">'''
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: maven
+    image: maven:3.8-openjdk-17
+    command:
+    - cat
+    tty: true
+  - name: docker
+    image: docker:24.0
+    command:
+    - cat
+    tty: true
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command:
+    - cat
+    tty: true
+'''</span>
+        }
+    }
+
+    <span class="code-keyword">environment</span> {
+        DOCKER_REGISTRY = <span class="code-string">'registry.example.com'</span>
+        IMAGE_NAME = <span class="code-string">'myapp-backend'</span>
+        KUBE_CONFIG = credentials(<span class="code-string">'kubeconfig'</span>)
+        SONAR_TOKEN = credentials(<span class="code-string">'sonar-token'</span>)
+    }
+
+    <span class="code-keyword">stages</span> {
+        <span class="code-comment">// 阶段 1: 代码检出与依赖安装</span>
+        <span class="code-keyword">stage</span>(<span class="code-string">'Checkout & Install'</span>) {
+            steps {
+                checkout scm
+                container(<span class="code-string">'maven'</span>) {
+                    sh <span class="code-string">'mvn clean install -DskipTests'</span>
+                }
+            }
+        }
+
+        <span class="code-comment">// 阶段 2: 代码质量检查</span>
+        <span class="code-keyword">stage</span>(<span class="code-string">'Code Quality'</span>) {
+            steps {
+                container(<span class="code-string">'maven'</span>) {
+                    sh <span class="code-string">'mvn sonar:sonar -Dsonar.projectKey=${JOB_NAME}'</span>
+                }
+            }
+        }
+
+        <span class="code-comment">// 阶段 3: 单元测试</span>
+        <span class="code-keyword">stage</span>(<span class="code-string">'Unit Test'</span>) {
+            steps {
+                container(<span class="code-string">'maven'</span>) {
+                    sh <span class="code-string">'mvn test'</span>
+                }
+                junit allowEmptyResults: <span class="code-keyword">true</span>, testResults: <span class="code-string">'**/target/surefire-reports/*.xml'</span>
+            }
+        }
+
+        <span class="code-comment">// 阶段 4: 集成测试</span>
+        <span class="code-keyword">stage</span>(<span class="code-string">'Integration Test'</span>) {
+            steps {
+                container(<span class="code-string">'maven'</span>) {
+                    sh <span class="code-string">'mvn verify -Pintegration-test'</span>
+                }
+            }
+        }
+
+        <span class="code-comment">// 阶段 5: Docker 镜像构建</span>
+        <span class="code-keyword">stage</span>(<span class="code-string">'Build Docker Image'</span>) {
+            steps {
+                container(<span class="code-string">'docker'</span>) {
+                    script {
+                        def version = sh(script: <span class="code-string">'mvn help:evaluate -Dexpression=project.version -q -DforceStdout'</span>, returnStdout: <span class="code-keyword">true</span>).trim()
+                        env.IMAGE_TAG = <span class="code-string">"${version}-${BUILD_NUMBER}"</span>
+                    }
+                    sh <span class="code-string">'docker build -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} .'</span>
+                }
+            }
+        }
+
+        <span class="code-comment">// 阶段 6: 安全扫描</span>
+        <span class="code-keyword">stage</span>(<span class="code-string">'Security Scan'</span>) {
+            steps {
+                container(<span class="code-string">'docker'</span>) {
+                    sh <span class="code-string">'docker scan ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}'</span>
+                }
+            }
+        }
+
+        <span class="code-comment">// 阶段 7: 推送镜像仓库</span>
+        <span class="code-keyword">stage</span>(<span class="code-string">'Push to Registry'</span>) {
+            steps {
+                container(<span class="code-string">'docker'</span>) {
+                    withCredentials([usernamePassword(credentialsId: <span class="code-string">'docker-registry-auth'</span>, usernameVariable: <span class="code-string">'DOCKER_USER'</span>, passwordVariable: <span class="code-string">'DOCKER_PASS'</span>)]) {
+                        sh <span class="code-string">'echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin ${DOCKER_REGISTRY}'</span>
+                        sh <span class="code-string">'docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}'</span>
+                    }
+                }
+            }
+        }
+
+        <span class="code-comment">// 阶段 8: K8S 部署</span>
+        <span class="code-keyword">stage</span>(<span class="code-string">'Deploy to K8S'</span>) {
+            steps {
+                container(<span class="code-string">'kubectl'</span>) {
+                    script {
+                        kubeconfig(credentialsId: <span class="code-string">'kubeconfig'</span>, serverUrl: <span class="code-string">'https://k8s-cluster.example.com'</span>) {
+                            sh <span class="code-string">'kubectl set image deployment/${IMAGE_NAME} ${IMAGE_NAME}=${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} -n production'</span>
+                            sh <span class="code-string">'kubectl rollout status deployment/${IMAGE_NAME} -n production --timeout=300s'</span>
+                        }
+                    }
+                }
+            }
+        }
+
+        <span class="code-comment">// 阶段 9: UI 自动化测试</span>
+        <span class="code-keyword">stage</span>(<span class="code-string">'UI Automation Test'</span>) {
+            steps {
+                container(<span class="code-string">'maven'</span>) {
+                    sh <span class="code-string">'mvn test -Pselenium-test -Dbase.url=https://prod.example.com'</span>
+                }
+            }
+        }
+
+        <span class="code-comment">// 阶段 10: 通知与报告</span>
+        <span class="code-keyword">stage</span>(<span class="code-string">'Notification'</span>) {
+            steps {
+                script {
+                    if (currentBuild.result == <span class="code-string">'SUCCESS'</span>) {
+                        emailext subject: <span class="code-string">"部署成功：${JOB_NAME} [${BUILD_NUMBER}]"</span>,
+                                 body: <span class="code-string">"应用 ${IMAGE_NAME} 已成功部署到生产环境\n版本：${IMAGE_TAG}"</span>,
+                                 to: <span class="code-string">'team@example.com'</span>
+                    } else {
+                        emailext subject: <span class="code-string">"部署失败：${JOB_NAME} [${BUILD_NUMBER}]"</span>,
+                                 body: <span class="code-string">"部署失败，请登录 Jenkins 查看详细信息"</span>,
+                                 to: <span class="code-string">'team@example.com'</span>
+                    }
+                }
+            }
+        }
+    }
+
+    <span class="code-keyword">post</span> {
+        always {
+            cleanWs()
+            archiveArtifacts artifacts: <span class="code-string">'**/target/*.jar'</span>, allowEmptyArchive: <span class="code-keyword">true</span>
+        }
+        failure {
+            script {
+                sh <span class="code-string">'kubectl rollout undo deployment/${IMAGE_NAME} -n production'</span>
+            }
+        }
+    }
+}
+            </div>
+        </div>
+
+        <div class="human-machine-collab">
+            <h3 class="collab-title">🤝 人机协同关键节点</h3>
+            <div class="collab-points">
+                <div class="collab-point">
+                    <h4>需求评审阶段</h4>
+                    <p>AI 生成 PRD 后，产品经理进行业务逻辑审核和优先级调整，确保需求准确性</p>
+                </div>
+                <div class="collab-point">
+                    <h4>技术方案确认</h4>
+                    <p>架构师审核 AI 生成的技术方案，对关键技术决策进行人工确认和优化</p>
+                </div>
+                <div class="collab-point">
+                    <h4>代码审查环节</h4>
+                    <p>Senior Developer 对 AI 生成的核心业务代码进行 Review，确保代码质量和可维护性</p>
+                </div>
+                <div class="collab-point">
+                    <h4>测试用例补充</h4>
+                    <p>测试工程师补充 AI 未覆盖的边缘场景和特殊业务逻辑测试用例</p>
+                </div>
+                <div class="collab-point">
+                    <h4>上线审批流程</h4>
+                    <p>发布经理审核测试报告和风险评估，进行最终上线审批决策</p>
+                </div>
+                <div class="collab-point">
+                    <h4>异常处理介入</h4>
+                    <p>当自动化流程遇到异常或失败时，相关角色及时介入排查和修复</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="quantum-divider"></div>
+
+        <div class="section">
+            <h2 class="section-title">KubeSphere 部署架构</h2>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>组件</th>
+                        <th>功能描述</th>
+                        <th>配置建议</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>多集群管理</strong></td>
+                        <td>统一管理开发、测试、预发、生产多个 K8S 集群</td>
+                        <td>至少 3 节点 HA 集群，分离控制平面和工作节点</td>
+                    </tr>
+                    <tr>
+                        <td><strong>DevOps 工程</strong></td>
+                        <td>基于 Jenkins 的流水线管理，支持 Blue Ocean UI</td>
+                        <td>每个微服务独立 DevOps 工程，配置不同分支策略</td>
+                    </tr>
+                    <tr>
+                        <td><strong>应用商店</strong></td>
+                        <td>Helm Chart 应用模板管理，一键部署中间件</td>
+                        <td>预置 MySQL、Redis、Kafka、ES 等常用组件</td>
+                    </tr>
+                    <tr>
+                        <td><strong>可观测性</strong></td>
+                        <td>集成 Prometheus+Grafana+Jaeger 监控追踪体系</td>
+                        <td>配置自定义告警规则，对接钉钉/企业微信</td>
+                    </tr>
+                    <tr>
+                        <td><strong>灰度发布</strong></td>
+                        <td>支持金丝雀发布、蓝绿部署、A/B 测试</td>
+                        <td>配置流量比例逐步切换，设置健康检查阈值</td>
+                    </tr>
+                    <tr>
+                        <td><strong>多租户管理</strong></td>
+                        <td>基于 RBAC 的资源隔离和权限控制</td>
+                        <td>按团队划分工作空间，配置细粒度权限策略</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="quantum-divider"></div>
+
+        <div class="section">
+            <h2 class="section-title">实施路线图</h2>
+            
+            <div class="workflow-diagram">
+                <h3 style="color: var(--quantum-purple); margin-bottom: 20px;">📅 分阶段实施计划</h3>
+                
+                <div class="workflow-step">
+                    <div class="step-number">P1</div>
+                    <div class="step-content">
+                        <div class="step-title">第一阶段：基础设施搭建（2-3 周）</div>
+                        <div class="step-description">
+                            <ul>
+                                <li>部署 KubeSphere 多集群环境</li>
+                                <li>配置 Jenkins Master-Slave 架构</li>
+                                <li>搭建私有 Docker 镜像仓库</li>
+                                <li>集成 SonarQube 代码质量平台</li>
+                                <li>配置 Prometheus+Grafana 监控体系</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="workflow-step">
+                    <div class="step-number">P2</div>
+                    <div class="step-content">
+                        <div class="step-title">第二阶段：AI Agent 开发（4-6 周）</div>
+                        <div class="step-description">
+                            <ul>
+                                <li>部署 OpenClaw 本地 AI 环境</li>
+                                <li>集成 Claude Code API</li>
+                                <li>开发各岗位专业 Agent（需求/设计/开发/测试）</li>
+                                <li>构建业务知识库和 RAG 检索系统</li>
+                                <li>实现 Agent 间通信协调机制</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="workflow-step">
+                    <div class="step-number">P3</div>
+                    <div class="step-content">
+                        <div class="step-title">第三阶段：Pipeline 编排（3-4 周）</div>
+                        <div class="step-description">
+                            <ul>
+                                <li>编写标准化 Jenkinsfile 模板</li>
+                                <li>配置多环境部署策略</li>
+                                <li>实现自动化回滚机制</li>
+                                <li>集成 UI 自动化测试框架</li>
+                                <li>配置通知告警系统</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="workflow-step">
+                    <div class="step-number">P4</div>
+                    <div class="step-content">
+                        <div class="step-title">第四阶段：试点项目验证（4-6 周）</div>
+                        <div class="step-description">
+                            <ul>
+                                <li>选择 1-2 个中等复杂度项目试点</li>
+                                <li>全流程跑通并收集反馈</li>
+                                <li>优化 Agent 提示词和工作流</li>
+                                <li>完善人机协同机制</li>
+                                <li>建立度量指标体系</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="workflow-step">
+                    <div class="step-number">P5</div>
+                    <div class="step-content">
+                        <div class="step-title">第五阶段：全面推广（持续）</div>
+                        <div class="step-description">
+                            <ul>
+                                <li>组织培训和知识分享</li>
+                                <li>制定标准化操作手册</li>
+                                <li>建立最佳实践案例库</li>
+                                <li>持续优化和迭代升级</li>
+                                <li>扩展更多 AI 应用场景</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="quantum-divider"></div>
+
+        <div class="section">
+            <h2 class="section-title">关键成功要素</h2>
+            
+            <div class="highlight-box">
+                <h4 style="color: var(--quantum-green); margin-bottom: 15px;">✅ 技术层面</h4>
+                <ul>
+                    <li><strong>稳定的 AI 模型服务：</strong>确保 OpenClaw 和 Claude Code 的高可用性和低延迟响应</li>
+                    <li><strong>完善的监控体系：</strong>全链路监控、日志聚合、异常告警实时触达</li>
+                    <li><strong>安全的权限管控：</strong>最小权限原则、敏感信息加密、审计日志完整</li>
+                    <li><strong>高效的资源调度：</strong>K8S 弹性伸缩、资源配额管理、成本优化</li>
+                </ul>
+            </div>
+
+            <div class="highlight-box">
+                <h4 style="color: var(--quantum-blue); margin-bottom: 15px;">👥 组织层面</h4>
+                <ul>
+                    <li><strong>高层支持与投入：</strong>获得管理层认可，保障资源和政策支持</li>
+                    <li><strong>跨部门协作机制：</strong>产品、研发、测试、运维紧密配合，打破部门墙</li>
+                    <li><strong>持续学习文化：</strong>鼓励尝试新技术，容忍失败，快速迭代优化</li>
+                    <li><strong>明确的角色职责：</strong>清晰定义各岗位在自动化流程中的职责边界</li>
+                </ul>
+            </div>
+
+            <div class="highlight-box">
+                <h4 style="color: var(--quantum-purple); margin-bottom: 15px;">📊 度量指标</h4>
+                <ul>
+                    <li><strong>交付周期 (Lead Time)：</strong>从需求提出到上线的平均时长缩短 50%+</li>
+                    <li><strong>部署频率：</strong>从每周/每月提升到每天多次部署</li>
+                    <li><strong>变更失败率：</strong>控制在 5% 以下，快速回滚能力</li>
+                    <li><strong>平均恢复时间 (MTTR)：</strong>故障恢复时间缩短至 30 分钟内</li>
+                    <li><strong>代码质量指标：</strong>单元测试覆盖率&gt;80%，代码重复率&lt;5%</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="quantum-divider"></div>
+
+        <div class="section">
+            <h2 class="section-title">风险与应对策略</h2>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>风险类型</th>
+                        <th>具体风险</th>
+                        <th>影响程度</th>
+                        <th>应对策略</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>技术风险</strong></td>
+                        <td>AI 生成代码质量不稳定</td>
+                        <td>高</td>
+                        <td>建立严格的 Code Review 机制，核心代码人工审核，持续优化 Prompt</td>
+                    </tr>
+                    <tr>
+                        <td><strong>安全风险</strong></td>
+                        <td>代码泄露、敏感信息暴露</td>
+                        <td>极高</td>
+                        <td>私有化部署 AI 模型，代码脱敏处理，访问控制和审计日志</td>
+                    </tr>
+                    <tr>
+                        <td><strong>依赖风险</strong></td>
+                        <td>Claude API 服务不可用</td>
+                        <td>中</td>
+                        <td>建立多模型备份方案，本地模型兜底，降级策略</td>
+                    </tr>
+                    <tr>
+                        <td><strong>人员风险</strong></td>
+                        <td>团队抵触新技术，技能不足</td>
+                        <td>高</td>
+                        <td>系统性培训计划，设立变革 Champion，渐进式推广</td>
+                    </tr>
+                    <tr>
+                        <td><strong>流程风险</strong></td>
+                        <td>自动化流程中断，手动干预频繁</td>
+                        <td>中</td>
+                        <td>完善的异常处理机制，清晰的 SOP 文档，定期演练</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="footer">
+            <p class="footer-text">
+                © 2026 Jenkins CI/CD 全流程流水线架构设计报告 | 基于 OpenClaw + Claude Code 的端到端研发自动化系统<br>
+                生成时间：2026-03-14 | 版本号：v2.0 | AI科幻量子炫彩风格
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // 添加动态效果
+        document.addEventListener('DOMContentLoaded', function() {
+            const sections = document.querySelectorAll('.section');
+            
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.opacity = '1';
+                        entry.target.style.transform = 'translateY(0)';
+                    }
+                });
+            }, { threshold: 0.1 });
+
+            sections.forEach(section => {
+                section.style.opacity = '0';
+                section.style.transform = 'translateY(30px)';
+                section.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+                observer.observe(section);
+            });
+
+            // 添加鼠标悬停粒子效果
+            const cards = document.querySelectorAll('.agent-card, .tech-item');
+            cards.forEach(card => {
+                card.addEventListener('mousemove', (e) => {
+                    const rect = card.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    const glow = document.createElement('div');
+                    glow.style.position = 'absolute';
+                    glow.style.width = '100px';
+                    glow.style.height = '100px';
+                    glow.style.background = 'radial-gradient(circle, rgba(0, 245, 255, 0.3) 0%, transparent 70%)';
+                    glow.style.borderRadius = '50%';
+                    glow.style.pointerEvents = 'none';
+                    glow.style.left = (x - 50) + 'px';
+                    glow.style.top = (y - 50) + 'px';
+                    glow.style.transition = 'opacity 0.3s';
+                    
+                    card.appendChild(glow);
+                    
+                    setTimeout(() => {
+                        glow.style.opacity = '0';
+                        setTimeout(() => glow.remove(), 300);
+                    }, 100);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

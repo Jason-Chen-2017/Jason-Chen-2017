@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jenkins + Docker + K8s + KubeSphere 工具链版本选型与部署架构设计</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #00f0ff;
+            --secondary-color: #7b2cbf;
+            --accent-color: #ff006e;
+            --bg-dark: #0a0e27;
+            --bg-medium: #1a1f3a;
+            --bg-light: #2d3561;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --success-color: #00ff88;
+            --warning-color: #ffaa00;
+            --error-color: #ff4444;
+            --border-glow: 0 0 20px rgba(0, 240, 255, 0.3);
+            --card-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a103c 50%, var(--bg-dark) 100%);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(123, 44, 191, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(0, 240, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(255, 0, 110, 0.08) 0%, transparent 40%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+            padding: 40px;
+            background: linear-gradient(135deg, rgba(26, 31, 58, 0.8), rgba(45, 53, 97, 0.6));
+            border-radius: 20px;
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            box-shadow: var(--card-shadow);
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                45deg,
+                transparent 30%,
+                rgba(0, 240, 255, 0.05) 50%,
+                transparent 70%
+            );
+            animation: shimmer 6s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        h1 {
+            font-size: 2.8em;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+            text-shadow: 0 0 40px rgba(0, 240, 255, 0.3);
+            position: relative;
+        }
+
+        .subtitle {
+            font-size: 1.3em;
+            color: var(--text-secondary);
+            max-width: 900px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .section {
+            background: linear-gradient(135deg, rgba(26, 31, 58, 0.7), rgba(45, 53, 97, 0.5));
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 40px;
+            border: 1px solid rgba(0, 240, 255, 0.15);
+            box-shadow: var(--card-shadow);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .section:hover {
+            border-color: rgba(0, 240, 255, 0.3);
+            box-shadow: 0 15px 60px rgba(0, 0, 0, 0.5), var(--border-glow);
+            transform: translateY(-5px);
+        }
+
+        h2 {
+            font-size: 2em;
+            color: var(--primary-color);
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(0, 240, 255, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        h2::before {
+            content: '◈';
+            color: var(--accent-color);
+            font-size: 1.2em;
+            text-shadow: 0 0 20px var(--accent-color);
+        }
+
+        h3 {
+            font-size: 1.5em;
+            color: var(--secondary-color);
+            margin: 25px 0 15px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h3::before {
+            content: '▸';
+            color: var(--primary-color);
+        }
+
+        .version-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
+        }
+
+        .version-card {
+            background: linear-gradient(135deg, rgba(10, 14, 39, 0.8), rgba(26, 31, 58, 0.6));
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(123, 44, 191, 0.3);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .version-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+        }
+
+        .version-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary-color);
+            box-shadow: 0 10px 40px rgba(0, 240, 255, 0.2);
+        }
+
+        .version-card.recommended {
+            border-color: var(--success-color);
+            box-shadow: 0 10px 40px rgba(0, 255, 136, 0.2);
+        }
+
+        .version-card.recommended::before {
+            background: linear-gradient(90deg, var(--success-color), var(--primary-color));
+        }
+
+        .version-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .badge-lts {
+            background: rgba(0, 255, 136, 0.2);
+            color: var(--success-color);
+            border: 1px solid var(--success-color);
+        }
+
+        .badge-stable {
+            background: rgba(0, 240, 255, 0.2);
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+        }
+
+        .badge-beta {
+            background: rgba(255, 170, 0, 0.2);
+            color: var(--warning-color);
+            border: 1px solid var(--warning-color);
+        }
+
+        .version-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: var(--text-primary);
+            margin: 10px 0;
+            text-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+        }
+
+        .version-info {
+            color: var(--text-secondary);
+            font-size: 0.95em;
+            margin: 10px 0;
+        }
+
+        .version-features {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .feature-tag {
+            display: inline-block;
+            padding: 4px 12px;
+            margin: 5px 5px 0 0;
+            background: rgba(123, 44, 191, 0.3);
+            border-radius: 12px;
+            font-size: 0.85em;
+            color: var(--text-primary);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            background: rgba(10, 14, 39, 0.5);
+            border-radius: 15px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 15px 20px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        th {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.3), rgba(0, 240, 255, 0.1));
+            color: var(--primary-color);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.9em;
+            letter-spacing: 0.5px;
+        }
+
+        tr:hover {
+            background: rgba(0, 240, 255, 0.05);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .architecture-diagram {
+            background: rgba(10, 14, 39, 0.6);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+            border: 1px solid rgba(0, 240, 255, 0.2);
+        }
+
+        .diagram-title {
+            text-align: center;
+            font-size: 1.3em;
+            color: var(--primary-color);
+            margin-bottom: 25px;
+        }
+
+        .layer {
+            background: linear-gradient(135deg, rgba(26, 31, 58, 0.8), rgba(45, 53, 97, 0.6));
+            border-radius: 12px;
+            padding: 20px;
+            margin: 15px 0;
+            border: 1px solid rgba(123, 44, 191, 0.3);
+        }
+
+        .layer-title {
+            font-size: 1.2em;
+            color: var(--accent-color);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .component-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .component-item {
+            background: rgba(0, 240, 255, 0.08);
+            padding: 12px 18px;
+            border-radius: 8px;
+            border-left: 3px solid var(--primary-color);
+            transition: all 0.3s ease;
+        }
+
+        .component-item:hover {
+            background: rgba(0, 240, 255, 0.15);
+            transform: translateX(5px);
+        }
+
+        .component-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 5px;
+        }
+
+        .component-version {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+        }
+
+        .deployment-modes {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
+        }
+
+        .mode-card {
+            background: linear-gradient(135deg, rgba(26, 31, 58, 0.7), rgba(45, 53, 97, 0.5));
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(123, 44, 191, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .mode-card:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-5px);
+        }
+
+        .mode-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .mode-title {
+            font-size: 1.3em;
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        .mode-badge {
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .badge-dev {
+            background: rgba(0, 240, 255, 0.2);
+            color: var(--primary-color);
+        }
+
+        .badge-prod {
+            background: rgba(0, 255, 136, 0.2);
+            color: var(--success-color);
+        }
+
+        .badge-enterprise {
+            background: rgba(255, 0, 110, 0.2);
+            color: var(--accent-color);
+        }
+
+        .mode-specs {
+            list-style: none;
+        }
+
+        .mode-specs li {
+            padding: 8px 0;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .mode-specs li::before {
+            content: '✓';
+            color: var(--success-color);
+            font-weight: bold;
+        }
+
+        .hardware-requirements {
+            background: rgba(10, 14, 39, 0.6);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 25px 0;
+            border: 1px solid rgba(255, 170, 0, 0.3);
+        }
+
+        .requirement-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .requirement-row:last-child {
+            border-bottom: none;
+        }
+
+        .requirement-label {
+            color: var(--text-secondary);
+        }
+
+        .requirement-value {
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        .compatibility-matrix {
+            overflow-x: auto;
+            margin: 30px 0;
+        }
+
+        .info-box {
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.1), rgba(123, 44, 191, 0.1));
+            border-left: 4px solid var(--primary-color);
+            padding: 20px 25px;
+            margin: 25px 0;
+            border-radius: 0 12px 12px 0;
+        }
+
+        .info-box.warning {
+            border-left-color: var(--warning-color);
+            background: linear-gradient(135deg, rgba(255, 170, 0, 0.1), rgba(255, 107, 0, 0.1));
+        }
+
+        .info-box.success {
+            border-left-color: var(--success-color);
+            background: linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(0, 240, 255, 0.1));
+        }
+
+        .info-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .pipeline-flow {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            justify-content: center;
+            margin: 30px 0;
+            padding: 30px;
+            background: rgba(10, 14, 39, 0.5);
+            border-radius: 15px;
+        }
+
+        .pipeline-step {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.3), rgba(0, 240, 255, 0.1));
+            padding: 15px 25px;
+            border-radius: 10px;
+            text-align: center;
+            min-width: 140px;
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .pipeline-step:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(0, 240, 255, 0.3);
+        }
+
+        .step-number {
+            display: block;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: var(--accent-color);
+            margin-bottom: 8px;
+        }
+
+        .step-name {
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        .arrow {
+            color: var(--primary-color);
+            font-size: 1.5em;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        ul li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+            color: var(--text-secondary);
+        }
+
+        ul li::before {
+            content: '▹';
+            position: absolute;
+            left: 0;
+            color: var(--primary-color);
+        }
+
+        .footer {
+            text-align: center;
+            padding: 40px;
+            margin-top: 60px;
+            border-top: 1px solid rgba(0, 240, 255, 0.2);
+            color: var(--text-secondary);
+        }
+
+        .timestamp {
+            font-size: 0.9em;
+            opacity: 0.7;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+
+            .section {
+                padding: 25px;
+            }
+
+            .version-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .pipeline-flow {
+                flex-direction: column;
+            }
+
+            .arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Jenkins + Docker + K8s + KubeSphere</h1>
+            <p class="subtitle">端到端研发自动化系统工具链版本选型与部署架构设计方案</p>
+            <p class="timestamp">基于 OpenClaw + Claude Code 的 AI 驱动研发体系 · 2026 年 3 月</p>
+        </header>
+
+        <!-- 第一部分：版本选型 -->
+        <section class="section">
+            <h2>一、核心工具版本选型</h2>
+            
+            <div class="version-grid">
+                <!-- Jenkins -->
+                <div class="version-card recommended">
+                    <span class="version-badge badge-lts">LTS 推荐</span>
+                    <h3>Jenkins</h3>
+                    <div class="version-number">2.440.x LTS</div>
+                    <div class="version-info">
+                        <strong>发布周期：</strong>每 12 周<br>
+                        <strong>支持周期：</strong>长期支持至 2027 年<br>
+                        <strong>Java 要求：</strong>Java 17+ (推荐 Java 21)
+                    </div>
+                    <div class="version-features">
+                        <span class="feature-tag">Kubernetes 原生集成</span>
+                        <span class="feature-tag">Pipeline as Code</span>
+                        <span class="feature-tag">云原生 Agent</span>
+                        <span class="feature-tag">增强的安全模型</span>
+                    </div>
+                </div>
+
+                <!-- Docker -->
+                <div class="version-card recommended">
+                    <span class="version-badge badge-stable">稳定版</span>
+                    <h3>Docker Engine</h3>
+                    <div class="version-number">26.1.x</div>
+                    <div class="version-info">
+                        <strong>容器运行时：</strong>runc 1.1.x<br>
+                        <strong>Compose：</strong>v2.26.x<br>
+                        <strong>兼容性：</strong>Kubernetes 1.28-1.35
+                    </div>
+                    <div class="version-features">
+                        <span class="feature-tag">BuildKit 增强</span>
+                        <span class="feature-tag">多架构构建</span>
+                        <span class="feature-tag">安全性提升</span>
+                    </div>
+                </div>
+
+                <!-- Containerd -->
+                <div class="version-card recommended">
+                    <span class="version-badge badge-stable">生产推荐</span>
+                    <h3>Containerd</h3>
+                    <div class="version-number">1.7.x / 2.0.x</div>
+                    <div class="version-info">
+                        <strong>状态：</strong>Kubernetes 默认运行时<br>
+                        <strong>CRI 支持：</strong>CRI v2<br>
+                        <strong>性能：</strong>优于 Docker 15-20%
+                    </div>
+                    <div class="version-features">
+                        <span class="feature-tag">轻量级</span>
+                        <span class="feature-tag">CRI 原生</span>
+                        <span class="feature-tag">资源占用低</span>
+                    </div>
+                </div>
+
+                <!-- Kubernetes -->
+                <div class="version-card recommended">
+                    <span class="version-badge badge-stable">生产稳定</span>
+                    <h3>Kubernetes</h3>
+                    <div class="version-number">1.32.x</div>
+                    <div class="version-info">
+                        <strong>最新稳定：</strong>1.33.x (可选)<br>
+                        <strong>支持周期：</strong>15 个月<br>
+                        <strong>API 版本：</strong>stable/v1
+                    </div>
+                    <div class="version-features">
+                        <span class="feature-tag">Sidecar 容器</span>
+                        <span class="feature-tag">CEL 表达式</span>
+                        <span class="feature-tag">Secret 自动轮转</span>
+                        <span class="feature-tag">增强的网络策略</span>
+                    </div>
+                </div>
+
+                <!-- KubeSphere -->
+                <div class="version-card recommended">
+                    <span class="version-badge badge-stable">企业版</span>
+                    <h3>KubeSphere</h3>
+                    <div class="version-number">4.0.x (LuBan)</div>
+                    <div class="version-info">
+                        <strong>架构：</strong>微内核可扩展架构<br>
+                        <strong>K8s 兼容：</strong>1.20.x - 1.26.x<br>
+                        <strong>部署模式：</strong>All-in-One / HA / 边缘
+                    </div>
+                    <div class="version-features">
+                        <span class="feature-tag">LuBan 扩展机制</span>
+                        <span class="feature-tag">DevOps 流水线</span>
+                        <span class="feature-tag">多集群管理</span>
+                        <span class="feature-tag">可观测性平台</span>
+                    </div>
+                </div>
+
+                <!-- KubeKey -->
+                <div class="version-card">
+                    <span class="version-badge badge-stable">安装工具</span>
+                    <h3>KubeKey</h3>
+                    <div class="version-number">3.0.13+</div>
+                    <div class="version-info">
+                        <strong>功能：</strong>K8s + KS 一键部署<br>
+                        <strong>语言：</strong>Go 开发<br>
+                        <strong>替代：</strong>Ansible 安装器
+                    </div>
+                    <div class="version-features">
+                        <span class="feature-tag">灵活安装</span>
+                        <span class="feature-tag">离线支持</span>
+                        <span class="feature-tag">高可用配置</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-box success">
+                <div class="info-title">✓ 推荐组合方案</div>
+                <p><strong>生产环境最佳实践：</strong>Jenkins 2.440.x LTS + Containerd 1.7.x + Kubernetes 1.32.x + KubeSphere 4.0.x</p>
+                <p style="margin-top: 10px;"><strong>开发测试环境：</strong>可使用 Docker 26.1.x 作为容器运行时，便于调试和镜像构建</p>
+            </div>
+        </section>
+
+        <!-- 第二部分：版本兼容性矩阵 -->
+        <section class="section">
+            <h2>二、版本兼容性矩阵</h2>
+            
+            <div class="compatibility-matrix">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>组件</th>
+                            <th>推荐版本</th>
+                            <th>最低版本</th>
+                            <th>最高版本</th>
+                            <th>备注</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Jenkins</strong></td>
+                            <td>2.440.x LTS</td>
+                            <td>2.387.x LTS</td>
+                            <td>2.45x (Weekly)</td>
+                            <td>LTS 版本每 12 周发布</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Jenkins Kubernetes Plugin</strong></td>
+                            <td>4.0.x</td>
+                            <td>3.3.x</td>
+                            <td>4.1.x</td>
+                            <td>支持 K8s 1.28-1.35</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Docker Engine</strong></td>
+                            <td>26.1.x</td>
+                            <td>20.10.x</td>
+                            <td>27.x</td>
+                            <td>开发环境推荐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Containerd</strong></td>
+                            <td>1.7.x</td>
+                            <td>1.6.x</td>
+                            <td>2.0.x</td>
+                            <td>生产环境推荐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Kubernetes</strong></td>
+                            <td>1.32.x</td>
+                            <td>1.28.x</td>
+                            <td>1.33.x</td>
+                            <td>N-2 版本策略</td>
+                        </tr>
+                        <tr>
+                            <td><strong>KubeSphere</strong></td>
+                            <td>4.0.x</td>
+                            <td>3.4.x</td>
+                            <td>4.1.x</td>
+                            <td>LuBan 架构</td>
+                        </tr>
+                        <tr>
+                            <td><strong>KubeKey</strong></td>
+                            <td>3.0.13+</td>
+                            <td>3.0.0</td>
+                            <td>3.1.x</td>
+                            <td>部署工具</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Helm</strong></td>
+                            <td>3.14.x</td>
+                            <td>3.10.x</td>
+                            <td>3.15.x</td>
+                            <td>包管理工具</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Calico</strong></td>
+                            <td>3.27.x</td>
+                            <td>3.24.x</td>
+                            <td>3.28.x</td>
+                            <td>网络插件</td>
+                        </tr>
+                        <tr>
+                            <td><strong>OpenEBS</strong></td>
+                            <td>3.5.x</td>
+                            <td>3.3.x</td>
+                            <td>3.6.x</td>
+                            <td>本地存储</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="info-box warning">
+                <div class="info-title">⚠ 重要注意事项</div>
+                <ul>
+                    <li>Kubernetes 1.24+ 已移除 Dockershim，必须使用 containerd 或 CRI-O</li>
+                    <li>KubeSphere 4.0 采用 LuBan 微内核架构，扩展组件需单独安装</li>
+                    <li>Jenkins on Kubernetes 需要配置正确的 ServiceAccount 和 RBAC</li>
+                    <li>生产环境建议使用 Kubernetes N-1 或 N-2 稳定版本</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 第三部分：部署架构设计 -->
+        <section class="section">
+            <h2>三、部署架构设计</h2>
+
+            <div class="architecture-diagram">
+                <div class="diagram-title">端到端研发自动化系统整体架构</div>
+                
+                <div class="layer">
+                    <div class="layer-title">◉ 第 7 层：UI 自动化测试验收层</div>
+                    <div class="component-grid">
+                        <div class="component-item">
+                            <div class="component-name">Selenium Grid</div>
+                            <div class="component-version">v4.18+</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">Playwright</div>
+                            <div class="component-version">v1.42+</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">Cypress</div>
+                            <div class="component-version">v13.x</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="layer">
+                    <div class="layer-title">◉ 第 6 层：CD 持续部署层 (KubeSphere + K8s)</div>
+                    <div class="component-grid">
+                        <div class="component-item">
+                            <div class="component-name">KubeSphere CD</div>
+                            <div class="component-version">v4.0</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">ArgoCD</div>
+                            <div class="component-version">v2.11+</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">FluxCD</div>
+                            <div class="component-version">v2.2+</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">Helm Charts</div>
+                            <div class="component-version">v3.14</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="layer">
+                    <div class="layer-title">◉ 第 5 层：CI 持续集成层 (Jenkins Pipeline)</div>
+                    <div class="component-grid">
+                        <div class="component-item">
+                            <div class="component-name">Jenkins Master</div>
+                            <div class="component-version">v2.440 LTS</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">Jenkins Agents</div>
+                            <div class="component-version">动态 K8s Pod</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">Pipeline Library</div>
+                            <div class="component-version">Shared Libs</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="layer">
+                    <div class="layer-title">◉ 第 4 层：集成测试层</div>
+                    <div class="component-grid">
+                        <div class="component-item">
+                            <div class="component-name">Test Containers</div>
+                            <div class="component-version">v1.19+</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">Postman/Newman</div>
+                            <div class="component-version">CLI</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">JUnit/TestNG</div>
+                            <div class="component-version">v5.x</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="layer">
+                    <div class="layer-title">◉ 第 3 层：单元测试层 (Unit Test)</div>
+                    <div class="component-grid">
+                        <div class="component-item">
+                            <div class="component-name">JaCoCo</div>
+                            <div class="component-version">覆盖率检测</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">SonarQube</div>
+                            <div class="component-version">v10.x</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">pytest/Jest</div>
+                            <div class="component-version">语言相关</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="layer">
+                    <div class="layer-title">◉ 第 2 层：AI Coding 层 (OpenClaw + Claude Code)</div>
+                    <div class="component-grid">
+                        <div class="component-item">
+                            <div class="component-name">OpenClaw</div>
+                            <div class="component-version">最新</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">Claude Code</div>
+                            <div class="component-version">API</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">代码生成 Agents</div>
+                            <div class="component-version">定制化</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="layer">
+                    <div class="layer-title">◉ 第 1 层：基础设施层 (Docker + Containerd + K8s)</div>
+                    <div class="component-grid">
+                        <div class="component-item">
+                            <div class="component-name">Container Runtime</div>
+                            <div class="component-version">Containerd 1.7.x</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">Kubernetes</div>
+                            <div class="component-version">v1.32.x</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">CNI (Calico)</div>
+                            <div class="component-version">v3.27.x</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">CSI Storage</div>
+                            <div class="component-version">OpenEBS/Longhorn</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="layer">
+                    <div class="layer-title">◉ 第 0 层：管理平台层 (KubeSphere)</div>
+                    <div class="component-grid">
+                        <div class="component-item">
+                            <div class="component-name">KubeSphere Console</div>
+                            <div class="component-version">v4.0</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">DevOps 工作台</div>
+                            <div class="component-version">内置</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">监控告警</div>
+                            <div class="component-version">Prometheus+Grafana</div>
+                        </div>
+                        <div class="component-item">
+                            <div class="component-name">日志系统</div>
+                            <div class="component-version">FluentBit+ES/Loki</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 第四部分：部署模式 -->
+        <section class="section">
+            <h2>四、部署模式与资源配置</h2>
+
+            <div class="deployment-modes">
+                <!-- All-in-One 模式 -->
+                <div class="mode-card">
+                    <div class="mode-header">
+                        <div class="mode-title">All-in-One 模式</div>
+                        <span class="mode-badge badge-dev">开发/测试</span>
+                    </div>
+                    <ul class="mode-specs">
+                        <li>单节点部署 (最小 2 核 4G)</li>
+                        <li>快速体验和演示环境</li>
+                        <li>KubeKey 一键安装</li>
+                        <li>适合个人学习和 PoC 验证</li>
+                        <li>不支持高可用</li>
+                        <li>资源利用率较低</li>
+                    </ul>
+                    <div class="hardware-requirements">
+                        <div class="requirement-row">
+                            <span class="requirement-label">CPU</span>
+                            <span class="requirement-value">2 核 (推荐 4 核)</span>
+                        </div>
+                        <div class="requirement-row">
+                            <span class="requirement-label">内存</span>
+                            <span class="requirement-value">4 GB (推荐 8GB)</span>
+                        </div>
+                        <div class="requirement-row">
+                            <span class="requirement-label">磁盘</span>
+                            <span class="requirement-value">40 GB SSD</span>
+                        </div>
+                        <div class="requirement-row">
+                            <span class="requirement-label">操作系统</span>
+                            <span class="requirement-value">Ubuntu 22.04 / CentOS 7+</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 高可用生产模式 -->
+                <div class="mode-card recommended">
+                    <div class="mode-header">
+                        <div class="mode-title">高可用生产模式</div>
+                        <span class="mode-badge badge-prod">生产环境</span>
+                    </div>
+                    <ul class="mode-specs">
+                        <li>3 Master 节点 + N Worker 节点</li>
+                        <li>etcd 集群 (3/5 节点)</li>
+                        <li>Keepalived + HAProxy 负载均衡</li>
+                        <li>支持节点故障自动转移</li>
+                        <li>持久化存储 (Ceph/NFS/LocalPV)</li>
+                        <li>完整的监控告警日志体系</li>
+                    </ul>
+                    <div class="hardware-requirements">
+                        <div class="requirement-row">
+                            <span class="requirement-label">Master 节点</span>
+                            <span class="requirement-value">3 × (4 核 8G 40G)</span>
+                        </div>
+                        <div class="requirement-row">
+                            <span class="requirement-label">Worker 节点</span>
+                            <span class="requirement-value">N × (8 核 16G 100G+)</span>
+                        </div>
+                        <div class="requirement-row">
+                            <span class="requirement-label">负载均衡</span>
+                            <span class="requirement-value">HAProxy + Keepalived</span>
+                        </div>
+                        <div class="requirement-row">
+                            <span class="requirement-label">存储</span>
+                            <span class="requirement-value">Ceph RBD / NFS / LocalPV</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 企业级多集群模式 -->
+                <div class="mode-card">
+                    <div class="mode-header">
+                        <div class="mode-title">企业级多集群模式</div>
+                        <span class="mode-badge badge-enterprise">大型企业</span>
+                    </div>
+                    <ul class="mode-specs">
+                        <li>多区域多集群部署</li>
+                        <li>KubeSphere 多集群管理</li>
+                        <li>联邦集群支持</li>
+                        <li>灾备和容灾能力</li>
+                        <li>混合云/多云支持</li>
+                        <li>边缘计算场景</li>
+                    </ul>
+                    <div class="hardware-requirements">
+                        <div class="requirement-row">
+                            <span class="requirement-label">集群数量</span>
+                            <span class="requirement-value">3+ 集群</span>
+                        </div>
+                        <div class="requirement-row">
+                            <span class="requirement-label">节点规模</span>
+                            <span class="requirement-value">100+ 节点</span>
+                        </div>
+                        <div class="requirement-row">
+                            <span class="requirement-label">网络</span>
+                            <span class="requirement-value">专线/SD-WAN</span>
+                        </div>
+                        <div class="requirement-row">
+                            <span class="requirement-label">管理</span>
+                            <span class="requirement-value">KubeSphere 多集群</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 第五部分：CI/CD 流水线设计 -->
+        <section class="section">
+            <h2>五、CI/CD 流水线设计</h2>
+
+            <div class="pipeline-flow">
+                <div class="pipeline-step">
+                    <span class="step-number">01</span>
+                    <span class="step-name">需求分析<br>PRD 设计</span>
+                </div>
+                <span class="arrow">→</span>
+                <div class="pipeline-step">
+                    <span class="step-number">02</span>
+                    <span class="step-name">技术方案<br>前后端设计</span>
+                </div>
+                <span class="arrow">→</span>
+                <div class="pipeline-step">
+                    <span class="step-number">03</span>
+                    <span class="step-name">API 接口<br>协议设计</span>
+                </div>
+                <span class="arrow">→</span>
+                <div class="pipeline-step">
+                    <span class="step-number">04</span>
+                    <span class="step-name">AI Coding<br>代码生成</span>
+                </div>
+                <span class="arrow">→</span>
+                <div class="pipeline-step">
+                    <span class="step-number">05</span>
+                    <span class="step-name">Unit Test<br>单元测试</span>
+                </div>
+                <span class="arrow">→</span>
+                <div class="pipeline-step">
+                    <span class="step-number">06</span>
+                    <span class="step-name">集成测试<br>接口测试</span>
+                </div>
+                <span class="arrow">→</span>
+                <div class="pipeline-step">
+                    <span class="step-number">07</span>
+                    <span class="step-name">CI 构建<br>Jenkins Pipeline</span>
+                </div>
+                <span class="arrow">→</span>
+                <div class="pipeline-step">
+                    <span class="step-number">08</span>
+                    <span class="step-name">Docker 镜像<br>构建推送</span>
+                </div>
+                <span class="arrow">→</span>
+                <div class="pipeline-step">
+                    <span class="step-number">09</span>
+                    <span class="step-name">K8s 部署<br>KubeSphere CD</span>
+                </div>
+                <span class="arrow">→</span>
+                <div class="pipeline-step">
+                    <span class="step-number">10</span>
+                    <span class="step-name">UI 自动化<br>测试验收</span>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <div class="info-title">💡 Jenkins Pipeline 关键配置</div>
+                <ul>
+                    <li><strong>动态 Agent：</strong>使用 Kubernetes Plugin 动态创建构建 Pod</li>
+                    <li><strong>并行执行：</strong>利用 K8s 资源并行运行多个构建任务</li>
+                    <li><strong>缓存优化：</strong>使用 PVC 缓存 Maven/npm 依赖</li>
+                    <li><strong>凭证管理：</strong>Kubernetes Secrets 集成 Jenkins Credentials</li>
+                    <li><strong>质量门禁：</strong>集成 SonarQube 代码质量扫描</li>
+                    <li><strong>通知机制：</strong>构建结果推送到企业微信/钉钉/Slack</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 第六部分：网络与存储设计 -->
+        <section class="section">
+            <h2>六、网络与存储方案设计</h2>
+
+            <h3>网络方案对比</h3>
+            <div class="compatibility-matrix">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>CNI 插件</th>
+                            <th>性能</th>
+                            <th>功能特性</th>
+                            <th>适用场景</th>
+                            <th>推荐度</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Calico</strong></td>
+                            <td>★★★★★</td>
+                            <td>BGP, NetworkPolicy, eBPF</td>
+                            <td>生产环境，大规模集群</td>
+                            <td>⭐⭐⭐⭐⭐ 强烈推荐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Flannel</strong></td>
+                            <td>★★★☆☆</td>
+                            <td>VXLAN, Host-GW, 简单易用</td>
+                            <td>开发测试，小型集群</td>
+                            <td>⭐⭐⭐☆☆ 一般推荐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Cilium</strong></td>
+                            <td>★★★★★</td>
+                            <td>eBPF, Hubble 观测，服务网格</td>
+                            <td>高级网络需求，安全合规</td>
+                            <td>⭐⭐⭐⭐☆ 推荐</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Kube-OVN</strong></td>
+                            <td>★★★★☆</td>
+                            <td>OVN, 子网，静态 IP</td>
+                            <td>传统应用迁移，复杂网络</td>
+                            <td>⭐⭐⭐☆☆ 可选</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>存储方案对比</h3>
+            <div class="compatibility-matrix">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>存储类型</th>
+                            <th>性能</th>
+                            <th>可靠性</th>
+                            <th>复杂度</th>
+                            <th>适用场景</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>OpenEBS LocalPV</strong></td>
+                            <td>★★★★★</td>
+                            <td>★★★☆☆</td>
+                            <td>★☆☆☆☆ 简单</td>
+                            <td>开发测试，有状态应用</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Ceph RBD</strong></td>
+                            <td>★★★★☆</td>
+                            <td>★★★★★</td>
+                            <td>★★★★☆ 较复杂</td>
+                            <td>生产环境，高可用需求</td>
+                        </tr>
+                        <tr>
+                            <td><strong>NFS</strong></td>
+                            <td>★★★☆☆</td>
+                            <td>★★★★☆</td>
+                            <td>★★☆☆☆ 中等</td>
+                            <td>共享文件存储，日志</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Longhorn</strong></td>
+                            <td>★★★★☆</td>
+                            <td>★★★★☆</td>
+                            <td>★★☆☆☆ 中等</td>
+                            <td>云原生分布式块存储</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 第七部分：安全加固建议 -->
+        <section class="section">
+            <h2>七、安全加固建议</h2>
+
+            <div class="version-grid">
+                <div class="version-card">
+                    <h3>集群安全</h3>
+                    <ul>
+                        <li>启用 RBAC 最小权限原则</li>
+                        <li>配置 NetworkPolicy 网络隔离</li>
+                        <li>启用 Pod Security Standards</li>
+                        <li>定期更新 K8s 版本和安全补丁</li>
+                        <li>使用私有镜像仓库</li>
+                    </ul>
+                </div>
+
+                <div class="version-card">
+                    <h3>Jenkins 安全</h3>
+                    <ul>
+                        <li>启用矩阵授权策略</li>
+                        <li>配置 CSRF 保护</li>
+                        <li>使用凭据保管库管理密钥</li>
+                        <li>限制 Script Sandbox</li>
+                        <li>定期审计插件安全</li>
+                    </ul>
+                </div>
+
+                <div class="version-card">
+                    <h3>镜像安全</h3>
+                    <ul>
+                        <li>使用可信基础镜像</li>
+                        <li>镜像漏洞扫描 (Trivy/Clair)</li>
+                        <li>签名和验证镜像</li>
+                        <li>最小化镜像层数</li>
+                        <li>非 root 用户运行容器</li>
+                    </ul>
+                </div>
+
+                <div class="version-card">
+                    <h3>数据安全</h3>
+                    <ul>
+                        <li>Secrets 加密存储 (etcd encryption)</li>
+                        <li>传输层 TLS 加密</li>
+                        <li>敏感数据脱敏处理</li>
+                        <li>定期备份 etcd 数据</li>
+                        <li>审计日志记录</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- 第八部分：监控与运维 -->
+        <section class="section">
+            <h2>八、监控告警与运维体系</h2>
+
+            <div class="component-grid" style="margin: 30px 0;">
+                <div class="component-item">
+                    <div class="component-name">Prometheus</div>
+                    <div class="component-version">指标采集</div>
+                </div>
+                <div class="component-item">
+                    <div class="component-name">Grafana</div>
+                    <div class="component-version">可视化仪表盘</div>
+                </div>
+                <div class="component-item">
+                    <div class="component-name">Alertmanager</div>
+                    <div class="component-version">告警路由</div>
+                </div>
+                <div class="component-item">
+                    <div class="component-name">kube-state-metrics</div>
+                    <div class="component-version">K8s 对象指标</div>
+                </div>
+                <div class="component-item">
+                    <div class="component-name">node-exporter</div>
+                    <div class="component-version">节点指标</div>
+                </div>
+                <div class="component-item">
+                    <div class="component-name">FluentBit</div>
+                    <div class="component-version">日志收集</div>
+                </div>
+                <div class="component-item">
+                    <div class="component-name">Elasticsearch</div>
+                    <div class="component-version">日志存储</div>
+                </div>
+                <div class="component-item">
+                    <div class="component-name">Kibana/Loki</div>
+                    <div class="component-version">日志查询</div>
+                </div>
+            </div>
+
+            <div class="info-box success">
+                <div class="info-title">✓ KubeSphere 内置可观测性</div>
+                <p>KubeSphere 4.0 内置完整的监控告警日志体系，无需额外部署：</p>
+                <ul>
+                    <li>多租户监控仪表盘</li>
+                    <li>自定义告警策略和通知渠道</li>
+                    <li>容器日志实时查询</li>
+                    <li>事件中心和问题追踪</li>
+                    <li>资源用量分析和成本优化建议</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 第九部分：实施路线图 -->
+        <section class="section">
+            <h2>九、实施路线图</h2>
+
+            <div class="deployment-modes">
+                <div class="mode-card">
+                    <div class="mode-header">
+                        <div class="mode-title">阶段一：环境准备</div>
+                        <span class="mode-badge badge-dev">Week 1-2</span>
+                    </div>
+                    <ul class="mode-specs">
+                        <li>准备服务器资源和网络规划</li>
+                        <li>安装配置操作系统和依赖</li>
+                        <li>部署 Kubernetes 集群 (KubeKey)</li>
+                        <li>安装 KubeSphere 管理平台</li>
+                        <li>配置存储和网络插件</li>
+                    </ul>
+                </div>
+
+                <div class="mode-card">
+                    <div class="mode-header">
+                        <div class="mode-title">阶段二：CI/CD 搭建</div>
+                        <span class="mode-badge badge-prod">Week 3-4</span>
+                    </div>
+                    <ul class="mode-specs">
+                        <li>部署 Jenkins on Kubernetes</li>
+                        <li>配置 Kubernetes Plugin 和动态 Agent</li>
+                        <li>开发标准 Pipeline 模板</li>
+                        <li>集成代码质量扫描 (SonarQube)</li>
+                        <li>配置镜像仓库 (Harbor)</li>
+                    </ul>
+                </div>
+
+                <div class="mode-card">
+                    <div class="mode-header">
+                        <div class="mode-title">阶段三：AI 集成</div>
+                        <span class="mode-badge badge-enterprise">Week 5-6</span>
+                    </div>
+                    <ul class="mode-specs">
+                        <li>部署 OpenClaw + Claude Code</li>
+                        <li>配置各角色 Agents (产品/开发/测试)</li>
+                        <li>训练领域特定知识库</li>
+                        <li>人机协同流程设计</li>
+                        <li>代码审查和优化机制</li>
+                    </ul>
+                </div>
+
+                <div class="mode-card">
+                    <div class="mode-header">
+                        <div class="mode-title">阶段四：自动化测试</div>
+                        <span class="mode-badge badge-prod">Week 7-8</span>
+                    </div>
+                    <ul class="mode-specs">
+                        <li>搭建 UI 自动化测试框架</li>
+                        <li>编写自动化测试用例</li>
+                        <li>集成到 CI/CD 流水线</li>
+                        <li>配置测试报告和质量门禁</li>
+                        <li>性能测试和压力测试</li>
+                    </ul>
+                </div>
+
+                <div class="mode-card">
+                    <div class="mode-header">
+                        <div class="mode-title">阶段五：生产上线</div>
+                        <span class="mode-badge badge-enterprise">Week 9-10</span>
+                    </div>
+                    <ul class="mode-specs">
+                        <li>灰度发布和蓝绿部署</li>
+                        <li>监控告警配置优化</li>
+                        <li>应急预案和回滚机制</li>
+                        <li>文档培训和知识转移</li>
+                        <li>持续优化和改进</li>
+                    </ul>
+                </div>
+
+                <div class="mode-card">
+                    <div class="mode-header">
+                        <div class="mode-title">阶段六：运营优化</div>
+                        <span class="mode-badge badge-enterprise">持续</span>
+                    </div>
+                    <ul class="mode-specs">
+                        <li>性能调优和成本控制</li>
+                        <li>安全加固和合规审计</li>
+                        <li>容量规划和弹性伸缩</li>
+                        <li>技术债务管理和重构</li>
+                        <li>团队技能提升和培训</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- 第十部分：总结 -->
+        <section class="section">
+            <h2>十、方案总结</h2>
+
+            <div class="info-box success">
+                <div class="info-title">✓ 核心技术栈</div>
+                <p><strong>CI/CD 引擎：</strong>Jenkins 2.440.x LTS + Kubernetes Plugin 4.0.x</p>
+                <p><strong>容器运行时：</strong>Containerd 1.7.x (生产) / Docker 26.1.x (开发)</p>
+                <p><strong>容器编排：</strong>Kubernetes 1.32.x + Calico 3.27.x</p>
+                <p><strong>管理平台：</strong>KubeSphere 4.0.x (LuBan 架构)</p>
+                <p><strong>AI 编程：</strong>OpenClaw + Claude Code + 多角色 Agents</p>
+            </div>
+
+            <div class="info-box">
+                <div class="info-title">💡 关键优势</div>
+                <ul>
+                    <li><strong>端到端自动化：</strong>从需求到部署全流程自动化，支持人机协同</li>
+                    <li><strong>云原生架构：</strong>基于 Kubernetes 的弹性可扩展架构</li>
+                    <li><strong>AI 驱动开发：</strong>集成先进 AI 编程助手提升研发效率</li>
+                    <li><strong>企业级能力：</strong>多租户、多集群、高可用、安全合规</li>
+                    <li><strong>开箱即用：</strong>KubeSphere 提供完整 DevOps 和可观测性能力</li>
+                    <li><strong>生态丰富：</strong>数百个插件和扩展组件可选</li>
+                </ul>
+            </div>
+
+            <div class="info-box warning">
+                <div class="info-title">⚠ 风险提示</div>
+                <ul>
+                    <li>Kubernetes 版本升级需谨慎评估兼容性</li>
+                    <li>AI 生成代码需要人工审核和质量把控</li>
+                    <li>生产环境必须进行充分的压力测试和灾备演练</li>
+                    <li>团队需要接受 K8s 和云原生技术培训</li>
+                    <li>建议先在非生产环境验证后再推广</li>
+                </ul>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <p><strong>基于 OpenClaw + Claude Code 的端到端研发自动化系统</strong></p>
+            <p>Jenkins + Docker + K8s + KubeSphere 工具链版本选型与部署架构设计</p>
+            <p class="timestamp">文档版本：v1.0 | 生成时间：2026-03-13</p>
+        </footer>
+    </div>
+
+    <script>
+        // 添加简单的交互效果
+        document.querySelectorAll('.version-card, .mode-card, .component-item').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-5px)';
+            });
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0)';
+            });
+        });
+
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

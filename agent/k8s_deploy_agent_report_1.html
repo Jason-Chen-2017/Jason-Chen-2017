@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K8s Deploy Agent 技术报告 - OpenClaw + Claude Code 端到端研发自动化系统</title>
+    <style>
+        :root {
+            --primary-color: #00f5ff;
+            --secondary-color: #7b2cbf;
+            --accent-color: #ff006e;
+            --bg-dark: #0a0a1a;
+            --bg-card: rgba(20, 20, 40, 0.8);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0c0;
+            --border-glow: 0 0 20px rgba(0, 245, 255, 0.3);
+            --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a1a3a 50%, #0f0f2a 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.8;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(123, 44, 191, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(0, 245, 255, 0.2) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(255, 0, 110, 0.15) 0%, transparent 40%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        header {
+            text-align: center;
+            padding: 60px 0 40px;
+            position: relative;
+        }
+        
+        .title-main {
+            font-size: 3.5em;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: var(--border-glow);
+            margin-bottom: 20px;
+            animation: glow 3s ease-in-out infinite;
+        }
+        
+        @keyframes glow {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.3); }
+        }
+        
+        .subtitle {
+            font-size: 1.5em;
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+        }
+        
+        .meta-info {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
+            margin-top: 30px;
+        }
+        
+        .meta-item {
+            background: var(--bg-card);
+            padding: 15px 30px;
+            border-radius: 50px;
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            backdrop-filter: blur(10px);
+            box-shadow: var(--card-shadow);
+        }
+        
+        .meta-label {
+            color: var(--primary-color);
+            font-weight: 600;
+            margin-right: 10px;
+        }
+        
+        section {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 40px;
+            margin: 40px 0;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            box-shadow: var(--card-shadow);
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        section:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0, 245, 255, 0.2);
+        }
+        
+        h2 {
+            font-size: 2.2em;
+            color: var(--primary-color);
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(0, 245, 255, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        h2::before {
+            content: '◈';
+            color: var(--accent-color);
+            font-size: 1.2em;
+        }
+        
+        h3 {
+            font-size: 1.5em;
+            color: var(--secondary-color);
+            margin: 30px 0 20px;
+            padding-left: 20px;
+            border-left: 4px solid var(--accent-color);
+        }
+        
+        p {
+            margin: 15px 0;
+            color: var(--text-secondary);
+            text-align: justify;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
+        }
+        
+        .feature-card {
+            background: rgba(30, 30, 60, 0.6);
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid rgba(123, 44, 191, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            border-color: var(--primary-color);
+            box-shadow: var(--border-glow);
+            transform: scale(1.02);
+        }
+        
+        .feature-title {
+            font-size: 1.3em;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .feature-icon {
+            font-size: 1.5em;
+        }
+        
+        .architecture-diagram {
+            background: rgba(10, 10, 30, 0.8);
+            padding: 30px;
+            border-radius: 15px;
+            margin: 30px 0;
+            overflow-x: auto;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+        }
+        
+        .diagram-text {
+            font-family: 'Courier New', monospace;
+            color: var(--primary-color);
+            white-space: pre;
+            line-height: 1.5;
+            font-size: 0.9em;
+        }
+        
+        .code-block {
+            background: rgba(10, 10, 30, 0.9);
+            padding: 25px;
+            border-radius: 10px;
+            overflow-x: auto;
+            border: 1px solid rgba(123, 44, 191, 0.3);
+            margin: 20px 0;
+        }
+        
+        .code-block code {
+            font-family: 'Courier New', 'Consolas', monospace;
+            color: #e0e0e0;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+        
+        .keyword { color: var(--accent-color); }
+        .string { color: #50fa7b; }
+        .comment { color: #6272a4; }
+        .function { color: var(--primary-color); }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            background: rgba(20, 20, 40, 0.5);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        th, td {
+            padding: 15px 20px;
+            text-align: left;
+            border-bottom: 1px solid rgba(123, 44, 191, 0.2);
+        }
+        
+        th {
+            background: rgba(123, 44, 191, 0.3);
+            color: var(--primary-color);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.9em;
+            letter-spacing: 1px;
+        }
+        
+        tr:hover {
+            background: rgba(0, 245, 255, 0.05);
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        
+        .status-done {
+            background: rgba(80, 250, 123, 0.2);
+            color: #50fa7b;
+            border: 1px solid #50fa7b;
+        }
+        
+        .status-progress {
+            background: rgba(0, 245, 255, 0.2);
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+        }
+        
+        .module-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .module-item {
+            background: rgba(30, 30, 60, 0.4);
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 10px;
+            border-left: 4px solid var(--primary-color);
+            transition: all 0.3s ease;
+        }
+        
+        .module-item:hover {
+            border-left-color: var(--accent-color);
+            background: rgba(40, 40, 80, 0.5);
+        }
+        
+        .module-name {
+            font-weight: 600;
+            color: var(--primary-color);
+            font-size: 1.1em;
+            margin-bottom: 8px;
+        }
+        
+        .module-desc {
+            color: var(--text-secondary);
+            font-size: 0.95em;
+        }
+        
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.2), rgba(0, 245, 255, 0.1));
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid rgba(123, 44, 191, 0.4);
+            margin: 25px 0;
+        }
+        
+        .highlight-title {
+            color: var(--accent-color);
+            font-weight: 600;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            margin-top: 60px;
+            border-top: 1px solid rgba(123, 44, 191, 0.3);
+        }
+        
+        .footer-text {
+            color: var(--text-secondary);
+            font-size: 0.95em;
+        }
+        
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .tech-item {
+            background: rgba(0, 245, 255, 0.1);
+            padding: 10px 20px;
+            border-radius: 25px;
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .tech-item:hover {
+            background: var(--primary-color);
+            color: var(--bg-dark);
+            box-shadow: var(--border-glow);
+        }
+        
+        @media (max-width: 768px) {
+            .title-main {
+                font-size: 2.2em;
+            }
+            
+            .subtitle {
+                font-size: 1.2em;
+            }
+            
+            section {
+                padding: 25px 20px;
+            }
+            
+            .meta-info {
+                flex-direction: column;
+                align-items: center;
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 class="title-main">K8s Deploy Agent</h1>
+            <p class="subtitle">Kubernetes 部署自动化智能体</p>
+            <p style="color: var(--secondary-color); font-size: 1.2em;">
+                对接 KubeSphere API 实现集群自动部署
+            </p>
+            
+            <div class="meta-info">
+                <div class="meta-item">
+                    <span class="meta-label">版本:</span> v1.0.0
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">日期:</span> 2026-03-15
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">状态:</span> 
+                    <span class="status-badge status-done">已完成</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">作者:</span> OpenClaw + Claude Code
+                </div>
+            </div>
+        </header>
+
+        <section>
+            <h2>项目概述</h2>
+            <p>
+                <strong>K8s Deploy Agent</strong> 是 OpenClaw + Claude Code 端到端研发自动化系统的核心组件，
+                负责实现 Kubernetes 集群的自动部署。该 Agent 对接 KubeSphere API 和 Kubernetes 原生 API，
+                提供完整的容器化应用部署能力，处于 DevOps 全流程自动化的<strong>自动部署</strong>关键环节。
+            </p>
+            
+            <div class="highlight-box">
+                <div class="highlight-title">🎯 核心价值主张</div>
+                <ul style="padding-left: 25px; color: var(--text-secondary);">
+                    <li><strong>简化部署复杂度</strong> - 一键式部署替代繁琐的 YAML 配置</li>
+                    <li><strong>统一多环境管理</strong> - 开发、测试、生产环境配置标准化</li>
+                    <li><strong>快速回滚能力</strong> - 问题发生时秒级回滚到稳定版本</li>
+                    <li><strong>CI/CD 无缝集成</strong> - 与 Jenkins 等流水线工具深度整合</li>
+                    <li><strong>企业级支持</strong> - 完整对接 KubeSphere 企业级容器平台</li>
+                </ul>
+            </div>
+        </section>
+
+        <section>
+            <h2>核心功能</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-title">
+                        <span class="feature-icon">🚀</span>
+                        一键部署
+                    </div>
+                    <p style="margin: 0;">支持 Deployment、Service 自动创建和更新，滚动更新策略确保零停机时间。</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-title">
+                        <span class="feature-icon">↩️</span>
+                        快速回滚
+                    </div>
+                    <p style="margin: 0;">一键回滚到历史版本，内置健康检查机制确保回滚成功。</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-title">
+                        <span class="feature-icon">⚖️</span>
+                        弹性伸缩
+                    </div>
+                    <p style="margin: 0;">手动调整副本数量，支持业务高峰期的快速扩容需求。</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-title">
+                        <span class="feature-icon">🏥</span>
+                        健康检查
+                    </div>
+                    <p style="margin: 0;">实时监测部署状态和集群健康度，提供完整的状态追踪。</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-title">
+                        <span class="feature-icon">🔗</span>
+                        KubeSphere 集成
+                    </div>
+                    <p style="margin: 0;">完整对接 KubeSphere 企业级容器平台 API，支持多集群管理。</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-title">
+                        <span class="feature-icon">💻</span>
+                        CLI 工具
+                    </div>
+                    <p style="margin: 0;">友好的命令行界面，支持丰富的部署选项和配置管理。</p>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>系统架构</h2>
+            <div class="architecture-diagram">
+                <div class="diagram-text">┌─────────────────────────────────────────────────────────────────┐
+│                    K8s Deploy Agent                              │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │   CLI/API    │  │  Web Console │  │  Jenkins CI  │          │
+│  │   Interface  │  │   (Optional) │  │   Pipeline   │          │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘          │
+│         └─────────────────┼──────────────────┘                   │
+│                  ┌────────▼────────┐                             │
+│                  │  Auto Deployer  │                             │
+│                  │   (核心引擎)     │                             │
+│                  └────────┬────────┘                             │
+│         ┌─────────────────┼─────────────────┐                   │
+│  ┌──────▼───────┐  ┌──────▼───────┐  ┌──────▼───────┐          │
+│  │  Deployment  │  │  KubeSphere  │  │  Kubernetes  │          │
+│  │   Builder    │  │    Client    │  │    Client    │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+└─────────────────────────────────────────────────────────────────┘
+                           │                 │
+              ┌────────────▼─────┐   ┌───────▼────────┐
+              │   KubeSphere     │   │  Kubernetes    │
+              │   Enterprise     │   │    Cluster     │
+              │     Platform     │   │                │
+              └──────────────────┘   └────────────────┘</div>
+            </div>
+            
+            <h3>模块划分</h3>
+            <ul class="module-list">
+                <li class="module-item">
+                    <div class="module-name">📁 config/settings.py - 配置管理模块</div>
+                    <div class="module-desc">加载和管理系统配置，支持环境变量、YAML 配置文件、命令行参数三种配置来源，优先级依次递减。</div>
+                </li>
+                <li class="module-item">
+                    <div class="module-name">📁 src/kubesphere_client.py - KubeSphere API 客户端</div>
+                    <div class="module-desc">封装 KubeSphere v1alpha2 API，提供集群管理、命名空间管理、工作负载管理等核心功能。</div>
+                </li>
+                <li class="module-item">
+                    <div class="module-name">📁 src/kubernetes_client.py - Kubernetes 原生客户端</div>
+                    <div class="module-desc">基于官方 kubernetes-python SDK，提供完整的 K8s 资源操作能力，包括 Deployment、Service、ConfigMap、Secret 等。</div>
+                </li>
+                <li class="module-item">
+                    <div class="module-name">📁 src/deployment_builder.py - 部署构建器</div>
+                    <div class="module-desc">提供流畅的 Builder API 来构建复杂的 Kubernetes 资源对象，支持链式调用和类型安全。</div>
+                </li>
+                <li class="module-item">
+                    <div class="module-name">📁 src/auto_deployer.py - 自动部署器（核心引擎）</div>
+                    <div class="module-desc">整合 KubeSphere 和 Kubernetes API，实现端到端的自动化部署流程，包括部署、回滚、扩缩容等核心功能。</div>
+                </li>
+                <li class="module-item">
+                    <div class="module-name">📁 src/main.py - CLI 主入口</div>
+                    <div class="module-desc">提供友好的命令行界面，支持 deploy、status、scale、rollback、delete、list、health 等命令。</div>
+                </li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>技术栈</h2>
+            <div class="tech-stack">
+                <div class="tech-item">Python 3.12+</div>
+                <div class="tech-item">kubernetes-python SDK</div>
+                <div class="tech-item">requests</div>
+                <div class="tech-item">PyYAML</div>
+                <div class="tech-item">pytest</div>
+                <div class="tech-item">Kubernetes 1.25+</div>
+                <div class="tech-item">KubeSphere 3.x/4.x</div>
+            </div>
+            
+            <h3>依赖清单</h3>
+            <div class="code-block">
+                <code><span class="comment"># Kubernetes Python SDK</span>
+kubernetes>=28.1.0
+
+<span class="comment"># HTTP Client</span>
+requests>=2.31.0
+
+<span class="comment"># Configuration</span>
+PyYAML>=6.0.1
+
+<span class="comment"># Testing</span>
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+
+<span class="comment"># Development</span>
+black>=23.12.0
+flake8>=7.0.0
+mypy>=1.8.0</code>
+            </div>
+        </section>
+
+        <section>
+            <h2>部署流程</h2>
+            <div class="architecture-diagram">
+                <div class="diagram-text">用户请求
+   │
+   ▼
+┌─────────────────┐
+│  参数验证与解析  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  构建资源配置    │◄─── DeploymentBuilder
+│  (Deployment,   │
+│   Service 等)   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  确保命名空间    │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  创建/更新       │◄─── Kubernetes Client
+│  Deployment     │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  创建/更新       │
+│  Service        │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  等待部署就绪    │
+│  (滚动更新监控)  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  返回部署结果    │
+└─────────────────┘</div>
+            </div>
+        </section>
+
+        <section>
+            <h2>使用示例</h2>
+            
+            <h3>命令行部署</h3>
+            <div class="code-block">
+                <code><span class="comment"># 部署应用</span>
+python src/main.py deploy \
+  --app user-service \
+  --image harbor.example.com/myapp/user-service:v1.2.0 \
+  --namespace production \
+  --replicas 3 \
+  --port 8080 \
+  --env DATABASE_URL=postgres://db:5432/users \
+  --env REDIS_HOST=redis-master
+
+<span class="comment"># 查看部署状态</span>
+python src/main.py status --app user-service --namespace production
+
+<span class="comment"># 扩缩容</span>
+python src/main.py scale --app user-service --replicas 10 --namespace production
+
+<span class="comment"># 回滚部署</span>
+python src/main.py rollback --app user-service --namespace production
+
+<span class="comment"># 健康检查</span>
+python src/main.py health</code>
+            </div>
+            
+            <h3>Python API 调用</h3>
+            <div class="code-block">
+                <code><span class="keyword">from</span> config.settings <span class="keyword">import</span> ConfigManager
+<span class="keyword">from</span> auto_deployer <span class="keyword">import</span> AutoDeployer
+
+<span class="comment"># 初始化配置和部署器</span>
+config = ConfigManager(<span class="string">"config/config.yaml"</span>)
+deployer = AutoDeployer(config)
+
+<span class="comment"># 执行部署</span>
+result = deployer.deploy(
+    app_name=<span class="string">"myapp"</span>,
+    image=<span class="string">"nginx:latest"</span>,
+    namespace=<span class="string">"production"</span>,
+    replicas=3,
+    env_vars={
+        <span class="string">"DB_HOST"</span>: <span class="string">"postgres"</span>,
+        <span class="string">"REDIS_HOST"</span>: <span class="string">"redis"</span>
+    }
+)
+
+<span class="comment"># 处理结果</span>
+print(f<span class="string">"Status: {result.status.value}"</span>)
+print(f<span class="string">"Message: {result.message}"</span>)</code>
+            </div>
+            
+            <h3>Jenkins Pipeline 集成</h3>
+            <div class="code-block">
+                <code><span class="comment">// Jenkinsfile 示例</span>
+pipeline {
+    agent any
+    
+    stages {
+        stage(<span class="string">'Build'</span>) {
+            steps {
+                sh <span class="string">'docker build -t myapp:${BUILD_NUMBER} .'</span>
+                sh <span class="string">'docker push harbor.example.com/myapp:${BUILD_NUMBER}'</span>
+            }
+        }
+        
+        stage(<span class="string">'Deploy to K8s'</span>) {
+            steps {
+                sh <span class="string">'''
+                    python main.py deploy \\
+                        --app myapp \\
+                        --image harbor.example.com/myapp:${BUILD_NUMBER} \\
+                        --namespace production \\
+                        --replicas 3
+                '''</span>
+            }
+        }
+        
+        stage(<span class="string">'Verify'</span>) {
+            steps {
+                sh <span class="string">'python main.py status --app myapp --namespace production'</span>
+            }
+        }
+    }
+    
+    post {
+        failure {
+            sh <span class="string">'python main.py rollback --app myapp --namespace production'</span>
+        }
+    }
+}</code>
+            </div>
+        </section>
+
+        <section>
+            <h2>API 参考</h2>
+            
+            <h3>AutoDeployer 核心 API</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>方法</th>
+                        <th>参数</th>
+                        <th>返回值</th>
+                        <th>描述</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>deploy()</code></td>
+                        <td>app_name, image, namespace, replicas...</td>
+                        <td>DeploymentResult</td>
+                        <td>执行应用部署</td>
+                    </tr>
+                    <tr>
+                        <td><code>rollback()</code></td>
+                        <td>app_name, namespace, revision</td>
+                        <td>DeploymentResult</td>
+                        <td>回滚部署</td>
+                    </tr>
+                    <tr>
+                        <td><code>scale()</code></td>
+                        <td>app_name, replicas, namespace</td>
+                        <td>DeploymentResult</td>
+                        <td>扩缩容</td>
+                    </tr>
+                    <tr>
+                        <td><code>delete()</code></td>
+                        <td>app_name, namespace, delete_service</td>
+                        <td>DeploymentResult</td>
+                        <td>删除部署</td>
+                    </tr>
+                    <tr>
+                        <td><code>get_deployment_status()</code></td>
+                        <td>app_name, namespace</td>
+                        <td>Dict</td>
+                        <td>获取部署状态</td>
+                    </tr>
+                    <tr>
+                        <td><code>list_deployments()</code></td>
+                        <td>namespace</td>
+                        <td>List[Dict]</td>
+                        <td>列出所有部署</td>
+                    </tr>
+                    <tr>
+                        <td><code>health_check()</code></td>
+                        <td>-</td>
+                        <td>Dict[str, bool]</td>
+                        <td>健康检查</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>测试覆盖</h2>
+            <p>项目包含完整的单元测试套件，覆盖所有核心模块：</p>
+            
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-title">
+                        <span class="feature-icon">🧪</span>
+                        test_deployment_builder.py
+                    </div>
+                    <p style="margin: 0;">测试 DeploymentBuilder 的资源构建能力，包括基本部署、环境变量、资源限制、健康探针、标签注解等功能。</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-title">
+                        <span class="feature-icon">🧪</span>
+                        test_auto_deployer.py
+                    </div>
+                    <p style="margin: 0;">测试 AutoDeployer 的核心部署逻辑，包括部署成功/失败场景、扩缩容、回滚、删除等操作。</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-title">
+                        <span class="feature-icon">🧪</span>
+                        test_kubesphere_client.py
+                    </div>
+                    <p style="margin: 0;">测试 KubeSphereClient 的 API 对接能力，包括认证、集群管理、命名空间管理、工作负载管理等。</p>
+                </div>
+            </div>
+            
+            <div class="code-block">
+                <code><span class="comment"># 运行所有测试</span>
+pytest tests/ -v
+
+<span class="comment"># 生成覆盖率报告</span>
+pytest tests/ --cov=src --cov-report=html</code>
+            </div>
+        </section>
+
+        <section>
+            <h2>安全设计</h2>
+            <div class="highlight-box">
+                <div class="highlight-title">🔐 安全最佳实践</div>
+                <ul style="padding-left: 25px; color: var(--text-secondary);">
+                    <li><strong>Token 认证优先</strong> - 推荐使用 ServiceAccount Token，避免明文密码</li>
+                    <li><strong>最小权限原则</strong> - RBAC 只授予必要权限</li>
+                    <li><strong>TLS 加密通信</strong> - 始终启用 HTTPS 连接 API Server</li>
+                    <li><strong>凭证定期轮换</strong> - 定期更新 Token 和密码</li>
+                    <li><strong>审计日志</strong> - 记录所有部署操作便于追溯</li>
+                    <li><strong>敏感信息加密</strong> - 使用 Secret 存储敏感配置</li>
+                </ul>
+            </div>
+        </section>
+
+        <section>
+            <h2>项目文件结构</h2>
+            <div class="code-block">
+                <code>k8s_deploy_agent/
+├── src/                          <span class="comment"># 源代码目录</span>
+│   ├── __init__.py
+│   ├── main.py                   <span class="comment"># CLI 主入口</span>
+│   ├── auto_deployer.py          <span class="comment"># 自动部署引擎</span>
+│   ├── kubesphere_client.py      <span class="comment"># KubeSphere API 客户端</span>
+│   ├── kubernetes_client.py      <span class="comment"># Kubernetes 原生客户端</span>
+│   └── deployment_builder.py     <span class="comment"># 资源构建器</span>
+├── config/                       <span class="comment"># 配置目录</span>
+│   ├── __init__.py
+│   ├── settings.py               <span class="comment"># 配置管理</span>
+│   └── example_config.yaml       <span class="comment"># 配置示例</span>
+├── tests/                        <span class="comment"># 测试目录</span>
+│   ├── __init__.py
+│   ├── test_deployment_builder.py
+│   ├── test_auto_deployer.py
+│   └── test_kubesphere_client.py
+├── docs/                         <span class="comment"># 文档目录</span>
+│   ├── architecture.md           <span class="comment"># 架构设计文档</span>
+│   └── product_guide.md          <span class="comment"># 产品说明文档</span>
+├── templates/                    <span class="comment"># 模板目录</span>
+├── requirements.txt              <span class="comment"># 依赖清单</span>
+├── README.md                     <span class="comment"># 项目说明</span>
+└── k8s_deploy_agent_report.html  <span class="comment"># 技术报告</span></code>
+            </div>
+        </section>
+
+        <section>
+            <h2>性能指标</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>指标</th>
+                        <th>目标值</th>
+                        <th>说明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>部署响应时间</td>
+                        <td>&lt; 5 秒</td>
+                        <td>从请求到开始部署的时间</td>
+                    </tr>
+                    <tr>
+                        <td>部署完成时间</td>
+                        <td>取决于镜像大小和副本数</td>
+                        <td>包含镜像拉取和 Pod 启动</td>
+                    </tr>
+                    <tr>
+                        <td>API 并发支持</td>
+                        <td>100+ QPS</td>
+                        <td>单节点处理能力</td>
+                    </tr>
+                    <tr>
+                        <td>部署成功率</td>
+                        <td>&gt; 99%</td>
+                        <td>在正常网络和资源条件下</td>
+                    </tr>
+                    <tr>
+                        <td>Agent 资源消耗</td>
+                        <td>CPU &lt; 100m, 内存 &lt; 256Mi</td>
+                        <td>运行时平均资源占用</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>未来规划</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>功能</th>
+                        <th>描述</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>蓝绿部署</td>
+                        <td>完整的蓝绿发布支持，流量平滑切换</td>
+                        <td><span class="status-badge status-progress">规划中</span></td>
+                    </tr>
+                    <tr>
+                        <td>金丝雀发布</td>
+                        <td>渐进式流量切换，支持百分比控制</td>
+                        <td><span class="status-badge status-progress">规划中</span></td>
+                    </tr>
+                    <tr>
+                        <td>Helm 支持</td>
+                        <td>Helm Chart 部署和管理</td>
+                        <td><span class="status-badge">待办</span></td>
+                    </tr>
+                    <tr>
+                        <td>GitOps 集成</td>
+                        <td>ArgoCD 深度集成</td>
+                        <td><span class="status-badge">待办</span></td>
+                    </tr>
+                    <tr>
+                        <td>自动 HPA</td>
+                        <td>基于 CPU/内存指标的自动水平伸缩</td>
+                        <td><span class="status-badge">待办</span></td>
+                    </tr>
+                    <tr>
+                        <td>成本优化</td>
+                        <td>资源使用分析和优化建议</td>
+                        <td><span class="status-badge">待办</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <footer>
+            <p class="footer-text">
+                <strong>K8s Deploy Agent v1.0.0</strong> | 
+                生成时间：2026-03-15 | 
+                OpenClaw + Claude Code 端到端研发自动化系统
+            </p>
+            <p class="footer-text" style="margin-top: 15px;">
+                Made with ❤️ by AI Agents
+            </p>
+        </footer>
+    </div>
+</body>
+</html>

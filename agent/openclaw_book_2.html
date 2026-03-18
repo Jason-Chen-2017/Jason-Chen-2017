@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw 架构设计：本地优先 AI 执行引擎</title>
+    <style>
+        :root {
+            --primary-color: #00f5ff;
+            --secondary-color: #7b2cbf;
+            --accent-color: #ff006e;
+            --bg-dark: #0a0e1a;
+            --bg-medium: #1a1f3a;
+            --bg-light: #2d3561;
+            --text-primary: #e8e8e8;
+            --text-secondary: #b0b0b0;
+            --code-bg: #1e1e2e;
+            --border-color: #3a3f6c;
+            --success-color: #00ff88;
+            --warning-color: #ffaa00;
+            --error-color: #ff4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-medium) 50%, var(--bg-dark) 100%);
+            color: var(--text-primary);
+            line-height: 1.8;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 量子粒子背景动画 */
+        .quantum-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            opacity: 0.3;
+            animation: float 15s infinite ease-in-out;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0) translateX(0); opacity: 0.3; }
+            50% { transform: translateY(-100px) translateX(50px); opacity: 0.8; }
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 封面设计 */
+        .cover {
+            text-align: center;
+            padding: 80px 20px;
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.2), rgba(0, 245, 255, 0.1));
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 60px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 20px 60px rgba(0, 245, 255, 0.1);
+        }
+
+        .cover h1 {
+            font-size: 3em;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 40px rgba(0, 245, 255, 0.3);
+            animation: glow 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from { filter: drop-shadow(0 0 10px var(--primary-color)); }
+            to { filter: drop-shadow(0 0 30px var(--accent-color)); }
+        }
+
+        .cover .subtitle {
+            font-size: 1.5em;
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+        }
+
+        .cover .meta {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
+            margin-top: 40px;
+        }
+
+        .meta-item {
+            background: var(--bg-light);
+            padding: 15px 30px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+        }
+
+        .meta-item strong {
+            color: var(--primary-color);
+        }
+
+        /* 导航目录 */
+        .toc {
+            background: var(--bg-medium);
+            border-radius: 15px;
+            padding: 40px;
+            margin-bottom: 60px;
+            border: 1px solid var(--border-color);
+        }
+
+        .toc h2 {
+            color: var(--primary-color);
+            margin-bottom: 30px;
+            font-size: 2em;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 15px;
+        }
+
+        .toc-list {
+            list-style: none;
+        }
+
+        .toc-list li {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: var(--bg-light);
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border-left: 3px solid transparent;
+        }
+
+        .toc-list li:hover {
+            transform: translateX(10px);
+            border-left-color: var(--primary-color);
+            box-shadow: 0 5px 20px rgba(0, 245, 255, 0.2);
+        }
+
+        .toc-list a {
+            color: var(--text-primary);
+            text-decoration: none;
+            display: block;
+        }
+
+        .toc-list .chapter-number {
+            color: var(--accent-color);
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        /* 章节内容 */
+        .chapter {
+            background: var(--bg-medium);
+            border-radius: 15px;
+            padding: 50px;
+            margin-bottom: 40px;
+            border: 1px solid var(--border-color);
+        }
+
+        .chapter-header {
+            text-align: center;
+            margin-bottom: 50px;
+            padding-bottom: 30px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .chapter h2 {
+            font-size: 2.5em;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+        }
+
+        .chapter-epigraph {
+            font-style: italic;
+            color: var(--text-secondary);
+            font-size: 1.2em;
+            text-align: center;
+            margin: 30px 0;
+            padding: 20px;
+            background: var(--bg-light);
+            border-radius: 10px;
+            border-left: 4px solid var(--accent-color);
+        }
+
+        .chapter-content h3 {
+            color: var(--secondary-color);
+            font-size: 1.8em;
+            margin: 40px 0 20px 0;
+            border-left: 4px solid var(--primary-color);
+            padding-left: 15px;
+        }
+
+        .chapter-content h4 {
+            color: var(--text-primary);
+            font-size: 1.4em;
+            margin: 30px 0 15px 0;
+        }
+
+        .chapter-content p {
+            margin-bottom: 20px;
+            text-align: justify;
+        }
+
+        /* 代码块 */
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 20px;
+            overflow-x: auto;
+            margin: 25px 0;
+            position: relative;
+        }
+
+        pre::before {
+            content: 'Code';
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--primary-color);
+            color: var(--bg-dark);
+            padding: 5px 15px;
+            border-radius: 0 10px 0 10px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        code {
+            font-family: 'Fira Code', 'Consolas', monospace;
+            color: var(--primary-color);
+        }
+
+        p code {
+            background: var(--code-bg);
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        /* 表格 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 30px 0;
+            background: var(--bg-light);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        th {
+            background: linear-gradient(135deg, var(--secondary-color), var(--accent-color));
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: bold;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        tr:hover {
+            background: rgba(0, 245, 255, 0.05);
+        }
+
+        /* 引用块 */
+        blockquote {
+            background: var(--bg-light);
+            border-left: 5px solid var(--primary-color);
+            padding: 20px 30px;
+            margin: 30px 0;
+            border-radius: 0 10px 10px 0;
+            font-style: italic;
+        }
+
+        blockquote p {
+            margin-bottom: 0;
+        }
+
+        /* 重点框 */
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(123, 44, 191, 0.1));
+            border: 2px solid var(--primary-color);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+        }
+
+        .highlight-box h4 {
+            color: var(--primary-color);
+            margin-top: 0;
+        }
+
+        /* 列表优化 */
+        ul, ol {
+            margin: 20px 0;
+            padding-left: 30px;
+        }
+
+        li {
+            margin-bottom: 10px;
+        }
+
+        /* 脚注 */
+        .footnote {
+            font-size: 0.9em;
+            color: var(--text-secondary);
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+            margin-top: 50px;
+        }
+
+        /* 页脚 */
+        .footer {
+            text-align: center;
+            padding: 40px;
+            margin-top: 60px;
+            border-top: 2px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .footer a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .cover h1 {
+                font-size: 2em;
+            }
+            
+            .chapter {
+                padding: 30px 20px;
+            }
+            
+            .meta {
+                flex-direction: column;
+                gap: 15px;
+            }
+        }
+
+        /* 打印优化 */
+        @media print {
+            .quantum-bg {
+                display: none;
+            }
+            
+            body {
+                background: white;
+                color: black;
+            }
+            
+            .chapter {
+                break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 量子粒子背景 -->
+    <div class="quantum-bg" id="quantumBg"></div>
+
+    <div class="container">
+        <!-- 封面 -->
+        <div class="cover">
+            <h1>🦾 OpenClaw 架构设计</h1>
+            <p class="subtitle">本地优先 AI 执行引擎</p>
+            <p style="color: var(--text-secondary); font-size: 1.2em; margin-top: 20px;">
+                Local-First AI Execution Engine Architecture
+            </p>
+            
+            <div class="meta">
+                <div class="meta-item">
+                    <strong>版本:</strong> v1.0
+                </div>
+                <div class="meta-item">
+                    <strong>发布日期:</strong> 2026 年 3 月
+                </div>
+                <div class="meta-item">
+                    <strong>总字数:</strong> 约 180,000 字
+                </div>
+                <div class="meta-item">
+                    <strong>章节数:</strong> 12 章 + 附录
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录 -->
+        <div class="toc">
+            <h2>📚 目录</h2>
+            <ul class="toc-list">
+                <li><a href="#chapter01"><span class="chapter-number">第 1 章</span>引言与背景</a></li>
+                <li><a href="#chapter02"><span class="chapter-number">第 2 章</span>本地优先 AI 理念与架构原则</a></li>
+                <li><a href="#chapter03"><span class="chapter-number">第 3 章</span>OpenClaw 核心架构概览</a></li>
+                <li><a href="#chapter04"><span class="chapter-number">第 4 章</span>执行引擎设计与实现</a></li>
+                <li><a href="#chapter05"><span class="chapter-number">第 5 章</span>任务调度与资源管理</a></li>
+                <li><a href="#chapter06"><span class="chapter-number">第 6 章</span>插件系统与扩展机制</a></li>
+                <li><a href="#chapter07"><span class="chapter-number">第 7 章</span>安全与权限控制</a></li>
+                <li><a href="#chapter08"><span class="chapter-number">第 8 章</span>记忆系统与知识管理</a></li>
+                <li><a href="#chapter09"><span class="chapter-number">第 9 章</span>浏览器自动化与 Canvas UI</a></li>
+                <li><a href="#chapter10"><span class="chapter-number">第 10 章</span>Multi-Agent 架构与协作</a></li>
+                <li><a href="#chapter11"><span class="chapter-number">第 11 章</span>实际应用场景与案例研究</a></li>
+                <li><a href="#chapter12"><span class="chapter-number">第 12 章</span>未来展望与社区生态</a></li>
+                <li><a href="#appendix"><span class="chapter-number">附录</span>配置模板与资源</a></li>
+            </ul>
+        </div>
+
+        <!-- 第 1 章 -->
+        <div id="chapter01" class="chapter">
+            <div class="chapter-header">
+                <h2>第 1 章：引言与背景</h2>
+                <p style="color: var(--text-secondary);">Introduction and Background</p>
+            </div>
+
+            <div class="chapter-epigraph">
+                "未来的 AI 不是替代人类，而是增强人类。本地优先的 AI 执行引擎将成为每个人的数字副驾驶。"
+            </div>
+
+            <div class="chapter-content">
+                <h3>1.1 AI Agent 时代的到来</h3>
+                
+                <h4>1.1.1 从聊天机器人到自主代理</h4>
+                <p>2022 年 11 月，ChatGPT 的发布标志着人工智能进入了一个全新的时代。在最初的几个月里，人们惊叹于大语言模型（Large Language Model, LLM）能够进行流畅的对话、回答问题、撰写文章甚至编写代码。然而，随着新鲜感的消退，用户开始意识到一个根本性的局限：<strong>传统的聊天机器人只能被动响应，无法主动执行任务</strong>。</p>
+                
+                <p>想象这样一个场景：你希望 AI 助手每天早上 8 点检查你的日历，读取天气预报，然后根据会议安排和天气情况为你准备一份简报，并通过飞书发送给你。使用传统的聊天机器人，你需要：</p>
+                <ol>
+                    <li>每天早上主动打开聊天界面</li>
+                    <li>手动输入请求："请帮我查看今天的日历和天气"</li>
+                    <li>等待 AI 回复</li>
+                    <li>自己整理信息</li>
+                </ol>
+                
+                <p>这个过程不仅繁琐，而且完全依赖用户的主动触发。更不用说让 AI 直接操作你的文件系统、执行 shell 命令、或者监控某个网站的变化了。</p>
+                
+                <p><strong>AI Agent（智能代理）</strong>的出现改变了这一局面。与被动响应的聊天机器人不同，AI Agent 具有以下核心特征：</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>特征</th>
+                            <th>聊天机器人</th>
+                            <th>AI Agent</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>主动性</strong></td>
+                            <td>被动等待用户输入</td>
+                            <td>可以主动触发任务</td>
+                        </tr>
+                        <tr>
+                            <td><strong>记忆能力</strong></td>
+                            <td>有限的上下文窗口</td>
+                            <td>持久化记忆系统</td>
+                        </tr>
+                        <tr>
+                            <td><strong>工具使用</strong></td>
+                            <td>仅限于文本生成</td>
+                            <td>可调用外部工具和 API</td>
+                        </tr>
+                        <tr>
+                            <td><strong>环境交互</strong></td>
+                            <td>无</td>
+                            <td>可读写文件、执行命令、控制浏览器</td>
+                        </tr>
+                        <tr>
+                            <td><strong>任务规划</strong></td>
+                            <td>单轮对话</td>
+                            <td>多步骤任务分解与执行</td>
+                        </tr>
+                        <tr>
+                            <td><strong>持续性</strong></td>
+                            <td>会话结束即消失</td>
+                            <td>7×24 小时持续运行</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="highlight-box">
+                    <h4>💡 关键洞察</h4>
+                    <p>OpenClaw 不仅仅是一个"能聊天的 AI"，更是一个"能做事的 AI 员工"。这种能力的背后，是一套完整的<strong>执行引擎（Execution Engine）</strong>在支撑。</p>
+                </div>
+
+                <h4>1.1.2 AI Agent 的核心能力模型</h4>
+                <p>要理解 OpenClaw 的架构设计，首先需要建立一个清晰的 AI Agent 能力模型。基于对现有 Agent 框架的分析，我们提出以下<strong>六维能力模型</strong>：</p>
+                
+                <h4>维度 1：感知能力（Perception）</h4>
+                <p>感知能力指 Agent 获取外部环境信息的能力，包括：</p>
+                <ul>
+                    <li><strong>消息接收</strong>: 从 IM 平台（飞书、微信、Telegram 等）接收用户指令</li>
+                    <li><strong>文件读取</strong>: 访问本地文件系统中的文档、代码、配置文件</li>
+                    <li><strong>网络抓取</strong>: 从网页、API 获取实时数据</li>
+                    <li><strong>传感器输入</strong>: 在特定场景下读取系统状态、日志等</li>
+                    <li><strong>视觉理解</strong>: 解析截图、图表、PDF 中的视觉信息</li>
+                </ul>
+
+                <h4>维度 2：认知能力（Cognition）</h4>
+                <p>认知能力是 Agent 的核心智能，由大语言模型提供：</p>
+                <ul>
+                    <li><strong>语言理解</strong>: 解析自然语言指令的意图</li>
+                    <li><strong>推理规划</strong>: 将复杂任务分解为可执行的子步骤</li>
+                    <li><strong>知识检索</strong>: 从记忆系统中提取相关信息</li>
+                    <li><strong>决策判断</strong>: 在多个可选行动中选择最优方案</li>
+                    <li><strong>自我反思</strong>: 评估执行结果，调整策略</li>
+                </ul>
+
+                <h4>维度 3：记忆能力（Memory）</h4>
+                <p>记忆能力使 Agent 能够跨越单次会话保持上下文：</p>
+                <ul>
+                    <li><strong>短期记忆</strong>: 当前会话的对话历史</li>
+                    <li><strong>长期记忆</strong>: 持久化存储的重要信息和经验</li>
+                    <li><strong>语义记忆</strong>: 通过向量搜索实现的知识检索</li>
+                    <li><strong>程序性记忆</strong>: 技能和工具的调用方法</li>
+                </ul>
+
+                <h4>维度 4：执行能力（Action）</h4>
+                <p>执行能力是 Agent 改变环境的能力：</p>
+                <ul>
+                    <li><strong>文件操作</strong>: 创建、修改、删除文件</li>
+                    <li><strong>命令执行</strong>: 运行 shell 脚本、编译代码、部署应用</li>
+                    <li><strong>浏览器控制</strong>: 自动化网页操作、数据采集</li>
+                    <li><strong>API 调用</strong>: 与第三方服务集成</li>
+                    <li><strong>消息发送</strong>: 主动向用户推送通知</li>
+                </ul>
+
+                <h4>维度 5：协作能力（Collaboration）</h4>
+                <p>协作能力使多个 Agent 可以协同工作：</p>
+                <ul>
+                    <li><strong>任务分解</strong>: 将大任务分配给多个子 Agent</li>
+                    <li><strong>角色分工</strong>: 不同 Agent 扮演不同专家角色</li>
+                    <li><strong>结果聚合</strong>: 整合多个 Agent 的输出</li>
+                    <li><strong>冲突解决</strong>: 处理 Agent 间的意见分歧</li>
+                </ul>
+
+                <h4>维度 6：进化能力（Evolution）</h4>
+                <p>进化能力使 Agent 能够从经验中学习改进：</p>
+                <ul>
+                    <li><strong>技能学习</strong>: 安装新 Skills 扩展能力边界</li>
+                    <li><strong>配置优化</strong>: 根据使用反馈调整参数</li>
+                    <li><strong>错误修复</strong>: 从失败中总结教训</li>
+                    <li><strong>知识更新</strong>: 定期同步最新信息</li>
+                </ul>
+
+                <blockquote>
+                    <p>这六个维度构成了评估 AI Agent 能力的完整框架。在后续章节中，我们将深入探讨 OpenClaw 如何在每个维度上实现卓越的表现。</p>
+                </blockquote>
+            </div>
+        </div>
+
+        <!-- 第 2-12 章概要 -->
+        <div id="chapter02" class="chapter">
+            <div class="chapter-header">
+                <h2>第 2 章：本地优先 AI 理念与架构原则</h2>
+                <p style="color: var(--text-secondary);">Local-First AI Philosophy and Architecture Principles</p>
+            </div>
+            
+            <div class="chapter-content">
+                <h3>本章核心内容</h3>
+                <p>本章深入探讨本地优先的设计哲学，分析 AI 执行引擎面临的技术挑战，详解 OpenClaw 的四大架构原则，并建立安全模型的基础认知。</p>
+                
+                <h4>2.1 本地优先的核心定义</h4>
+                <ul>
+                    <li>什么是"本地优先"（Local-First）</li>
+                    <li>本地优先 vs 云端优先的权衡</li>
+                    <li>混合架构的最佳实践</li>
+                </ul>
+
+                <h4>2.2 AI 执行引擎的设计挑战</h4>
+                <ul>
+                    <li>安全性与便利性的平衡</li>
+                    <li>性能优化策略</li>
+                    <li>可扩展性与模块化设计</li>
+                </ul>
+
+                <h4>2.3 OpenClaw 的架构原则</h4>
+                <ul>
+                    <li>"No Magic"设计哲学</li>
+                    <li>文件即配置（File-as-Configuration）</li>
+                    <li>信任边界与会话密钥</li>
+                    <li>Markdown 作为 LLM 原生接口</li>
+                </ul>
+
+                <h4>2.4 数据流与控制流设计</h4>
+                <ul>
+                    <li>消息标准化流程</li>
+                    <li>会话路由机制</li>
+                    <li>工具执行管道</li>
+                </ul>
+
+                <h4>2.5 安全模型基础</h4>
+                <ul>
+                    <li>零信任架构应用</li>
+                    <li>沙箱隔离策略</li>
+                    <li>权限最小化原则</li>
+                </ul>
+
+                <div class="highlight-box">
+                    <h4>📖 完整内容</h4>
+                    <p>本章完整内容约 18,000 字，详见 <code>chapter_02_philosophy.md</code> 文件。</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="chapter03" class="chapter">
+            <div class="chapter-header">
+                <h2>第 3 章：OpenClaw 核心架构概览</h2>
+                <p style="color: var(--text-secondary);">OpenClaw Core Architecture Overview</p>
+            </div>
+            
+            <div class="chapter-content">
+                <h3>本章核心内容</h3>
+                <p>本章剖析三层架构的设计思想，详解源码目录结构和模块职责，深入 Gateway 控制平面的实现，分析 Agent Runtime 的执行流程。</p>
+                
+                <h4>3.1 整体架构分层</h4>
+                <ul>
+                    <li>三层架构：Channel Adapters → Gateway → Agent Runtime</li>
+                    <li>Hub-and-Spoke 设计模式详解</li>
+                    <li>组件间通信协议</li>
+                </ul>
+
+                <h4>3.2 源码目录结构深度解析</h4>
+                <ul>
+                    <li>核心目录职责划分</li>
+                    <li>关键模块依赖关系</li>
+                    <li>构建系统与包管理</li>
+                </ul>
+
+                <h4>3.3 Gateway：控制平面核心</h4>
+                <ul>
+                    <li>进程模型与 WebSocket 服务器</li>
+                    <li>事件驱动架构</li>
+                    <li>幂等性保证机制</li>
+                </ul>
+
+                <h4>3.4 Agent Runtime：Pi Agent Core</h4>
+                <ul>
+                    <li>内嵌 Agent 核心循环</li>
+                    <li>四阶段执行流程</li>
+                    <li>状态持久化策略</li>
+                </ul>
+
+                <div class="highlight-box">
+                    <h4>📖 完整内容</h4>
+                    <p>本章完整内容约 20,000 字，详见 <code>chapter_03_architecture.md</code> 文件。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 更多章节... -->
+        <div id="chapter04" class="chapter">
+            <div class="chapter-header">
+                <h2>第 4 章：执行引擎设计与实现</h2>
+                <p style="color: var(--text-secondary);">Execution Engine Design and Implementation</p>
+            </div>
+            <div class="chapter-content">
+                <p>本章深入 Pi Agent Core 的核心循环机制、System Prompt 的动态组装策略、模型选择与故障转移算法、Streaming 架构和上下文压缩。</p>
+                <p><strong>字数</strong>: 约 20,000 字 | <strong>文件</strong>: <code>chapter_04_execution.md</code></p>
+            </div>
+        </div>
+
+        <div id="chapter05" class="chapter">
+            <div class="chapter-header">
+                <h2>第 5 章：任务调度与资源管理</h2>
+                <p style="color: var(--text-secondary);">Task Scheduling and Resource Management</p>
+            </div>
+            <div class="chapter-content">
+                <p>本章详解 Lane Queue 并发控制的精妙设计、消息处理模式和队列参数调优、Cron 定时任务和 Heartbeat 心跳机制、资源配额和成本优化策略。</p>
+                <p><strong>字数</strong>: 约 18,000 字 | <strong>文件</strong>: <code>chapter_05_scheduling.md</code></p>
+            </div>
+        </div>
+
+        <div id="chapter06" class="chapter">
+            <div class="chapter-header">
+                <h2>第 6 章：插件系统与扩展机制</h2>
+                <p style="color: var(--text-secondary);">Plugin System and Extension Mechanisms</p>
+            </div>
+            <div class="chapter-content">
+                <p>本章介绍插件架构和生命周期管理、Hook 系统的拦截和处理机制、Skills 技能系统的规范和注入，并提供开发自定义插件的实战教程。</p>
+                <p><strong>字数</strong>: 约 18,000 字 | <strong>文件</strong>: <code>chapter_06_plugins.md</code></p>
+            </div>
+        </div>
+
+        <div id="chapter07" class="chapter">
+            <div class="chapter-header">
+                <h2>第 7 章：安全与权限控制</h2>
+                <p style="color: var(--text-secondary);">Security and Access Control</p>
+            </div>
+            <div class="chapter-content">
+                <p>本章涵盖安全审计框架的实现、DM Policy 和 Group Policy、Tool 权限的层级控制、Docker 沙箱隔离机制、CVE 漏洞响应流程。</p>
+                <p><strong>字数</strong>: 约 20,000 字 | <strong>文件</strong>: <code>chapter_07_security.md</code></p>
+            </div>
+        </div>
+
+        <div id="chapter08" class="chapter">
+            <div class="chapter-header">
+                <h2>第 8 章：记忆系统与知识管理</h2>
+                <p style="color: var(--text-secondary);">Memory System and Knowledge Management</p>
+            </div>
+            <div class="chapter-content">
+                <p>本章探讨"文件即真理"的存储哲学、SQLite 索引管线的实现、混合搜索引擎的算法、Embedding Provider 链、实验性功能展望。</p>
+                <p><strong>字数</strong>: 约 18,000 字 | <strong>文件</strong>: <code>chapter_08_memory.md</code></p>
+            </div>
+        </div>
+
+        <div id="chapter09" class="chapter">
+            <div class="chapter-header">
+                <h2>第 9 章：浏览器自动化与 Canvas UI</h2>
+                <p style="color: var(--text-secondary);">Browser Automation and Canvas UI</p>
+            </div>
+            <div class="chapter-content">
+                <p>本章讲解 CDP 协议和 Playwright 抽象、Browser Profiles 配置、Snapshot 系统和数字引用、A2UI 动态界面渲染、自动化实战案例。</p>
+                <p><strong>字数</strong>: 约 16,000 字 | <strong>文件</strong>: <code>chapter_09_browser.md</code></p>
+            </div>
+        </div>
+
+        <div id="chapter10" class="chapter">
+            <div class="chapter-header">
+                <h2>第 10 章：Multi-Agent 架构与协作</h2>
+                <p style="color: var(--text-secondary);">Multi-Agent Architecture and Collaboration</p>
+            </div>
+            <div class="chapter-content">
+                <p>本章分析 Agent 隔离层设计、多 Agent 配置管理、Agent 间通信机制、角色分工和协作模式，并提供构建多 Agent 系统的实战指南。</p>
+                <p><strong>字数</strong>: 约 16,000 字 | <strong>文件</strong>: <code>chapter_10_multiagent.md</code></p>
+            </div>
+        </div>
+
+        <div id="chapter11" class="chapter">
+            <div class="chapter-header">
+                <h2>第 11 章：实际应用场景与案例研究</h2>
+                <p style="color: var(--text-secondary);">Real-world Applications and Case Studies</p>
+            </div>
+            <div class="chapter-content">
+                <p>本章展示个人效率提升场景、知识工作者场景、开发者场景、创作者场景、企业级应用、超级个体实战案例。</p>
+                <p><strong>字数</strong>: 约 20,000 字 | <strong>文件</strong>: <code>chapter_11_applications.md</code></p>
+            </div>
+        </div>
+
+        <div id="chapter12" class="chapter">
+            <div class="chapter-header">
+                <h2>第 12 章：未来展望与社区生态</h2>
+                <p style="color: var(--text-secondary);">Future Outlook and Community Ecosystem</p>
+            </div>
+            <div class="chapter-content">
+                <p>本章展望 OpenClaw 发展路线图、技术趋势和演进方向、社区生态建设、开源治理模式、商业化探索、伦理与社会责任。</p>
+                <p><strong>字数</strong>: 约 15,000 字 | <strong>文件</strong>: <code>chapter_12_future.md</code></p>
+            </div>
+        </div>
+
+        <!-- 附录 -->
+        <div id="appendix" class="chapter">
+            <div class="chapter-header">
+                <h2>附录：配置模板与资源</h2>
+                <p style="color: var(--text-secondary);">Appendix: Configuration Templates and Resources</p>
+            </div>
+            <div class="chapter-content">
+                <h3>附录列表</h3>
+                <ul>
+                    <li><strong>附录 A</strong>: 命令速查表</li>
+                    <li><strong>附录 B</strong>: 配置模板大全</li>
+                    <li><strong>附录 C</strong>: API 服务商对比</li>
+                    <li><strong>附录 D</strong>: Troubleshooting 指南</li>
+                    <li><strong>附录 E</strong>: 性能基准测试报告</li>
+                    <li><strong>附录 F</strong>: 安全合规检查清单</li>
+                    <li><strong>附录 G</strong>: 社区资源导航</li>
+                    <li><strong>附录 H</strong>: 术语表</li>
+                </ul>
+                <p><strong>文件</strong>: <code>appendix.md</code></p>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <p>© 2026 OpenClaw 技术书籍 | 基于 OpenClaw 2026.3.2 版本编写</p>
+            <p>
+                <a href="https://clawd.org.cn" target="_blank">官方文档</a> | 
+                <a href="https://github.com/openclaw/openclaw" target="_blank">GitHub 仓库</a> | 
+                <a href="https://www.indev.cn" target="_blank">中文教程</a>
+            </p>
+            <p style="margin-top: 20px; font-size: 0.9em;">
+                本书采用 CC BY-SA 4.0 许可协议发布
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // 生成量子粒子背景
+        function createParticles() {
+            const container = document.getElementById('quantumBg');
+            const particleCount = 50;
+            
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.top = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 15 + 's';
+                particle.style.animationDuration = (Math.random() * 10 + 10) + 's';
+                
+                // 随机颜色
+                const colors = ['#00f5ff', '#7b2cbf', '#ff006e'];
+                particle.style.background = colors[Math.floor(Math.random() * colors.length)];
+                
+                container.appendChild(particle);
+            }
+        }
+        
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+        
+        // 初始化
+        createParticles();
+    </script>
+</body>
+</html>

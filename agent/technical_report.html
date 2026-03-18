@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统异常告警规则设计与多渠道告警对接技术方案</title>
+    <style>
+        :root {
+            --primary-color: #667eea;
+            --secondary-color: #764ba2;
+            --accent-color: #f093fb;
+            --bg-dark: #0f0c29;
+            --bg-medium: #1a1a3e;
+            --bg-light: #2d2d5a;
+            --text-primary: #ffffff;
+            --text-secondary: #b8b8d1;
+            --success: #00d2aa;
+            --warning: #ffa500;
+            --danger: #ff6b6b;
+            --info: #4facfe;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-medium) 50%, var(--bg-light) 100%);
+            color: var(--text-primary);
+            line-height: 1.8;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        header {
+            text-align: center;
+            padding: 60px 20px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            border-radius: 20px;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 60px rgba(102, 126, 234, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: pulse 4s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
+        h1 {
+            font-size: 2.8em;
+            margin-bottom: 20px;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 1;
+        }
+        
+        .subtitle {
+            font-size: 1.3em;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .meta-info {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .meta-tag {
+            background: rgba(255,255,255,0.2);
+            padding: 8px 20px;
+            border-radius: 25px;
+            font-size: 0.9em;
+            backdrop-filter: blur(10px);
+        }
+        
+        section {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 40px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        
+        h2 {
+            font-size: 2em;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        h2::before {
+            content: '🔷';
+            font-size: 1.2em;
+        }
+        
+        h3 {
+            font-size: 1.5em;
+            margin: 30px 0 20px;
+            color: var(--accent-color);
+        }
+        
+        h4 {
+            font-size: 1.2em;
+            margin: 20px 0 15px;
+            color: var(--info);
+        }
+        
+        p {
+            margin-bottom: 15px;
+            color: var(--text-secondary);
+        }
+        
+        ul, ol {
+            margin-left: 30px;
+            margin-bottom: 20px;
+            color: var(--text-secondary);
+        }
+        
+        li {
+            margin-bottom: 10px;
+        }
+        
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
+            border-left: 4px solid var(--primary-color);
+            padding: 20px;
+            border-radius: 0 10px 10px 0;
+            margin: 20px 0;
+        }
+        
+        .severity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .severity-card {
+            background: var(--bg-medium);
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            border: 2px solid;
+            transition: transform 0.3s ease;
+        }
+        
+        .severity-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .severity-p0 { border-color: var(--danger); }
+        .severity-p1 { border-color: var(--warning); }
+        .severity-p2 { border-color: var(--info); }
+        .severity-p3 { border-color: var(--success); }
+        
+        .severity-level {
+            font-size: 3em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .severity-p0 .severity-level { color: var(--danger); }
+        .severity-p1 .severity-level { color: var(--warning); }
+        .severity-p2 .severity-level { color: var(--info); }
+        .severity-p3 .severity-level { color: var(--success); }
+        
+        .channel-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
+        }
+        
+        .channel-card {
+            background: linear-gradient(135deg, rgba(79, 172, 254, 0.1), rgba(0, 210, 170, 0.1));
+            border-radius: 15px;
+            padding: 30px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .channel-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        th {
+            background: rgba(102, 126, 234, 0.3);
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        tr:hover {
+            background: rgba(255,255,255,0.05);
+        }
+        
+        .code-block {
+            background: var(--bg-dark);
+            border-radius: 10px;
+            padding: 25px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+            line-height: 1.6;
+            border: 1px solid rgba(255,255,255,0.1);
+            margin: 20px 0;
+        }
+        
+        .code-block code {
+            color: var(--text-primary);
+        }
+        
+        .keyword { color: var(--primary-color); }
+        .string { color: var(--success); }
+        .comment { color: var(--text-secondary); font-style: italic; }
+        .number { color: var(--warning); }
+        
+        .architecture-diagram {
+            background: var(--bg-dark);
+            border-radius: 15px;
+            padding: 40px;
+            margin: 30px 0;
+            text-align: center;
+        }
+        
+        .flow-chart {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .flow-step {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            padding: 20px 30px;
+            border-radius: 10px;
+            flex: 1;
+            min-width: 150px;
+            text-align: center;
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .flow-arrow {
+            font-size: 2em;
+            color: var(--accent-color);
+        }
+        
+        .toc {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .toc h3 {
+            margin-top: 0;
+        }
+        
+        .toc ul {
+            list-style: none;
+            margin-left: 0;
+        }
+        
+        .toc li {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        
+        .toc a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .toc a:hover {
+            color: var(--primary-color);
+        }
+        
+        footer {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+            border-top: 1px solid rgba(255,255,255,0.1);
+            margin-top: 40px;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+        
+        .badge-primary { background: var(--primary-color); }
+        .badge-success { background: var(--success); color: var(--bg-dark); }
+        .badge-warning { background: var(--warning); color: var(--bg-dark); }
+        .badge-danger { background: var(--danger); }
+        
+        @media (max-width: 768px) {
+            h1 { font-size: 2em; }
+            h2 { font-size: 1.6em; }
+            section { padding: 25px; }
+            .container { padding: 20px 15px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚨 系统异常告警规则设计与多渠道告警对接</h1>
+            <p class="subtitle">OpenClaw + Claude Code 端到端研发自动化系统 · 告警模块技术方案</p>
+            <div class="meta-info">
+                <span class="meta-tag">📅 2026 年 3 月</span>
+                <span class="meta-tag">👨‍💻 AI 辅助开发</span>
+                <span class="meta-tag">🐍 Python 3.12</span>
+                <span class="meta-tag">⚡ FastAPI</span>
+            </div>
+        </header>
+        
+        <nav class="toc">
+            <h3>📑 目录</h3>
+            <ul>
+                <li><a href="#section1">1. 项目背景与目标</a></li>
+                <li><a href="#section2">2. 告警规则体系设计</a></li>
+                <li><a href="#section3">3. 多渠道告警架构</a></li>
+                <li><a href="#section4">4. 系统架构设计</a></li>
+                <li><a href="#section5">5. 核心功能实现</a></li>
+                <li><a href="#section6">6. API 接口设计</a></li>
+                <li><a href="#section7">7. 配置说明</a></li>
+                <li><a href="#section8">8. 部署方案</a></li>
+                <li><a href="#section9">9. 使用示例</a></li>
+                <li><a href="#section10">10. 总结与展望</a></li>
+            </ul>
+        </nav>
+        
+        <section id="section1">
+            <h2>项目背景与目标</h2>
+            
+            <div class="highlight-box">
+                <strong>🎯 核心目标：</strong>为 OpenClaw + Claude Code 端到端研发自动化系统设计一套完整的系统异常告警规则体系，并实现与邮件、短信、企业微信等多渠道的告警对接。
+            </div>
+            
+            <h3>1.1 业务背景</h3>
+            <p>在端到端的研发自动化流程中，从 PRD 设计、AI 代码生成、单元测试、集成测试到 UI 自动化测试，每个环节都可能出现异常。及时、准确地发现并通知相关人员处理这些异常，是保障研发效率和质量的关键。</p>
+            
+            <h3>1.2 设计原则</h3>
+            <ul>
+                <li><strong>分级管理：</strong>根据异常严重程度分为 P0/P1/P2/P3 四个等级</li>
+                <li><strong>精准触达：</strong>根据异常类型和级别，自动选择通知渠道和接收人</li>
+                <li><strong>智能去重：</strong>避免告警风暴，相同告警在时间窗口内只发送一次</li>
+                <li><strong>自动升级：</strong>超时未处理的告警自动升级到上级负责人</li>
+                <li><strong>人机协同：</strong>支持告警确认、处理、关闭等完整生命周期管理</li>
+            </ul>
+            
+            <h3>1.3 技术选型</h3>
+            <table>
+                <tr>
+                    <th>组件</th>
+                    <th>技术栈</th>
+                    <th>说明</th>
+                </tr>
+                <tr>
+                    <td>Web 框架</td>
+                    <td>FastAPI</td>
+                    <td>高性能异步 Web 框架</td>
+                </tr>
+                <tr>
+                    <td>消息队列</td>
+                    <td>Redis / RabbitMQ</td>
+                    <td>异步任务处理（可选）</td>
+                </tr>
+                <tr>
+                    <td>数据存储</td>
+                    <td>SQLite / PostgreSQL</td>
+                    <td>告警记录存储</td>
+                </tr>
+                <tr>
+                    <td>通知渠道</td>
+                    <td>SMTP / 云 API</td>
+                    <td>邮件、短信、企微</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section id="section2">
+            <h2>告警规则体系设计</h2>
+            
+            <h3>2.1 告警级别定义</h3>
+            
+            <div class="severity-grid">
+                <div class="severity-card severity-p0">
+                    <div class="severity-level">P0</div>
+                    <h4>致命级</h4>
+                    <p>系统完全不可用<br>核心功能瘫痪</p>
+                    <p><strong>响应时间：5 分钟</strong></p>
+                    <span class="badge badge-danger">短信 + 企微 + 邮件</span>
+                </div>
+                
+                <div class="severity-card severity-p1">
+                    <div class="severity-level">P1</div>
+                    <h4>严重级</h4>
+                    <p>核心功能受影响<br>部分用户无法使用</p>
+                    <p><strong>响应时间：15 分钟</strong></p>
+                    <span class="badge badge-warning">企微 + 邮件</span>
+                </div>
+                
+                <div class="severity-card severity-p2">
+                    <div class="severity-level">P2</div>
+                    <h4>一般级</h4>
+                    <p>非核心功能异常<br>影响用户体验</p>
+                    <p><strong>响应时间：1 小时</strong></p>
+                    <span class="badge badge-primary">企业微信</span>
+                </div>
+                
+                <div class="severity-card severity-p3">
+                    <div class="severity-level">P3</div>
+                    <h4>提示级</h4>
+                    <p>轻微异常或预警<br>需要关注但无需立即处理</p>
+                    <p><strong>响应时间：4 小时</strong></p>
+                    <span class="badge badge-success">邮件</span>
+                </div>
+            </div>
+            
+            <h3>2.2 研发全流程告警规则</h3>
+            
+            <h4>CI/CD 阶段</h4>
+            <table>
+                <tr>
+                    <th>异常类型</th>
+                    <th>触发条件</th>
+                    <th>级别</th>
+                    <th>通知渠道</th>
+                </tr>
+                <tr>
+                    <td>Jenkins 构建失败</td>
+                    <td>build_status == "failed"</td>
+                    <td>P0</td>
+                    <td>短信 + 企微 + 邮件</td>
+                </tr>
+                <tr>
+                    <td>K8S 部署失败</td>
+                    <td>deployment_status == "failed"</td>
+                    <td>P0</td>
+                    <td>短信 + 企微 + 邮件</td>
+                </tr>
+                <tr>
+                    <td>镜像构建超时</td>
+                    <td>build_duration > 1800s</td>
+                    <td>P2</td>
+                    <td>企业微信</td>
+                </tr>
+            </table>
+            
+            <h4>AI Coding 阶段</h4>
+            <table>
+                <tr>
+                    <th>异常类型</th>
+                    <th>触发条件</th>
+                    <th>级别</th>
+                    <th>通知渠道</th>
+                </tr>
+                <tr>
+                    <td>代码生成失败</td>
+                    <td>generation_status == "failed"</td>
+                    <td>P1</td>
+                    <td>企微 + 邮件</td>
+                </tr>
+                <tr>
+                    <td>代码质量不达标</td>
+                    <td>code_quality_score &lt; 80</td>
+                    <td>P1</td>
+                    <td>企微 + 邮件</td>
+                </tr>
+                <tr>
+                    <td>安全漏洞检测</td>
+                    <td>security_issues &gt; 0</td>
+                    <td>P0</td>
+                    <td>短信 + 企微 + 邮件</td>
+                </tr>
+            </table>
+            
+            <h4>单元测试阶段</h4>
+            <table>
+                <tr>
+                    <th>异常类型</th>
+                    <th>触发条件</th>
+                    <th>级别</th>
+                    <th>通知渠道</th>
+                </tr>
+                <tr>
+                    <td>单元测试失败</td>
+                    <td>test_status == "failed"</td>
+                    <td>P1</td>
+                    <td>企微 + 邮件</td>
+                </tr>
+                <tr>
+                    <td>覆盖率不足</td>
+                    <td>coverage_percentage &lt; 80%</td>
+                    <td>P2</td>
+                    <td>企业微信</td>
+                </tr>
+            </table>
+            
+            <h4>集成测试阶段</h4>
+            <table>
+                <tr>
+                    <th>异常类型</th>
+                    <th>触发条件</th>
+                    <th>级别</th>
+                    <th>通知渠道</th>
+                </tr>
+                <tr>
+                    <td>接口联调失败</td>
+                    <td>integration_test_status == "failed"</td>
+                    <td>P1</td>
+                    <td>企微 + 邮件</td>
+                </tr>
+                <tr>
+                    <td>API 响应过慢</td>
+                    <td>response_time &gt; 2000ms</td>
+                    <td>P2</td>
+                    <td>企业微信</td>
+                </tr>
+            </table>
+            
+            <h4>UI 自动化测试阶段</h4>
+            <table>
+                <tr>
+                    <th>异常类型</th>
+                    <th>触发条件</th>
+                    <th>级别</th>
+                    <th>通知渠道</th>
+                </tr>
+                <tr>
+                    <td>UI 测试失败</td>
+                    <td>ui_test_status == "failed"</td>
+                    <td>P1</td>
+                    <td>企微 + 邮件</td>
+                </tr>
+                <tr>
+                    <td>视觉回归异常</td>
+                    <td>visual_diff &gt; 5%</td>
+                    <td>P2</td>
+                    <td>企业微信</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section id="section3">
+            <h2>多渠道告警架构</h2>
+            
+            <div class="channel-grid">
+                <div class="channel-card">
+                    <div class="channel-icon">📧</div>
+                    <h3>邮件告警</h3>
+                    <p><strong>适用场景：</strong>P0-P3 全级别告警，适合传递详细信息</p>
+                    <p><strong>技术实现：</strong>SMTP 协议 + HTML 模板</p>
+                    <p><strong>特点：</strong></p>
+                    <ul>
+                        <li>支持富文本 HTML 格式</li>
+                        <li>可附带详细日志和图表</li>
+                        <li>支持抄送多人</li>
+                        <li>有已读回执功能</li>
+                    </ul>
+                </div>
+                
+                <div class="channel-card">
+                    <div class="channel-icon">📱</div>
+                    <h3>短信告警</h3>
+                    <p><strong>适用场景：</strong>P0/P1紧急告警，确保即时触达</p>
+                    <p><strong>技术实现：</strong>阿里云/腾讯云 SMS API</p>
+                    <p><strong>特点：</strong></p>
+                    <ul>
+                        <li>即时性强，到达率高</li>
+                        <li>内容精简（140 字以内）</li>
+                        <li>支持国内三大运营商</li>
+                        <li>成本相对较高</li>
+                    </ul>
+                </div>
+                
+                <div class="channel-card">
+                    <div class="channel-icon">💬</div>
+                    <h3>企业微信</h3>
+                    <p><strong>适用场景：</strong>P1-P3日常告警，团队协作</p>
+                    <p><strong>技术实现：</strong>企微机器人 Webhook / 应用消息 API</p>
+                    <p><strong>特点：</strong></p>
+                    <ul>
+                        <li>支持 Markdown 格式</li>
+                        <li>可@指定人员</li>
+                        <li>支持卡片消息</li>
+                        <li>免费且易用</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <h3>3.1 渠道选择策略</h3>
+            
+            <table>
+                <tr>
+                    <th>告警级别</th>
+                    <th>工作时间 (9:00-18:00)</th>
+                    <th>非工作时间</th>
+                    <th>节假日</th>
+                </tr>
+                <tr>
+                    <td>P0</td>
+                    <td>短信 + 企微 + 邮件</td>
+                    <td>短信 + 企微 + 邮件</td>
+                    <td>短信 + 企微 + 邮件</td>
+                </tr>
+                <tr>
+                    <td>P1</td>
+                    <td>企微 + 邮件</td>
+                    <td>短信 + 企微 + 邮件</td>
+                    <td>短信 + 企微 + 邮件</td>
+                </tr>
+                <tr>
+                    <td>P2</td>
+                    <td>企业微信</td>
+                    <td>企业微信</td>
+                    <td>邮件</td>
+                </tr>
+                <tr>
+                    <td>P3</td>
+                    <td>企业微信</td>
+                    <td>邮件</td>
+                    <td>邮件</td>
+                </tr>
+            </table>
+            
+            <h3>3.2 通知模板设计</h3>
+            
+            <div class="code-block">
+                <code>
+<span class="comment"># 邮件 HTML 模板示例</span>
+&lt;<span class="keyword">div</span> <span class="keyword">class</span>=<span class="string">"alert-header"</span>&gt;
+    &lt;<span class="keyword">h1</span>&gt;🚨 系统异常告警&lt;/<span class="keyword">h1</span>&gt;
+    &lt;<span class="keyword">h2</span>&gt;【{severity}】{alert_name}&lt;/<span class="keyword">h2</span>&gt;
+&lt;/&lt;<span class="keyword">div</span>&gt;
+
+&lt;<span class="keyword">table</span>&gt;
+    &lt;<span class="keyword">tr</span>&gt;&lt;<span class="keyword">td</span>&gt;告警 ID:&lt;/<span class="keyword">td</span>&gt;&lt;<span class="keyword">td</span>&gt;{alert_id}&lt;/<span class="keyword">td</span>&gt;&lt;/<span class="keyword">tr</span>&gt;
+    &lt;<span class="keyword">tr</span>&gt;&lt;<span class="keyword">td</span>&gt;发生时间:&lt;/<span class="keyword">td</span>&gt;&lt;<span class="keyword">td</span>&gt;{timestamp}&lt;/<span class="keyword">td</span>&gt;&lt;/<span class="keyword">tr</span>&gt;
+    &lt;<span class="keyword">tr</span>&gt;&lt;<span class="keyword">td</span>&gt;涉及系统:&lt;/<span class="keyword">td</span>&gt;&lt;<span class="keyword">td</span>&gt;{system}&lt;/<span class="keyword">td</span>&gt;&lt;/<span class="keyword">tr</span>&gt;
+    &lt;<span class="keyword">tr</span>&gt;&lt;<span class="keyword">td</span>&gt;研发阶段:&lt;/<span class="keyword">td</span>&gt;&lt;<span class="keyword">td</span>&gt;{stage}&lt;/<span class="keyword">td</span>&gt;&lt;/<span class="keyword">tr</span>&gt;
+&lt;/<span class="keyword">table</span>&gt;
+                </code>
+            </div>
+        </section>
+        
+        <section id="section4">
+            <h2>系统架构设计</h2>
+            
+            <div class="architecture-diagram">
+                <h3>4.1 整体架构图</h3>
+                <div class="flow-chart">
+                    <div class="flow-step">
+                        <strong>监控系统</strong><br>
+                        <small>Jenkins/K8s/Prometheus</small>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <strong>事件接入层</strong><br>
+                        <small>REST API / Webhook</small>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <strong>规则引擎</strong><br>
+                        <small>匹配 + 过滤</small>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <strong>告警处理器</strong><br>
+                        <small>去重 + 升级</small>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <strong>通知渠道</strong><br>
+                        <small>邮件/短信/企微</small>
+                    </div>
+                </div>
+            </div>
+            
+            <h3>4.2 核心模块</h3>
+            
+            <h4>AnomalyDetector - 异常检测器</h4>
+            <p>负责从 incoming events 中检测异常，支持阈值检测、趋势分析、统计异常检测等多种策略。</p>
+            
+            <h4>RuleMatcher - 规则匹配器</h4>
+            <p>将检测到的异常与预定义的告警规则进行匹配，确定触发的规则和告警级别。</p>
+            
+            <h4>AlertProcessor - 告警处理器</h4>
+            <p>创建告警实例，管理告警生命周期（创建、确认、升级、解决、关闭）。</p>
+            
+            <h4>Deduplicator - 去重处理器</h4>
+            <p>防止告警风暴，在指定的时间窗口内，相同的告警只发送一次通知。</p>
+            
+            <h3>4.3 数据模型</h3>
+            
+            <div class="code-block">
+                <code>
+<span class="comment"># AlertEvent - 告警事件</span>
+<span class="keyword">class</span> AlertEvent:
+    event_type: str      <span class="comment"># 事件类型</span>
+    stage: str           <span class="comment"># 研发阶段</span>
+    system: str          <span class="comment"># 系统名称</span>
+    metric: str          <span class="comment"># 指标名称</span>
+    value: Any           <span class="comment"># 指标值</span>
+    timestamp: datetime  <span class="comment"># 时间戳</span>
+    details: dict        <span class="comment"># 详细信息</span>
+
+<span class="comment"># AlertRule - 告警规则</span>
+<span class="keyword">class</span> AlertRule:
+    id: str              <span class="comment"># 规则 ID</span>
+    name: str            <span class="comment"># 规则名称</span>
+    severity: Severity   <span class="comment"># 告警级别</span>
+    trigger: Trigger     <span class="comment"># 触发条件</span>
+    notification: dict   <span class="comment"># 通知配置</span>
+
+<span class="comment"># Alert - 告警实例</span>
+<span class="keyword">class</span> Alert:
+    id: str              <span class="comment"># 告警 ID</span>
+    rule_id: str         <span class="comment"># 规则 ID</span>
+    status: Status       <span class="comment"># 告警状态</span>
+    created_at: datetime <span class="comment"># 创建时间</span>
+    acknowledged_by: str <span class="comment"># 确认人</span>
+    resolved_at: datetime <span class="comment"># 解决时间</span>
+                </code>
+            </div>
+        </section>
+        
+        <section id="section5">
+            <h2>核心功能实现</h2>
+            
+            <h3>5.1 告警去重机制</h3>
+            <p>通过生成告警的唯一指纹（dedup_key），在指定的时间窗口内抑制重复告警。</p>
+            
+            <div class="code-block">
+                <code>
+<span class="keyword">def</span> <span class="function">generate_dedup_key</span>(alert):
+    <span class="comment"># 基于规则 ID、事件类型、系统、指标生成唯一键</span>
+    key_parts = [
+        alert.rule_id,
+        alert.event.event_type,
+        alert.event.system,
+        alert.event.metric,
+    ]
+    key_string = <span class="string">"|"</span>.join(key_parts)
+    <span class="keyword">return</span> hashlib.sha256(key_string.encode()).hexdigest()[:<span class="number">32</span>]
+
+<span class="keyword">def</span> <span class="function">is_duplicate</span>(alert, window=<span class="number">300</span>):
+    dedup_key = generate_dedup_key(alert)
+    now = datetime.now()
+    
+    <span class="keyword">if</span> dedup_key <span class="keyword">in</span> cache:
+        last_seen = cache[dedup_key]
+        <span class="keyword">if</span> (now - last_seen).seconds &lt; window:
+            <span class="keyword">return</span> True  <span class="comment"># 是重复告警</span>
+    
+    cache[dedup_key] = now
+    <span class="keyword">return</span> False  <span class="comment"># 不是重复告警</span>
+                </code>
+            </div>
+            
+            <h3>5.2 告警升级机制</h3>
+            <p>当告警在指定时间内未被确认或解决时，自动升级到上级负责人。</p>
+            
+            <div class="code-block">
+                <code>
+<span class="keyword">async def</span> <span class="function">check_escalations</span>():
+    <span class="keyword">for</span> alert <span class="keyword">in</span> active_alerts:
+        timeout = get_timeout_by_severity(alert.severity)
+        elapsed = (now - alert.created_at).seconds
+        
+        <span class="keyword">if</span> alert.status == <span class="string">"triggered"</span> <span class="keyword">and</span> elapsed &gt; timeout:
+            <span class="comment"># 超时未确认，升级</span>
+            escalate_to = get_escalation_targets(alert)
+            <span class="keyword">await</span> send_escalation_notification(alert, escalate_to)
+            
+        <span class="keyword">elif</span> alert.status == <span class="string">"acknowledged"</span>:
+            ack_elapsed = (now - alert.acknowledged_at).seconds
+            <span class="keyword">if</span> ack_elapsed &gt; timeout * <span class="number">2</span>:
+                <span class="comment"># 确认后超时未解决，再次升级</span>
+                <span class="keyword">await</span> send_escalation_notification(alert, escalate_to)
+                </code>
+            </div>
+            
+            <h3>5.3 静默期管理</h3>
+            <p>在维护窗口或特定时间段内，自动静默部分级别的告警。</p>
+            
+            <div class="code-block">
+                <code>
+<span class="keyword">def</span> <span class="function">is_in_silence_period</span>(rule):
+    now = datetime.now()
+    
+    <span class="keyword">for</span> period <span class="keyword">in</span> rule.silence_periods:
+        <span class="comment"># 检查星期几</span>
+        <span class="keyword">if</span> now.weekday() <span class="keyword">not in</span> period.weekdays:
+            continue
+        
+        <span class="comment"># 检查时间段</span>
+        current_time = now.hour * <span class="number">60</span> + now.minute
+        start_time = parse_time(period.start_time)
+        end_time = parse_time(period.end_time)
+        
+        <span class="keyword">if</span> start_time &lt;= current_time &lt;= end_time:
+            <span class="keyword">return</span> True  <span class="comment"># 在静默期内</span>
+    
+    <span class="keyword">return</span> False
+                </code>
+            </div>
+        </section>
+        
+        <section id="section6">
+            <h2>API 接口设计</h2>
+            
+            <h3>6.1 告警上报接口</h3>
+            <table>
+                <tr>
+                    <th>属性</th>
+                    <th>说明</th>
+                </tr>
+                <tr>
+                    <td>URL</td>
+                    <td><code>POST /api/v1/alerts</code></td>
+                </tr>
+                <tr>
+                    <td>Content-Type</td>
+                    <td><code>application/json</code></td>
+                </tr>
+            </table>
+            
+            <div class="code-block">
+                <code>
+<span class="comment"># 请求体</span>
+{
+    <span class="string">"event_type"</span>: <span class="string">"build_failure"</span>,
+    <span class="string">"stage"</span>: <span class="string">"ci_cd"</span>,
+    <span class="string">"system"</span>: <span class="string">"backend-service"</span>,
+    <span class="string">"metric"</span>: <span class="string">"build_status"</span>,
+    <span class="string">"value"</span>: <span class="string">"failed"</span>,
+    <span class="string">"details"</span>: {
+        <span class="string">"job_id"</span>: <span class="string">"jenkins-12345"</span>,
+        <span class="string">"branch"</span>: <span class="string">"main"</span>,
+        <span class="string">"error_message"</span>: <span class="string">"Compilation failed"</span>
+    }
+}
+
+<span class="comment"># 响应</span>
+{
+    <span class="string">"code"</span>: <span class="number">200</span>,
+    <span class="string">"message"</span>: <span class="string">"Alert created successfully"</span>,
+    <span class="string">"data"</span>: {
+        <span class="string">"alert_id"</span>: <span class="string">"ALT-20260315-ABC123"</span>,
+        <span class="string">"status"</span>: <span class="string">"triggered"</span>,
+        <span class="string">"severity"</span>: <span class="string">"P0"</span>
+    }
+}
+                </code>
+            </div>
+            
+            <h3>6.2 告警管理接口</h3>
+            <table>
+                <tr>
+                    <th>方法</th>
+                    <th>路径</th>
+                    <th>说明</th>
+                </tr>
+                <tr>
+                    <td>GET</td>
+                    <td>/api/v1/alerts</td>
+                    <td>获取告警列表</td>
+                </tr>
+                <tr>
+                    <td>GET</td>
+                    <td>/api/v1/alerts/{id}</td>
+                    <td>获取告警详情</td>
+                </tr>
+                <tr>
+                    <td>PUT</td>
+                    <td>/api/v1/alerts/{id}/acknowledge</td>
+                    <td>确认告警</td>
+                </tr>
+                <tr>
+                    <td>PUT</td>
+                    <td>/api/v1/alerts/{id}/resolve</td>
+                    <td>解决告警</td>
+                </tr>
+                <tr>
+                    <td>PUT</td>
+                    <td>/api/v1/alerts/{id}/close</td>
+                    <td>关闭告警</td>
+                </tr>
+                <tr>
+                    <td>GET</td>
+                    <td>/api/v1/statistics</td>
+                    <td>获取统计数据</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section id="section7">
+            <h2>配置说明</h2>
+            
+            <h3>7.1 系统配置 (settings.yaml)</h3>
+            <div class="code-block">
+                <code>
+<span class="comment"># 基本配置</span>
+app_name: <span class="string">"研发自动化告警系统"</span>
+debug: <span class="keyword">false</span>
+host: <span class="string">"0.0.0.0"</span>
+port: <span class="number">8000</span>
+
+<span class="comment"># 邮件配置</span>
+email:
+  smtp_server: <span class="string">"smtp.company.com"</span>
+  smtp_port: <span class="number">587</span>
+  use_tls: <span class="keyword">true</span>
+  username: <span class="string">"${EMAIL_USERNAME}"</span>
+  password: <span class="string">"${EMAIL_PASSWORD}"</span>
+
+<span class="comment"># 短信配置</span>
+sms:
+  provider: <span class="string">"aliyun"</span>
+  access_key: <span class="string">"${SMS_ACCESS_KEY}"</span>
+  secret_key: <span class="string">"${SMS_SECRET_KEY}"</span>
+
+<span class="comment"># 企业微信配置</span>
+wecom:
+  webhook_url: <span class="string">"${WECOM_WEBHOOK_URL}"</span>
+  corp_id: <span class="string">"${WECOM_CORP_ID}"</span>
+  agent_id: <span class="string">"${WECOM_AGENT_ID}"</span>
+  secret: <span class="string">"${WECOM_SECRET}"</span>
+                </code>
+            </div>
+            
+            <h3>7.2 告警规则配置 (alert_rules.yaml)</h3>
+            <div class="code-block">
+                <code>
+rules:
+  - id: <span class="string">"cicd_build_failure"</span>
+    name: <span class="string">"CI/CD 构建失败"</span>
+    stage: <span class="string">"ci_cd"</span>
+    severity: <span class="string">"P0"</span>
+    
+    trigger:
+      type: <span class="string">"threshold"</span>
+      metric: <span class="string">"build_status"</span>
+      operator: <span class="string">"=="</span>
+      threshold: <span class="string">"failed"</span>
+    
+    notification:
+      channels: [<span class="string">"sms"</span>, <span class="string">"wecom"</span>, <span class="string">"email"</span>]
+      receivers: [<span class="string">"role:devops"</span>, <span class="string">"role:backend_dev"</span>]
+      escalation:
+        enabled: <span class="keyword">true</span>
+        timeout: <span class="number">300</span>
+        escalate_to: [<span class="string">"role:tech_lead"</span>]
+    
+    deduplication:
+      enabled: <span class="keyword">true</span>
+      window: <span class="number">300</span>
+                </code>
+            </div>
+        </section>
+        
+        <section id="section8">
+            <h2>部署方案</h2>
+            
+            <h3>8.1 Docker 部署</h3>
+            <div class="code-block">
+                <code>
+<span class="comment"># Dockerfile</span>
+FROM python:<span class="number">3.12</span>-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE <span class="number">8000</span>
+
+CMD [<span class="string">"uvicorn"</span>, <span class="string">"src.main:create_app"</span>, <span class="string">"--factory"</span>, <span class="string">"--host"</span>, <span class="string">"0.0.0.0"</span>, <span class="string">"--port"</span>, <span class="string">"8000"</span>]
+                </code>
+            </div>
+            
+            <h3>8.2 K8S 部署</h3>
+            <div class="code-block">
+                <code>
+<span class="comment"># deployment.yaml</span>
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alert-system
+spec:
+  replicas: <span class="number">3</span>
+  selector:
+    matchLabels:
+      app: alert-system
+  template:
+    metadata:
+      labels:
+        app: alert-system
+    spec:
+      containers:
+      - name: alert-system
+        image: alert-system:v<span class="number">1.0</span>
+        ports:
+        - containerPort: <span class="number">8000</span>
+        env:
+        - name: EMAIL_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: alert-secrets
+              key: email-username
+        resources:
+          requests:
+            memory: <span class="string">"256Mi"</span>
+            cpu: <span class="string">"250m"</span>
+          limits:
+            memory: <span class="string">"512Mi"</span>
+            cpu: <span class="string">"500m"</span>
+                </code>
+            </div>
+        </section>
+        
+        <section id="section9">
+            <h2>使用示例</h2>
+            
+            <h3>9.1 快速启动</h3>
+            <div class="code-block">
+                <code>
+<span class="comment"># 1. 安装依赖</span>
+pip install -r requirements.txt
+
+<span class="comment"># 2. 设置环境变量</span>
+export EMAIL_USERNAME=<span class="string">"alert@company.com"</span>
+export EMAIL_PASSWORD=<span class="string">"your_password"</span>
+export WECOM_WEBHOOK_URL=<span class="string">"https://qyapi.weixin.qq.com/..."</span>
+
+<span class="comment"># 3. 启动服务</span>
+python -m uvicorn src.main:create_app --factory --reload
+
+<span class="comment"># 4. 访问 API 文档</span>
+<span class="comment"># http://localhost:8000/docs</span>
+                </code>
+            </div>
+            
+            <h3>9.2 上报异常事件</h3>
+            <div class="code-block">
+                <code>
+curl -X POST http://localhost:<span class="number">8000</span>/api/v1/alerts \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d '{
+    "event_type": "build_failure",
+    "stage": "ci_cd",
+    "system": "backend-service",
+    "metric": "build_status",
+    "value": "failed",
+    "details": {
+      "job_id": "jenkins-12345",
+      "branch": "main"
+    }
+  }'
+                </code>
+            </div>
+            
+            <h3>9.3 确认告警</h3>
+            <div class="code-block">
+                <code>
+curl -X PUT http://localhost:<span class="number">8000</span>/api/v1/alerts/ALT-<span class="number">20260315</span>-ABC<span class="number">123</span>/acknowledge \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d '{"user": "zhangsan"}'
+                </code>
+            </div>
+        </section>
+        
+        <section id="section10">
+            <h2>总结与展望</h2>
+            
+            <div class="highlight-box">
+                <strong>✅ 已完成功能：</strong>
+                <ul>
+                    <li>完整的告警规则体系设计（覆盖研发全流程）</li>
+                    <li>多渠道告警对接（邮件、短信、企业微信）</li>
+                    <li>智能去重和静默机制</li>
+                    <li>自动升级和人机协同流程</li>
+                    <li>RESTful API 和完整文档</li>
+                </ul>
+            </div>
+            
+            <h3>未来优化方向</h3>
+            <ul>
+                <li><strong>AI 智能降噪：</strong>利用机器学习识别误报和无关紧要的告警</li>
+                <li><strong>根因分析：</strong>自动关联相关告警，定位问题根源</li>
+                <li><strong>值班管理：</strong>集成值班表，自动路由到当前值班人员</li>
+                <li><strong>移动端 App：</strong>开发专属 App，支持告警处理和审批</li>
+                <li><strong>数据分析：</strong>告警趋势分析、MTTR 统计、团队响应效率评估</li>
+            </ul>
+            
+            <div class="highlight-box" style="margin-top: 30px;">
+                <strong>📞 技术支持：</strong>如有问题请查阅项目文档或联系开发团队。
+            </div>
+        </section>
+        
+        <footer>
+            <p>© 2026 研发自动化告警系统 | AI 辅助开发 | 内部使用</p>
+            <p>文档生成时间：2026 年 3 月 15 日</p>
+        </footer>
+    </div>
+</body>
+</html>

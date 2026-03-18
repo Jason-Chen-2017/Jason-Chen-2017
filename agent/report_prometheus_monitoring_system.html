@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prometheus 监控指标体系 - AI 研发自动化系统</title>
+    <style>
+        :root {
+            --primary-color: #00f5ff;
+            --secondary-color: #7b2cbf;
+            --accent-color: #ff006e;
+            --bg-dark: #0a0a1a;
+            --bg-card: rgba(20, 20, 40, 0.8);
+            --text-primary: #ffffff;
+            --text-secondary: #b8b8d0;
+            --success: #00ff88;
+            --warning: #ffaa00;
+            --danger: #ff4466;
+            --gradient-1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --gradient-2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --gradient-3: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --gradient-4: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(ellipse at top, rgba(123, 44, 191, 0.15), transparent 70%),
+                radial-gradient(ellipse at bottom, rgba(0, 245, 255, 0.1), transparent 70%);
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Header */
+        header {
+            text-align: center;
+            padding: 60px 20px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(0, 245, 255, 0.1) 0%, transparent 70%);
+            animation: pulse 4s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+        
+        h1 {
+            font-size: 3em;
+            margin-bottom: 20px;
+            background: var(--gradient-3);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            position: relative;
+            z-index: 1;
+            text-shadow: 0 0 40px rgba(0, 245, 255, 0.5);
+        }
+        
+        .subtitle {
+            font-size: 1.3em;
+            color: var(--text-secondary);
+            position: relative;
+            z-index: 1;
+        }
+        
+        .meta-info {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .meta-tag {
+            background: var(--bg-card);
+            padding: 10px 25px;
+            border-radius: 25px;
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            backdrop-filter: blur(10px);
+        }
+        
+        /* Section Styles */
+        section {
+            margin: 60px 0;
+            padding: 40px;
+            background: var(--bg-card);
+            border-radius: 20px;
+            border: 1px solid rgba(123, 44, 191, 0.3);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        h2 {
+            font-size: 2.2em;
+            margin-bottom: 30px;
+            color: var(--primary-color);
+            border-left: 4px solid var(--accent-color);
+            padding-left: 20px;
+        }
+        
+        h3 {
+            font-size: 1.5em;
+            margin: 25px 0 15px;
+            color: var(--secondary-color);
+        }
+        
+        /* Architecture Diagram */
+        .architecture-diagram {
+            background: rgba(10, 10, 30, 0.5);
+            padding: 30px;
+            border-radius: 15px;
+            margin: 30px 0;
+            overflow-x: auto;
+        }
+        
+        .arch-layer {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        
+        .arch-box {
+            background: var(--gradient-1);
+            padding: 20px 30px;
+            border-radius: 10px;
+            text-align: center;
+            min-width: 200px;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            transition: transform 0.3s ease;
+        }
+        
+        .arch-box:hover {
+            transform: translateY(-5px);
+        }
+        
+        .arch-box.level-2 {
+            background: var(--gradient-2);
+        }
+        
+        .arch-box.level-3 {
+            background: var(--gradient-3);
+            color: #000;
+        }
+        
+        .arch-box.level-4 {
+            background: var(--gradient-4);
+            color: #000;
+        }
+        
+        .arrow-down {
+            text-align: center;
+            font-size: 2em;
+            color: var(--primary-color);
+            margin: 10px 0;
+        }
+        
+        /* Metrics Table */
+        .metrics-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: rgba(10, 10, 30, 0.3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .metrics-table th,
+        .metrics-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(123, 44, 191, 0.2);
+        }
+        
+        .metrics-table th {
+            background: rgba(123, 44, 191, 0.3);
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+        
+        .metrics-table tr:hover {
+            background: rgba(0, 245, 255, 0.05);
+        }
+        
+        .metric-name {
+            font-family: 'Courier New', monospace;
+            color: var(--primary-color);
+            background: rgba(0, 245, 255, 0.1);
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+        
+        /* Feature Cards */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
+        }
+        
+        .feature-card {
+            background: rgba(20, 20, 40, 0.6);
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 30px rgba(0, 245, 255, 0.2);
+            transform: translateY(-3px);
+        }
+        
+        .feature-icon {
+            font-size: 2.5em;
+            margin-bottom: 15px;
+        }
+        
+        .feature-title {
+            font-size: 1.3em;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+        
+        /* Alert Levels */
+        .alert-levels {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .alert-card {
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            border: 2px solid;
+        }
+        
+        .alert-p0 {
+            background: rgba(255, 68, 102, 0.1);
+            border-color: var(--danger);
+        }
+        
+        .alert-p1 {
+            background: rgba(255, 170, 0, 0.1);
+            border-color: var(--warning);
+        }
+        
+        .alert-p2 {
+            background: rgba(0, 245, 255, 0.1);
+            border-color: var(--primary-color);
+        }
+        
+        .alert-p3 {
+            background: rgba(0, 255, 136, 0.1);
+            border-color: var(--success);
+        }
+        
+        .alert-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        
+        .alert-p0 .alert-badge { background: var(--danger); color: white; }
+        .alert-p1 .alert-badge { background: var(--warning); color: black; }
+        .alert-p2 .alert-badge { background: var(--primary-color); color: black; }
+        .alert-p3 .alert-badge { background: var(--success); color: black; }
+        
+        /* Code Block */
+        .code-block {
+            background: rgba(10, 10, 30, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 20px 0;
+            border-left: 4px solid var(--accent-color);
+        }
+        
+        .code-block code {
+            font-family: 'Courier New', monospace;
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+        
+        .code-keyword { color: #ff79c6; }
+        .code-string { color: #f1fa8c; }
+        .code-comment { color: #6272a4; }
+        .code-function { color: #8be9fd; }
+        
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            border: 1px solid rgba(102, 126, 234, 0.3);
+        }
+        
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            background: var(--gradient-3);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .stat-label {
+            color: var(--text-secondary);
+            margin-top: 10px;
+            font-size: 0.95em;
+        }
+        
+        /* Timeline */
+        .timeline {
+            position: relative;
+            padding: 20px 0;
+        }
+        
+        .timeline-item {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+            position: relative;
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: 30px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--primary-color);
+        }
+        
+        .timeline-marker {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            border: 3px solid var(--primary-color);
+            flex-shrink: 0;
+            z-index: 1;
+        }
+        
+        .timeline-content {
+            background: rgba(20, 20, 40, 0.5);
+            padding: 20px;
+            border-radius: 10px;
+            flex: 1;
+            border: 1px solid rgba(123, 44, 191, 0.2);
+        }
+        
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 40px;
+            margin-top: 60px;
+            border-top: 1px solid rgba(123, 44, 191, 0.3);
+            color: var(--text-secondary);
+        }
+        
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        section {
+            animation: fadeInUp 0.6s ease-out;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            h1 { font-size: 2em; }
+            h2 { font-size: 1.6em; }
+            .container { padding: 10px; }
+            section { padding: 20px; }
+            .meta-info { flex-direction: column; align-items: center; }
+        }
+        
+        /* Table of Contents */
+        .toc {
+            background: rgba(20, 20, 40, 0.5);
+            padding: 25px;
+            border-radius: 15px;
+            margin: 30px 0;
+        }
+        
+        .toc-title {
+            font-size: 1.3em;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+        }
+        
+        .toc-list {
+            list-style: none;
+        }
+        
+        .toc-list li {
+            margin: 10px 0;
+        }
+        
+        .toc-list a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .toc-list a:hover {
+            color: var(--primary-color);
+        }
+        
+        .toc-list ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔭 Prometheus 监控指标体系</h1>
+            <p class="subtitle">基于 OpenClaw + Claude Code 的端到端研发自动化系统</p>
+            <div class="meta-info">
+                <div class="meta-tag">📅 版本：v1.0</div>
+                <div class="meta-tag">🗓️ 日期：2026-03-15</div>
+                <div class="meta-tag">👨‍💻 作者：Super Code Agent</div>
+                <div class="meta-tag">☁️ 环境：Production</div>
+            </div>
+        </header>
+        
+        <!-- 目录 -->
+        <section>
+            <div class="toc">
+                <div class="toc-title">📑 目录导航</div>
+                <ul class="toc-list">
+                    <li><a href="#overview">🎯 项目概述</a></li>
+                    <li><a href="#architecture">🏗️ 监控架构设计</a></li>
+                    <li><a href="#metrics">📊 核心指标体系</a></li>
+                    <li><a href="#agents">🤖 Agent 监控埋点</a></li>
+                    <li><a href="#services">🔧 服务层监控</a></li>
+                    <li><a href="#alerts">🚨 告警策略设计</a></li>
+                    <li><a href="#dashboards">📈 Grafana 仪表盘</a></li>
+                    <li><a href="#implementation">🚀 实施路线图</a></li>
+                </ul>
+            </div>
+        </section>
+        
+        <!-- 项目概述 -->
+        <section id="overview">
+            <h2>🎯 项目概述</h2>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">4</div>
+                    <div class="stat-label">监控层级</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">50+</div>
+                    <div class="stat-label">核心指标</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">38+</div>
+                    <div class="stat-label">告警规则</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">3</div>
+                    <div class="stat-label">Grafana 仪表盘</div>
+                </div>
+            </div>
+            
+            <h3>监控目标</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🔍</div>
+                    <div class="feature-title">全链路追踪</div>
+                    <p>覆盖需求→PRD 设计→技术方案设计→API 开发→AI Coding→测试→部署→验收全流程</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <div class="feature-title">实时可观测</div>
+                    <p>毫秒级监控数据采集与展示，15 秒抓取间隔，确保数据新鲜度</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🧠</div>
+                    <div class="feature-title">智能告警</div>
+                    <p>基于机器学习的异常检测与告警，P0 级告警 5 分钟内响应</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🤝</div>
+                    <div class="feature-title">人机协同</div>
+                    <p>支持人工干预与人机协作的监控节点，记录每次人工介入</p>
+                </div>
+            </div>
+        </section>
+        
+        <!-- 监控架构 -->
+        <section id="architecture">
+            <h2>🏗️ 监控架构设计</h2>
+            
+            <div class="architecture-diagram">
+                <div class="arch-layer">
+                    <div class="arch-box" style="min-width: 400px;">Presentation Layer - Grafana Dashboards</div>
+                </div>
+                <div class="arrow-down">▼ PromQL Queries</div>
+                <div class="arch-layer">
+                    <div class="arch-box level-2" style="min-width: 400px;">Data Processing - Prometheus Cluster + Thanos</div>
+                </div>
+                <div class="arrow-down">▼ Pull/Push</div>
+                <div class="arch-layer">
+                    <div class="arch-box level-3">OpenTelemetry Collector</div>
+                    <div class="arch-box level-3">Node Exporter</div>
+                    <div class="arch-box level-3">Custom Exporters</div>
+                    <div class="arch-box level-3">Kube-State-Metrics</div>
+                </div>
+                <div class="arrow-down">▼ Instrumentation</div>
+                <div class="arch-layer">
+                    <div class="arch-box level-4">Demand Agent</div>
+                    <div class="arch-box level-4">PRD Agent</div>
+                    <div class="arch-box level-4">AI Coder</div>
+                    <div class="arch-box level-4">Test Agent</div>
+                    <div class="arch-box level-4">Deploy Agent</div>
+                </div>
+            </div>
+            
+            <h3>技术栈选型</h3>
+            <table class="metrics-table">
+                <thead>
+                    <tr>
+                        <th>组件类别</th>
+                        <th>技术选型</th>
+                        <th>说明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>指标采集</td>
+                        <td><span class="metric-name">Prometheus + OpenTelemetry</span></td>
+                        <td>云原生标准监控方案</td>
+                    </tr>
+                    <tr>
+                        <td>指标存储</td>
+                        <td><span class="metric-name">Prometheus TSDB + Thanos</span></td>
+                        <td>长期存储与高可用</td>
+                    </tr>
+                    <tr>
+                        <td>可视化</td>
+                        <td><span class="metric-name">Grafana v10.2+</span></td>
+                        <td>丰富的仪表盘生态</td>
+                    </tr>
+                    <tr>
+                        <td>告警管理</td>
+                        <td><span class="metric-name">Alertmanager v0.26+</span></td>
+                        <td>告警路由、抑制、静默</td>
+                    </tr>
+                    <tr>
+                        <td>链路追踪</td>
+                        <td><span class="metric-name">Jaeger/Tempo</span></td>
+                        <td>分布式追踪</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+        
+        <!-- 核心指标体系 -->
+        <section id="metrics">
+            <h2>📊 核心指标体系</h2>
+            
+            <h3>Agent 层核心指标</h3>
+            <table class="metrics-table">
+                <thead>
+                    <tr>
+                        <th>指标名称</th>
+                        <th>类型</th>
+                        <th>单位</th>
+                        <th>描述</th>
+                        <th>标签</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="metric-name">agent_tasks_total</span></td>
+                        <td>Counter</td>
+                        <td>个</td>
+                        <td>任务执行总数</td>
+                        <td>agent_type, task_type, status</td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-name">agent_active_tasks</span></td>
+                        <td>Gauge</td>
+                        <td>个</td>
+                        <td>当前活跃任务数</td>
+                        <td>agent_type</td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-name">agent_task_duration_seconds</span></td>
+                        <td>Histogram</td>
+                        <td>秒</td>
+                        <td>任务执行时长</td>
+                        <td>agent_type, task_type</td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-name">agent_llm_tokens_total</span></td>
+                        <td>Counter</td>
+                        <td>tokens</td>
+                        <td>LLM Token 消耗量</td>
+                        <td>agent_type, model, token_type</td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-name">agent_llm_calls_total</span></td>
+                        <td>Counter</td>
+                        <td>次</td>
+                        <td>LLM 调用次数</td>
+                        <td>agent_type, model, status</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h3>业务流程指标</h3>
+            <table class="metrics-table">
+                <thead>
+                    <tr>
+                        <th>指标名称</th>
+                        <th>类型</th>
+                        <th>单位</th>
+                        <th>描述</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="metric-name">pipeline_stage_duration_seconds</span></td>
+                        <td>Histogram</td>
+                        <td>秒</td>
+                        <td>阶段执行时长</td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-name">pipeline_success_rate</span></td>
+                        <td>Gauge</td>
+                        <td>%</td>
+                        <td>流程成功率</td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-name">human_intervention_count</span></td>
+                        <td>Counter</td>
+                        <td>次</td>
+                        <td>人工干预次数</td>
+                    </tr>
+                    <tr>
+                        <td><span class="metric-name">quality_gate_pass_rate</span></td>
+                        <td>Gauge</td>
+                        <td>%</td>
+                        <td>质量门禁通过率</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+        
+        <!-- Agent 监控埋点 -->
+        <section id="agents">
+            <h2>🤖 Agent 监控埋点设计</h2>
+            
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">📝</div>
+                    <div class="feature-title">需求分析 Agent</div>
+                    <p>监控需求输入处理延迟、结构化准确率、LLM 理解效果、需求变更追踪</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📋</div>
+                    <div class="feature-title">PRD 设计 Agent</div>
+                    <p>监控 PRD 生成质量评分、文档完整性、需求覆盖率、版本迭代</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💻</div>
+                    <div class="feature-title">AI Coding Agent</div>
+                    <p>监控代码生成速度、编译通过率、测试覆盖率、代码质量评分</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🧪</div>
+                    <div class="feature-title">测试 Agent</div>
+                    <p>监控测试用例生成数量、缺陷发现率、测试执行时长、回归通过率</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🚀</div>
+                    <div class="feature-title">部署 Agent</div>
+                    <p>监控部署成功率、部署时长、回滚次数、健康检查通过率</p>
+                </div>
+            </div>
+            
+            <h3>监控埋点代码示例</h3>
+            <div class="code-block">
+                <code>
+<span class="code-keyword">from</span> src.common.metrics <span class="code-keyword">import</span> monitor_agent, track_llm_call
+
+<span class="code-comment"># 使用装饰器进行 Agent 任务监控</span>
+<span class="code-function">@monitor_agent</span>(agent_type=<span class="code-string">"demand_agent"</span>, task_type=<span class="code-string">"requirement_analysis"</span>)
+<span class="code-keyword">def</span> <span class="code-function">analyze_requirement</span>(requirement_text: str):
+    <span class="code-comment"># 自动记录：</span>
+    <span class="code-comment"># - 任务开始/结束时间</span>
+    <span class="code-comment"># - 执行时长</span>
+    <span class="code-comment"># - 成功/失败状态</span>
+    <span class="code-comment"># - 错误类型</span>
+    <span class="code-keyword">return</span> structured_result
+
+<span class="code-comment"># LLM 调用监控</span>
+<span class="code-function">@track_llm_call</span>(agent_type=<span class="code-string">"ai_coder"</span>, model=<span class="code-string">"claude-sonnet-4"</span>)
+<span class="code-keyword">def</span> <span class="code-function">generate_code</span>(specification):
+    <span class="code-comment"># 自动记录：</span>
+    <span class="code-comment"># - Token 消耗 (input/output)</span>
+    <span class="code-comment"># - API 调用延迟</span>
+    <span class="code-comment"># - 调用成功/失败</span>
+    <span class="code-keyword">return</span> generated_code
+                </code>
+            </div>
+        </section>
+        
+        <!-- 告警策略 -->
+        <section id="alerts">
+            <h2>🚨 告警策略设计</h2>
+            
+            <div class="alert-levels">
+                <div class="alert-card alert-p0">
+                    <div class="alert-badge">P0 - Critical</div>
+                    <h3>严重告警</h3>
+                    <p>响应时间：5 分钟</p>
+                    <p>通知渠道：电话 + 短信 + IM</p>
+                    <hr style="margin: 15px 0; border: none; border-top: 1px solid rgba(255,255,255,0.2);">
+                    <p style="font-size: 0.9em;">• Agent 服务宕机<br>• 数据完全丢失<br>• 安全事件</p>
+                </div>
+                <div class="alert-card alert-p1">
+                    <div class="alert-badge">P1 - High</div>
+                    <h3>高级告警</h3>
+                    <p>响应时间：15 分钟</p>
+                    <p>通知渠道：短信 + IM</p>
+                    <hr style="margin: 15px 0; border: none; border-top: 1px solid rgba(255,255,255,0.2);">
+                    <p style="font-size: 0.9em;">• 错误率>10%<br>• 核心功能不可用<br>• LLM API 大规模失败</p>
+                </div>
+                <div class="alert-card alert-p2">
+                    <div class="alert-badge">P2 - Medium</div>
+                    <h3>中级告警</h3>
+                    <p>响应时间：1 小时</p>
+                    <p>通知渠道：IM + 邮件</p>
+                    <hr style="margin: 15px 0; border: none; border-top: 1px solid rgba(255,255,255,0.2);">
+                    <p style="font-size: 0.9em;">• 延迟超过阈值<br>• 资源使用率高<br>• 成本超预算</p>
+                </div>
+                <div class="alert-card alert-p3">
+                    <div class="alert-badge">P3 - Low</div>
+                    <h3>低级告警</h3>
+                    <p>响应时间：4 小时</p>
+                    <p>通知渠道：邮件</p>
+                    <hr style="margin: 15px 0; border: none; border-top: 1px solid rgba(255,255,255,0.2);">
+                    <p style="font-size: 0.9em;">• 测试覆盖率下降<br>• 非关键功能异常<br>• 性能轻微下降</p>
+                </div>
+            </div>
+            
+            <h3>核心告警规则</h3>
+            <div class="code-block">
+                <code>
+<span class="code-comment"># Agent 错误率过高告警</span>
+- alert: HighAgentErrorRate
+  expr: |
+    sum(rate(agent_errors_total[5m])) by (agent_type)
+    / sum(rate(agent_tasks_total[5m])) by (agent_type) > 0.1
+  for: 5m
+  labels:
+    severity: P1
+  annotations:
+    summary: <span class="code-string">"Agent {{ $labels.agent_type }} 错误率超过 10%"</span>
+
+<span class="code-comment"># LLM Token 消耗异常告警</span>
+- alert: HighLLMTokenConsumption
+  expr: |
+    sum(rate(agent_llm_tokens_total[1h])) > 100000
+  for: 1h
+  labels:
+    severity: P2
+  annotations:
+    summary: <span class="code-string">"LLM Token 消耗速率异常"</span>
+
+<span class="code-comment"># 流程阶段阻塞告警</span>
+- alert: PipelineStageBlocked
+  expr: |
+    avg(pipeline_stage_duration_seconds) by (stage_name) > 3600
+  for: 1h
+  labels:
+    severity: P2
+                </code>
+            </div>
+        </section>
+        
+        <!-- Grafana 仪表盘 -->
+        <section id="dashboards">
+            <h2>📈 Grafana 仪表盘设计</h2>
+            
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎛️</div>
+                    <div class="feature-title">Agent 监控总览</div>
+                    <p>全局展示所有 AI Agent 的运行状态、任务统计、错误率趋势、LLM 消耗分析</p>
+                    <ul style="margin-top: 10px; padding-left: 20px; color: var(--text-secondary);">
+                        <li>在线 Agent 数量</li>
+                        <li>活跃任务趋势图</li>
+                        <li>错误率热力图</li>
+                        <li>Token 消耗 Top10</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔄</div>
+                    <div class="feature-title">研发流程监控</div>
+                    <p>追踪从需求到部署的全流程执行情况、质量门禁、人工干预统计</p>
+                    <ul style="margin-top: 10px; padding-left: 20px; color: var(--text-secondary);">
+                        <li>各阶段执行时长</li>
+                        <li>流程成功率</li>
+                        <li>质量门禁通过率</li>
+                        <li>端到端交付周期</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💰</div>
+                    <div class="feature-title">LLM 成本分析</div>
+                    <p>深度分析 LLM 使用情况和成本构成、预算执行率、成本效率指标</p>
+                    <ul style="margin-top: 10px; padding-left: 20px; color: var(--text-secondary);">
+                        <li>Token 消耗趋势</li>
+                        <li>模型分布饼图</li>
+                        <li>成本效率分析</li>
+                        <li>预算预警仪表</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+        
+        <!-- 实施路线图 -->
+        <section id="implementation">
+            <h2>🚀 实施路线图</h2>
+            
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                        <h3>Phase 1: 基础框架搭建 (Week 1-2)</h3>
+                        <ul style="padding-left: 20px; color: var(--text-secondary);">
+                            <li>部署 Prometheus + Grafana + Alertmanager</li>
+                            <li>配置基础监控指标采集</li>
+                            <li>实现通用监控埋点 SDK</li>
+                            <li>搭建 OpenTelemetry Collector</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                        <h3>Phase 2: Agent 层监控 (Week 3-4)</h3>
+                        <ul style="padding-left: 20px; color: var(--text-secondary);">
+                            <li>实现各 Agent 的监控埋点</li>
+                            <li>开发 Agent 专用 Exporter</li>
+                            <li>配置 Agent 相关告警规则</li>
+                            <li>创建 Agent 监控仪表盘</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                        <h3>Phase 3: 服务层监控 (Week 5-6)</h3>
+                        <ul style="padding-left: 20px; color: var(--text-secondary);">
+                            <li>API 网关监控集成</li>
+                            <li>数据库/缓存监控</li>
+                            <li>消息队列监控</li>
+                            <li>服务性能指标采集</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                        <h3>Phase 4: 业务流程监控 (Week 7-8)</h3>
+                        <ul style="padding-left: 20px; color: var(--text-secondary);">
+                            <li>研发流程节点埋点</li>
+                            <li>质量门禁指标集成</li>
+                            <li>人机协同监控</li>
+                            <li>业务 SLI/SLO 定义</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                        <h3>Phase 5: 优化与完善 (Week 9-10)</h3>
+                        <ul style="padding-left: 20px; color: var(--text-secondary);">
+                            <li>告警规则调优</li>
+                            <li>仪表盘美化与优化</li>
+                            <li>性能基准测试</li>
+                            <li>文档完善与培训</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- 产物清单 -->
+        <section>
+            <h2>📦 交付产物清单</h2>
+            
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">📄</div>
+                    <div class="feature-title">Markdown 文档</div>
+                    <ul style="padding-left: 20px; color: var(--text-secondary); line-height: 2;">
+                        <li>01_监控指标体系设计方案.md</li>
+                        <li>02_系统架构设计文档.md</li>
+                        <li>03_产品说明文档.md</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🐍</div>
+                    <div class="feature-title">Python 源代码</div>
+                    <ul style="padding-left: 20px; color: var(--text-secondary); line-height: 2;">
+                        <li>src/common/metrics.py - 核心指标定义</li>
+                        <li>src/agents/monitors.py - Agent 监控埋点</li>
+                        <li>src/services/service_monitor.py - 服务监控</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚙️</div>
+                    <div class="feature-title">配置文件</div>
+                    <ul style="padding-left: 20px; color: var(--text-secondary); line-height: 2;">
+                        <li>config/prometheus/prometheus.yml</li>
+                        <li>config/prometheus/rules/*.yml</li>
+                        <li>config/grafana/dashboards/*.json</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+        
+        <footer>
+            <p>© 2026 Prometheus 监控指标体系 | AI 研发自动化系统</p>
+            <p style="margin-top: 10px; font-size: 0.9em;">
+                生成时间：2026-03-15 22:33:57 | 
+                版本：v1.0 | 
+                作者：Super Code Agent
+            </p>
+        </footer>
+    </div>
+    
+    <script>
+        // Smooth scroll for TOC links
+        document.querySelectorAll('.toc-list a').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href');
+                const targetElement = document.querySelector(targetId);
+                if (targetElement) {
+                    targetElement.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+        
+        // Add scroll animation to sections
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -100px 0px'
+        };
+        
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+        
+        document.querySelectorAll('section').forEach(section => {
+            section.style.opacity = '0';
+            section.style.transform = 'translateY(30px)';
+            section.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
+            observer.observe(section);
+        });
+    </script>
+</body>
+</html>

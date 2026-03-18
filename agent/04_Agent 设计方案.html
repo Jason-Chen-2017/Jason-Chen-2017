@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent 设计方案 - AI 研发自动化系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --neon-blue: #00f5ff;
+            --neon-purple: #bd00ff;
+            --neon-pink: #ff00e6;
+            --neon-green: #00ff88;
+            --neon-orange: #ffaa00;
+            --dark-bg: #0a0a0f;
+            --card-bg: rgba(20, 20, 35, 0.8);
+            --border-color: rgba(0, 245, 255, 0.3);
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: 
+                radial-gradient(ellipse at 20% 30%, rgba(189, 0, 255, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 70%, rgba(0, 245, 255, 0.15) 0%, transparent 50%),
+                linear-gradient(180deg, var(--dark-bg) 0%, #12121f 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 网格背景 */
+        .grid-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(0, 245, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 245, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            z-index: -1;
+            animation: gridMove 20s linear infinite;
+        }
+
+        @keyframes gridMove {
+            0% { transform: perspective(500px) rotateX(60deg) translateY(0); }
+            100% { transform: perspective(500px) rotateX(60deg) translateY(50px); }
+        }
+
+        /* 头部 */
+        header {
+            background: rgba(10, 10, 20, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 2px solid var(--neon-blue);
+            padding: 2rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 0 50px rgba(0, 245, 255, 0.3);
+        }
+
+        .header-content {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 2.2rem;
+            font-weight: bold;
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple), var(--neon-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: logoGlow 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes logoGlow {
+            from { filter: drop-shadow(0 0 10px var(--neon-blue)); }
+            to { filter: drop-shadow(0 0 30px var(--neon-purple)); }
+        }
+
+        nav ul {
+            display: flex;
+            list-style: none;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        nav a {
+            color: #fff;
+            text-decoration: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+            font-size: 0.95rem;
+        }
+
+        nav a:hover {
+            background: rgba(0, 245, 255, 0.1);
+            border-color: var(--neon-blue);
+            box-shadow: 0 0 20px rgba(0, 245, 255, 0.4);
+        }
+
+        /* 主容器 */
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 3rem 2rem;
+        }
+
+        /* 标题区域 */
+        .hero-section {
+            text-align: center;
+            padding: 4rem 0;
+            margin-bottom: 3rem;
+            position: relative;
+        }
+
+        .hero-title {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple), var(--neon-pink), var(--neon-blue));
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradientShift 5s ease infinite;
+        }
+
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .hero-subtitle {
+            font-size: 1.3rem;
+            color: rgba(255, 255, 255, 0.7);
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.8;
+        }
+
+        /* Agent 卡片网格 */
+        .agents-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .agent-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2.5rem;
+            border: 1px solid var(--border-color);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+
+        .agent-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 245, 255, 0.1), transparent);
+            transition: left 0.6s ease;
+        }
+
+        .agent-card:hover::before {
+            left: 100%;
+        }
+
+        .agent-card:hover {
+            transform: translateY(-10px) scale(1.02);
+            box-shadow: 
+                0 20px 60px rgba(0, 245, 255, 0.3),
+                0 0 40px rgba(0, 245, 255, 0.2);
+            border-color: var(--neon-blue);
+        }
+
+        .agent-header {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .agent-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.2), rgba(189, 0, 255, 0.2));
+            border: 2px solid var(--neon-blue);
+            flex-shrink: 0;
+            animation: iconPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes iconPulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(0, 245, 255, 0.5); }
+            50% { box-shadow: 0 0 40px rgba(0, 245, 255, 0.8); }
+        }
+
+        .agent-info h3 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .agent-role {
+            color: var(--neon-green);
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .agent-description {
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.7;
+            margin-bottom: 1.5rem;
+        }
+
+        /* 技能标签 */
+        .skills-container {
+            margin: 1.5rem 0;
+        }
+
+        .skills-title {
+            font-size: 1rem;
+            color: var(--neon-blue);
+            margin-bottom: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .skills-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .skill-tag {
+            padding: 0.4rem 1rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            background: rgba(0, 245, 255, 0.1);
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+            transition: all 0.3s ease;
+        }
+
+        .skill-tag:hover {
+            background: var(--neon-blue);
+            color: var(--dark-bg);
+            box-shadow: 0 0 20px rgba(0, 245, 255, 0.6);
+        }
+
+        /* 工作流 */
+        .workflow-container {
+            margin: 1.5rem 0;
+        }
+
+        .workflow-title {
+            font-size: 1rem;
+            color: var(--neon-purple);
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .workflow-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .workflow-step {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.8rem 1rem;
+            background: rgba(0, 245, 255, 0.05);
+            border-radius: 10px;
+            border-left: 3px solid var(--neon-blue);
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .workflow-step:hover {
+            background: rgba(0, 245, 255, 0.1);
+            transform: translateX(5px);
+        }
+
+        .step-arrow {
+            color: var(--neon-pink);
+            font-weight: bold;
+        }
+
+        /* 输出产物 */
+        .outputs-container {
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .outputs-title {
+            font-size: 1rem;
+            color: var(--neon-orange);
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .outputs-list {
+            list-style: none;
+        }
+
+        .outputs-list li {
+            padding: 0.5rem 0;
+            color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+
+        .outputs-list li::before {
+            content: '▸';
+            color: var(--neon-green);
+            font-size: 1.2rem;
+        }
+
+        /* 配置示例 */
+        .config-section {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2.5rem;
+            border: 1px solid var(--border-color);
+            margin-top: 3rem;
+        }
+
+        .config-section h2 {
+            font-size: 2rem;
+            margin-bottom: 2rem;
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-align: center;
+        }
+
+        .config-example {
+            background: rgba(10, 10, 20, 0.9);
+            border: 1px solid var(--neon-blue);
+            border-radius: 15px;
+            padding: 2rem;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 0.9rem;
+            line-height: 1.8;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+        }
+
+        .config-key { color: var(--neon-blue); }
+        .config-string { color: var(--neon-green); }
+        .config-number { color: var(--neon-orange); }
+        .config-comment { color: rgba(255, 255, 255, 0.4); font-style: italic; }
+
+        /* 协作流程图 */
+        .collaboration-flow {
+            margin: 3rem 0;
+            padding: 2rem;
+            background: var(--card-bg);
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .flow-diagram {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .flow-node {
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.2), rgba(189, 0, 255, 0.2));
+            border: 2px solid var(--neon-blue);
+            text-align: center;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .flow-node:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(0, 245, 255, 0.6);
+        }
+
+        .flow-arrow {
+            font-size: 1.5rem;
+            color: var(--neon-pink);
+            animation: flowPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes flowPulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* 性能指标 */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .metric-card {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(0, 245, 255, 0.05);
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
+        }
+
+        .metric-value {
+            font-size: 3rem;
+            font-weight: bold;
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-green));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .metric-label {
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 0.5rem;
+            font-size: 1rem;
+        }
+
+        /* 页脚 */
+        footer {
+            background: rgba(10, 10, 20, 0.95);
+            border-top: 2px solid var(--neon-blue);
+            padding: 2rem 0;
+            text-align: center;
+            margin-top: 3rem;
+        }
+
+        footer p {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .hero-title { font-size: 2.5rem; }
+            .agents-grid { grid-template-columns: 1fr; }
+            .header-content { flex-direction: column; gap: 1rem; }
+            .flow-diagram { flex-direction: column; }
+            .flow-arrow { transform: rotate(90deg); }
+        }
+
+        /* 动画效果 */
+        .fade-in {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+
+        .fade-in.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <div class="grid-background"></div>
+
+    <header>
+        <div class="header-content">
+            <div class="logo">🤖 AI Agent 设计方案</div>
+            <nav>
+                <ul>
+                    <li><a href="#product">产品 Agent</a></li>
+                    <li><a href="#architect">架构 Agent</a></li>
+                    <li><a href="#backend">后端 Agent</a></li>
+                    <li><a href="#frontend">前端 Agent</a></li>
+                    <li><a href="#test">测试 Agent</a></li>
+                    <li><a href="#devops">运维 Agent</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- 英雄区域 -->
+        <section class="hero-section fade-in">
+            <h1 class="hero-title">端到端研发 Agent 矩阵</h1>
+            <p class="hero-subtitle">
+                六大专业 AI Agent 协同工作，覆盖从需求分析到自动部署的完整研发生命周期，
+                实现人机协同的智能化研发新模式
+            </p>
+            
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value">6+</div>
+                    <div class="metric-label">专业 Agent 角色</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">10x</div>
+                    <div class="metric-label">研发效率提升</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">80%+</div>
+                    <div class="metric-label">任务自动化率</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">24/7</div>
+                    <div class="metric-label">全天候工作能力</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Agent 卡片网格 -->
+        <div class="agents-grid">
+            <!-- Product Agent -->
+            <div class="agent-card fade-in" id="product">
+                <div class="agent-header">
+                    <div class="agent-icon">📋</div>
+                    <div class="agent-info">
+                        <h3>Product Agent</h3>
+                        <div class="agent-role">产品专家 / 需求分析师</div>
+                    </div>
+                </div>
+                
+                <p class="agent-description">
+                    负责需求收集、分析、PRD 设计和用户故事编写。通过智能问答澄清模糊需求，
+                    进行竞品分析，输出完整的产品需求文档和验收标准。
+                </p>
+
+                <div class="skills-container">
+                    <div class="skills-title">核心技能</div>
+                    <div class="skills-list">
+                        <span class="skill-tag">需求分析</span>
+                        <span class="skill-tag">PRD 设计</span>
+                        <span class="skill-tag">用户调研</span>
+                        <span class="skill-tag">竞品分析</span>
+                        <span class="skill-tag">用户故事地图</span>
+                        <span class="skill-tag">原型设计</span>
+                    </div>
+                </div>
+
+                <div class="workflow-container">
+                    <div class="workflow-title">工作流程</div>
+                    <div class="workflow-steps">
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>接收用户需求输入</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>智能问答澄清模糊点</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>进行竞品分析和市场调研</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>生成 PRD 文档和用户故事</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>等待产品负责人审批</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="outputs-container">
+                    <div class="outputs-title">输出产物</div>
+                    <ul class="outputs-list">
+                        <li>产品需求文档 (PRD.md)</li>
+                        <li>用户故事地图 (User_Stories.md)</li>
+                        <li>功能优先级列表 (Priorities.md)</li>
+                        <li>验收标准清单 (Acceptance_Criteria.md)</li>
+                        <li>竞品分析报告 (Competitor_Analysis.md)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Architect Agent -->
+            <div class="agent-card fade-in" id="architect">
+                <div class="agent-header">
+                    <div class="agent-icon">🏗️</div>
+                    <div class="agent-info">
+                        <h3>Architect Agent</h3>
+                        <div class="agent-role">系统架构师 / 技术顾问</div>
+                    </div>
+                </div>
+                
+                <p class="agent-description">
+                    负责技术架构设计、技术选型和方案评审。基于 PRD 设计可扩展的系统架构，
+                    评估技术方案风险，输出详细的架构设计文档和技术规范。
+                </p>
+
+                <div class="skills-container">
+                    <div class="skills-title">核心技能</div>
+                    <div class="skills-list">
+                        <span class="skill-tag">系统架构设计</span>
+                        <span class="skill-tag">技术选型</span>
+                        <span class="skill-tag">架构模式</span>
+                        <span class="skill-tag">微服务设计</span>
+                        <span class="skill-tag">数据库设计</span>
+                        <span class="skill-tag">风险评估</span>
+                    </div>
+                </div>
+
+                <div class="workflow-container">
+                    <div class="workflow-title">工作流程</div>
+                    <div class="workflow-steps">
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>分析 PRD 需求和技术挑战</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>进行技术选型对比分析</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>设计系统架构和模块划分</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>输出架构图和技术方案</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>组织技术评审会议</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="outputs-container">
+                    <div class="outputs-title">输出产物</div>
+                    <ul class="outputs-list">
+                        <li>系统架构设计文档 (Architecture.md)</li>
+                        <li>技术选型报告 (Tech_Selection.md)</li>
+                        <li>系统架构图 (System_Diagram.png)</li>
+                        <li>数据库 ER 图 (ER_Diagram.png)</li>
+                        <li>风险评估报告 (Risk_Assessment.md)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Backend Agent -->
+            <div class="agent-card fade-in" id="backend">
+                <div class="agent-header">
+                    <div class="agent-icon">⚙️</div>
+                    <div class="agent-info">
+                        <h3>Backend Agent</h3>
+                        <div class="agent-role">后端开发工程师</div>
+                    </div>
+                </div>
+                
+                <p class="agent-description">
+                    负责后端 API 开发、数据库设计和业务逻辑实现。基于 API 设计规范，
+                    使用 Claude Code 自动生成高质量代码和单元测试，确保代码质量。
+                </p>
+
+                <div class="skills-container">
+                    <div class="skills-title">核心技能</div>
+                    <div class="skills-list">
+                        <span class="skill-tag">Python/FastAPI</span>
+                        <span class="skill-tag">Java/Spring Boot</span>
+                        <span class="skill-tag">PostgreSQL</span>
+                        <span class="skill-tag">Redis</span>
+                        <span class="skill-tag">RESTful API</span>
+                        <span class="skill-tag">单元测试</span>
+                    </div>
+                </div>
+
+                <div class="workflow-container">
+                    <div class="workflow-title">工作流程</div>
+                    <div class="workflow-steps">
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>解析 API 设计规范</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>设计数据库 Schema</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>Claude Code 生成代码框架</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>实现业务逻辑和数据访问层</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>编写单元测试并验证</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="outputs-container">
+                    <div class="outputs-title">输出产物</div>
+                    <ul class="outputs-list">
+                        <li>API 接口实现代码 (api/*.py)</li>
+                        <li>数据模型定义 (models/*.py)</li>
+                        <li>数据库迁移脚本 (migrations/*.sql)</li>
+                        <li>单元测试用例 (tests/test_*.py)</li>
+                        <li>API 文档 (OpenAPI.yaml)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Frontend Agent -->
+            <div class="agent-card fade-in" id="frontend">
+                <div class="agent-header">
+                    <div class="agent-icon">🎨</div>
+                    <div class="agent-info">
+                        <h3>Frontend Agent</h3>
+                        <div class="agent-role">前端开发工程师</div>
+                    </div>
+                </div>
+                
+                <p class="agent-description">
+                    负责前端界面开发、组件开发和交互实现。基于 UI 设计稿和 API 规范，
+                    使用 React + TypeScript 构建响应式用户界面，实现流畅的用户体验。
+                </p>
+
+                <div class="skills-container">
+                    <div class="skills-title">核心技能</div>
+                    <div class="skills-list">
+                        <span class="skill-tag">React 18</span>
+                        <span class="skill-tag">TypeScript</span>
+                        <span class="skill-tag">TailwindCSS</span>
+                        <span class="skill-tag">Vite</span>
+                        <span class="skill-tag">状态管理</span>
+                        <span class="skill-tag">组件测试</span>
+                    </div>
+                </div>
+
+                <div class="workflow-container">
+                    <div class="workflow-title">工作流程</div>
+                    <div class="workflow-steps">
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>分析 UI 设计稿和交互需求</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>拆分组件结构和状态设计</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>实现基础组件和页面</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>对接后端 API 接口</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>优化性能和用户体验</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="outputs-container">
+                    <div class="outputs-title">输出产物</div>
+                    <ul class="outputs-list">
+                        <li>React 组件代码 (components/*.tsx)</li>
+                        <li>页面组件 (pages/*.tsx)</li>
+                        <li>样式文件 (styles/*.css)</li>
+                        <li>自定义 Hooks (hooks/*.ts)</li>
+                        <li>组件测试 (tests/*.test.tsx)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Test Agent -->
+            <div class="agent-card fade-in" id="test">
+                <div class="agent-header">
+                    <div class="agent-icon">🧪</div>
+                    <div class="agent-info">
+                        <h3>Test Agent</h3>
+                        <div class="agent-role">测试工程师 / QA</div>
+                    </div>
+                </div>
+                
+                <p class="agent-description">
+                    负责测试用例设计、自动化测试执行和质量报告生成。覆盖单元测试、
+                    集成测试和 E2E 测试，确保软件质量和稳定性。
+                </p>
+
+                <div class="skills-container">
+                    <div class="skills-title">核心技能</div>
+                    <div class="skills-list">
+                        <span class="skill-tag">pytest</span>
+                        <span class="skill-tag">Playwright</span>
+                        <span class="skill-tag">Jest</span>
+                        <span class="skill-tag">测试设计</span>
+                        <span class="skill-tag">性能测试</span>
+                        <span class="skill-tag">安全测试</span>
+                    </div>
+                </div>
+
+                <div class="workflow-container">
+                    <div class="workflow-title">工作流程</div>
+                    <div class="workflow-steps">
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>分析需求和设计测试用例</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>编写自动化测试脚本</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>执行单元测试和集成测试</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>运行 E2E 测试流程</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>生成测试报告和缺陷跟踪</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="outputs-container">
+                    <div class="outputs-title">输出产物</div>
+                    <ul class="outputs-list">
+                        <li>测试用例文档 (Test_Cases.md)</li>
+                        <li>自动化测试脚本 (tests/automated/)</li>
+                        <li>测试执行报告 (Test_Report.html)</li>
+                        <li>覆盖率报告 (Coverage_Report.html)</li>
+                        <li>缺陷跟踪记录 (Bug_Tracker.md)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- DevOps Agent -->
+            <div class="agent-card fade-in" id="devops">
+                <div class="agent-header">
+                    <div class="agent-icon">🚀</div>
+                    <div class="agent-info">
+                        <h3>DevOps Agent</h3>
+                        <div class="agent-role">运维工程师 / SRE</div>
+                    </div>
+                </div>
+                
+                <p class="agent-description">
+                    负责 CI/CD 配置、自动化部署和监控告警。管理 Jenkins 流水线、
+                    Docker 镜像和 Kubernetes 部署，确保系统稳定运行。
+                </p>
+
+                <div class="skills-container">
+                    <div class="skills-title">核心技能</div>
+                    <div class="skills-list">
+                        <span class="skill-tag">Jenkins</span>
+                        <span class="skill-tag">Docker</span>
+                        <span class="skill-tag">Kubernetes</span>
+                        <span class="skill-tag">Helm</span>
+                        <span class="skill-tag">Prometheus</span>
+                        <span class="skill-tag">ELK Stack</span>
+                    </div>
+                </div>
+
+                <div class="workflow-container">
+                    <div class="workflow-title">工作流程</div>
+                    <div class="workflow-steps">
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>监听代码提交触发 CI</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>构建 Docker 镜像</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>推送镜像到仓库</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>更新 K8s 部署配置</span>
+                        </div>
+                        <div class="workflow-step">
+                            <span class="step-arrow">➤</span>
+                            <span>健康检查和监控配置</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="outputs-container">
+                    <div class="outputs-title">输出产物</div>
+                    <ul class="outputs-list">
+                        <li>Jenkins 流水线 (Jenkinsfile)</li>
+                        <li>Docker 镜像 (registry/image:tag)</li>
+                        <li>K8s 部署配置 (k8s/*.yaml)</li>
+                        <li>监控仪表盘 (Grafana Dashboard)</li>
+                        <li>部署报告 (Deployment_Report.md)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 协作流程图 -->
+        <section class="collaboration-flow fade-in">
+            <h2 style="text-align: center; margin-bottom: 2rem; font-size: 2rem; background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🔄 Agent 协同工作流程</h2>
+            
+            <div class="flow-diagram">
+                <div class="flow-node">📋<br>Product<br>Agent</div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-node">🏗️<br>Architect<br>Agent</div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-node">⚙️<br>Backend<br>Agent</div>
+                <div class="flow-arrow">↔️</div>
+                <div class="flow-node">🎨<br>Frontend<br>Agent</div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-node">🧪<br>Test<br>Agent</div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-node">🚀<br>DevOps<br>Agent</div>
+            </div>
+
+            <div style="margin-top: 2rem; text-align: center; color: rgba(255, 255, 255, 0.7);">
+                <p>六大 Agent 按顺序协作，前后端开发并行执行，测试通过后自动部署</p>
+            </div>
+        </section>
+
+        <!-- 配置示例 -->
+        <section class="config-section fade-in">
+            <h2>⚙️ Agent 配置文件示例</h2>
+            
+            <div class="config-example">
+<span class="config-comment"># config/agents/product-agent.json</span>
+{
+  <span class="config-key">"id"</span>: <span class="config-string">"product-agent"</span>,
+  <span class="config-key">"name"</span>: <span class="config-string">"产品 Agent"</span>,
+  <span class="config-key">"role"</span>: <span class="config-string">"product_manager"</span>,
+  <span class="config-key">"description"</span>: <span class="config-string">"负责需求分析、PRD 设计和用户故事编写"</span>,
+  <span class="config-key">"model"</span>: <span class="config-string">"anthropic/claude-opus-4-5"</span>,
+  <span class="config-key">"skills"</span>: [
+    <span class="config-string">"requirements_analysis"</span>,
+    <span class="config-string">"prd_design"</span>,
+    <span class="config-string">"user_story"</span>,
+    <span class="config-string">"competitor_analysis"</span>
+  ],
+  <span class="config-key">"workspace"</span>: <span class="config-string">"workspaces/product"</span>,
+  <span class="config-key">"routing"</span>: {
+    <span class="config-key">"keywords"</span>: [<span class="config-string">"需求"</span>, <span class="config-string">"PRD"</span>, <span class="config-string">"产品"</span>, <span class="config-string">"功能"</span>]
+  },
+  <span class="config-key">"approval"</span>: {
+    <span class="config-key">"required"</span>: <span class="config-key">true</span>,
+    <span class="config-key">"approvers"</span>: [<span class="config-string">"product_owner"</span>],
+    <span class="config-key">"timeout"</span>: <span class="config-string">"24h"</span>
+  }
+}
+            </div>
+        </section>
+    </div>
+
+    <footer>
+        <p>© 2026 AI 研发自动化系统 | 基于 OpenClaw + Claude Code 构建</p>
+        <p>文档版本：v1.0 | 最后更新：2026 年 3 月 15 日</p>
+    </footer>
+
+    <script>
+        // 滚动动画
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.fade-in').forEach(el => {
+            observer.observe(el);
+        });
+
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

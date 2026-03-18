@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>需求分析 Agent 核心功能定义 - 可视化报告</title>
+    <style>
+        :root {
+            --primary-color: #00f5ff;
+            --secondary-color: #7b2cbf;
+            --accent-color: #ff006e;
+            --bg-dark: #0a0a1a;
+            --bg-medium: #12122a;
+            --bg-light: #1a1a3e;
+            --text-primary: #ffffff;
+            --text-secondary: #b8b8d0;
+            --success-color: #00ff88;
+            --warning-color: #ffaa00;
+            --error-color: #ff4444;
+            --quantum-glow: 0 0 20px rgba(0, 245, 255, 0.5);
+            --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-medium) 50%, var(--bg-dark) 100%);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(123, 44, 191, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(0, 245, 255, 0.2) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(255, 0, 110, 0.15) 0%, transparent 40%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Header Styles */
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+            animation: fadeInDown 1s ease-out;
+        }
+
+        h1 {
+            font-size: 3em;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+            text-shadow: var(--quantum-glow);
+            animation: glow 3s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.3); }
+        }
+
+        .subtitle {
+            font-size: 1.3em;
+            color: var(--text-secondary);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .meta-info {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .meta-tag {
+            background: rgba(0, 245, 255, 0.1);
+            border: 1px solid var(--primary-color);
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* Section Styles */
+        section {
+            background: rgba(26, 26, 62, 0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 40px;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            box-shadow: var(--card-shadow);
+            animation: fadeInUp 0.8s ease-out;
+            animation-fill-mode: both;
+        }
+
+        section:nth-child(n+2) {
+            animation-delay: 0.2s;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h2 {
+            font-size: 2em;
+            color: var(--primary-color);
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(0, 245, 255, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        h2::before {
+            content: '◈';
+            color: var(--accent-color);
+            font-size: 1.2em;
+        }
+
+        h3 {
+            font-size: 1.5em;
+            color: var(--secondary-color);
+            margin: 25px 0 15px 0;
+        }
+
+        h4 {
+            font-size: 1.2em;
+            color: var(--text-primary);
+            margin: 20px 0 10px 0;
+        }
+
+        /* Grid Layouts */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin: 30px 0;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
+        }
+
+        /* Card Styles */
+        .card {
+            background: rgba(10, 10, 26, 0.8);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(123, 44, 191, 0.3);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0, 245, 255, 0.3);
+            border-color: var(--primary-color);
+        }
+
+        .card-title {
+            font-size: 1.3em;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+        }
+
+        /* Flow Diagram */
+        .flow-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 40px 0;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .flow-step {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(123, 44, 191, 0.1));
+            border: 2px solid var(--primary-color);
+            border-radius: 15px;
+            padding: 20px 30px;
+            text-align: center;
+            min-width: 180px;
+            position: relative;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .flow-step:nth-child(even) {
+            animation-delay: 1.5s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .flow-arrow {
+            font-size: 2em;
+            color: var(--accent-color);
+            animation: arrowPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes arrowPulse {
+            0%, 100% { opacity: 1; transform: translateX(0); }
+            50% { opacity: 0.5; transform: translateX(10px); }
+        }
+
+        /* Table Styles */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            background: rgba(10, 10, 26, 0.6);
+            border-radius: 15px;
+            overflow: hidden;
+        }
+
+        th {
+            background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid rgba(0, 245, 255, 0.1);
+            transition: background 0.3s ease;
+        }
+
+        tr:hover td {
+            background: rgba(0, 245, 255, 0.05);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Code Block */
+        pre {
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            overflow-x: auto;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        pre::before {
+            content: 'CODE';
+            position: absolute;
+            top: 5px;
+            right: 10px;
+            font-size: 0.7em;
+            color: var(--primary-color);
+            opacity: 0.5;
+        }
+
+        code {
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--primary-color);
+            font-size: 0.9em;
+        }
+
+        .keyword { color: var(--accent-color); }
+        .string { color: var(--success-color); }
+        .comment { color: var(--text-secondary); font-style: italic; }
+
+        /* Progress Bar */
+        .progress-container {
+            margin: 20px 0;
+        }
+
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+        }
+
+        .progress-bar {
+            height: 12px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            border-radius: 6px;
+            transition: width 1s ease-out;
+            position: relative;
+        }
+
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.3),
+                transparent
+            );
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        /* Badge */
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin: 3px;
+        }
+
+        .badge-must { background: rgba(255, 68, 68, 0.2); color: var(--error-color); border: 1px solid var(--error-color); }
+        .badge-should { background: rgba(255, 170, 0, 0.2); color: var(--warning-color); border: 1px solid var(--warning-color); }
+        .badge-could { background: rgba(0, 255, 136, 0.2); color: var(--success-color); border: 1px solid var(--success-color); }
+        .badge-wont { background: rgba(184, 184, 208, 0.2); color: var(--text-secondary); border: 1px solid var(--text-secondary); }
+
+        /* List Styles */
+        ul.feature-list {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        ul.feature-list li {
+            padding: 12px 0 12px 35px;
+            position: relative;
+            border-bottom: 1px solid rgba(0, 245, 255, 0.1);
+        }
+
+        ul.feature-list li:last-child {
+            border-bottom: none;
+        }
+
+        ul.feature-list li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--success-color);
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(123, 44, 191, 0.1));
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            margin-top: 10px;
+            font-size: 0.95em;
+        }
+
+        /* Architecture Diagram */
+        .architecture-diagram {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+        }
+
+        .arch-layer {
+            background: linear-gradient(90deg, rgba(0, 245, 255, 0.1), rgba(123, 44, 191, 0.1));
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+
+        .arch-layer-title {
+            color: var(--primary-color);
+            font-weight: 600;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .arch-components {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .arch-component {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(123, 44, 191, 0.4);
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+        }
+
+        .arch-component:hover {
+            background: rgba(0, 245, 255, 0.2);
+            border-color: var(--primary-color);
+            transform: scale(1.05);
+        }
+
+        /* Timeline */
+        .timeline {
+            position: relative;
+            padding: 20px 0;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 30px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to bottom, var(--primary-color), var(--secondary-color), var(--accent-color));
+        }
+
+        .timeline-item {
+            position: relative;
+            padding-left: 70px;
+            margin-bottom: 30px;
+        }
+
+        .timeline-marker {
+            position: absolute;
+            left: 20px;
+            top: 0;
+            width: 22px;
+            height: 22px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            border: 3px solid var(--bg-dark);
+            box-shadow: var(--quantum-glow);
+        }
+
+        .timeline-content {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            padding: 20px;
+            border-left: 3px solid var(--primary-color);
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+            border-top: 1px solid rgba(0, 245, 255, 0.2);
+            margin-top: 60px;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            color: var(--primary-color);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .footer-link:hover {
+            color: var(--accent-color);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            h1 { font-size: 2em; }
+            h2 { font-size: 1.6em; }
+            .grid-2, .grid-3 { grid-template-columns: 1fr; }
+            .flow-diagram { flex-direction: column; }
+            .flow-arrow { transform: rotate(90deg); }
+            section { padding: 25px; }
+        }
+
+        /* Interactive Elements */
+        .expandable {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .expandable:hover {
+            background: rgba(0, 245, 255, 0.05);
+        }
+
+        .expandable-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+
+        .expandable.active .expandable-content {
+            max-height: 1000px;
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            border-bottom: 1px dotted var(--primary-color);
+            cursor: help;
+        }
+
+        .tooltip .tooltip-text {
+            visibility: hidden;
+            width: 250px;
+            background: rgba(0, 0, 0, 0.9);
+            color: var(--text-primary);
+            text-align: center;
+            border-radius: 8px;
+            padding: 10px;
+            position: absolute;
+            z-index: 100;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            border: 1px solid var(--primary-color);
+        }
+
+        .tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* Animation delays for staggered appearance */
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+        .delay-4 { animation-delay: 0.4s; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🚀 需求分析 Agent 核心功能定义</h1>
+            <p class="subtitle">基于 OpenClaw + Claude Code 的端到端研发自动化系统 · 从需求到部署的全流程自动化</p>
+            <div class="meta-info">
+                <span class="meta-tag">📅 版本：1.0</span>
+                <span class="meta-tag">🕐 日期：2026-03-18</span>
+                <span class="meta-tag">🎯 阶段：需求分析</span>
+                <span class="meta-tag">⚡ AI 驱动</span>
+            </div>
+        </header>
+
+        <!-- 概述部分 -->
+        <section id="overview">
+            <h2>Agent 概述与定位</h2>
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-icon">🎯</div>
+                        核心目标
+                    </div>
+                    <ul class="feature-list">
+                        <li>自动化理解、分析和结构化用户需求</li>
+                        <li>提取可执行的功能点和技术约束</li>
+                        <li>为后续 PRD 设计、技术方案设计提供标准化输入</li>
+                        <li>支持人机协同的需求澄清与确认</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-icon">🔗</div>
+                        在研发流程中的位置
+                    </div>
+                    <div class="flow-diagram" style="flex-direction: column; gap: 15px;">
+                        <div class="flow-step">原始需求 (自然语言)</div>
+                        <div class="flow-arrow">⬇</div>
+                        <div class="flow-step" style="border-color: var(--accent-color); background: rgba(255, 0, 110, 0.1);">
+                            <strong>需求分析 Agent</strong><br>
+                            <small>结构化提取</small>
+                        </div>
+                        <div class="flow-arrow">⬇</div>
+                        <div class="flow-step">PRD 设计 Agent</div>
+                        <div class="flow-arrow">⬇</div>
+                        <div class="flow-step">技术方案设计 Agent</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 核心功能模块 -->
+        <section id="core-functions">
+            <h2>核心功能模块</h2>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">5</div>
+                    <div class="stat-label">核心模块</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">20+</div>
+                    <div class="stat-label">子功能</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">90%+</div>
+                    <div class="stat-label">自动化率目标</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">&lt;20%</div>
+                    <div class="stat-label">人工介入率</div>
+                </div>
+            </div>
+
+            <div class="grid-3">
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-icon">1️⃣</div>
+                        需求接收与预处理
+                    </div>
+                    <p style="color: var(--text-secondary); margin: 15px 0;">
+                        多通道需求接入、噪声过滤、术语标准化、智能分段
+                    </p>
+                    <div style="margin-top: 15px;">
+                        <span class="badge badge-must">文本输入</span>
+                        <span class="badge badge-should">语音转文本</span>
+                        <span class="badge badge-could">结构化数据</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-icon">2️⃣</div>
+                        需求理解与语义分析
+                    </div>
+                    <p style="color: var(--text-secondary); margin: 15px 0;">
+                        意图识别、实体抽取、依赖关系分析
+                    </p>
+                    <div style="margin-top: 15px;">
+                        <span class="badge badge-must">功能需求</span>
+                        <span class="badge badge-must">非功能需求</span>
+                        <span class="badge badge-should">业务规则</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-icon">3️⃣</div>
+                        需求结构化提取
+                    </div>
+                    <p style="color: var(--text-secondary); margin: 15px 0;">
+                        用户故事生成、功能点拆解、技术约束提取
+                    </p>
+                    <div style="margin-top: 15px;">
+                        <span class="badge badge-must">MoSCoW 优先级</span>
+                        <span class="badge badge-must">验收标准</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-icon">4️⃣</div>
+                        需求质量评估
+                    </div>
+                    <p style="color: var(--text-secondary); margin: 15px 0;">
+                        SMART 原则检验、完整性检查、一致性验证
+                    </p>
+                    <div style="margin-top: 15px;">
+                        <span class="badge badge-must">SMART</span>
+                        <span class="badge badge-should">完整性</span>
+                        <span class="badge badge-should">一致性</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-icon">5️⃣</div>
+                        人机协同模块
+                    </div>
+                    <p style="color: var(--text-secondary); margin: 15px 0;">
+                        需求澄清对话、确认工作流、变更影响分析
+                    </p>
+                    <div style="margin-top: 15px;">
+                        <span class="badge badge-must">澄清对话</span>
+                        <span class="badge badge-should">变更分析</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-icon">🔧</div>
+                        SubAgents
+                    </div>
+                    <p style="color: var(--text-secondary); margin: 15px 0;">
+                        需求澄清子 Agent、技术可行性评估子 Agent
+                    </p>
+                    <div style="margin-top: 15px;">
+                        <span class="badge badge-could">专项处理</span>
+                        <span class="badge badge-could">并行执行</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 系统架构 -->
+        <section id="architecture">
+            <h2>系统架构设计</h2>
+            
+            <div class="architecture-diagram">
+                <div class="arch-layer">
+                    <div class="arch-layer-title">
+                        <span>📥</span> 第 1 层：预处理层
+                    </div>
+                    <div class="arch-components">
+                        <div class="arch-component">噪声过滤</div>
+                        <div class="arch-component">术语标准化</div>
+                        <div class="arch-component">段落分割</div>
+                        <div class="arch-component">格式统一</div>
+                    </div>
+                </div>
+
+                <div class="arch-layer">
+                    <div class="arch-layer-title">
+                        <span>🧠</span> 第 2 层：语义分析层
+                    </div>
+                    <div class="arch-components">
+                        <div class="arch-component">意图分类</div>
+                        <div class="arch-component">实体抽取</div>
+                        <div class="arch-component">关系识别</div>
+                        <div class="arch-component">上下文理解</div>
+                    </div>
+                </div>
+
+                <div class="arch-layer">
+                    <div class="arch-layer-title">
+                        <span>🏗️</span> 第 3 层：结构化提取层
+                    </div>
+                    <div class="arch-components">
+                        <div class="arch-component">用户故事生成</div>
+                        <div class="arch-component">功能点拆解</div>
+                        <div class="arch-component">约束条件提取</div>
+                        <div class="arch-component">优先级判定</div>
+                    </div>
+                </div>
+
+                <div class="arch-layer">
+                    <div class="arch-layer-title">
+                        <span>✅</span> 第 4 层：质量评估层
+                    </div>
+                    <div class="arch-components">
+                        <div class="arch-component">SMART 检验</div>
+                        <div class="arch-component">完整性检查</div>
+                        <div class="arch-component">一致性验证</div>
+                        <div class="arch-component">冲突检测</div>
+                    </div>
+                </div>
+
+                <div class="arch-layer">
+                    <div class="arch-layer-title">
+                        <span>📤</span> 输出层
+                    </div>
+                    <div class="arch-components">
+                        <div class="arch-component">SRD 文档</div>
+                        <div class="arch-component">RTM 矩阵</div>
+                        <div class="arch-component">分析报告</div>
+                        <div class="arch-component">交接数据包</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 需求结构化提取规则 -->
+        <section id="extraction-rules">
+            <h2>需求结构化提取规则</h2>
+            
+            <h3>意图分类关键词</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>意图类型</th>
+                        <th>关键词示例</th>
+                        <th>优先级</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>功能需求</strong></td>
+                        <td>可以、能够、支持、实现、提供、允许、需要、必须</td>
+                        <td><span class="badge badge-must">Must</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>非功能需求</strong></td>
+                        <td>性能、效率、响应时间、吞吐量、并发、可用、可靠</td>
+                        <td><span class="badge badge-should">Should</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>安全需求</strong></td>
+                        <td>安全、加密、认证、授权、权限、审计、日志</td>
+                        <td><span class="badge badge-must">Must</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>数据需求</strong></td>
+                        <td>存储、数据、字段、表、索引、备份、归档</td>
+                        <td><span class="badge badge-should">Should</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>集成需求</strong></td>
+                        <td>对接、集成、接口、API、SDK、webhook、回调</td>
+                        <td><span class="badge badge-could">Could</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>UI/UX 需求</strong></td>
+                        <td>界面、页面、布局、样式、交互、动画、反馈</td>
+                        <td><span class="badge badge-could">Could</span></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>MoSCoW 优先级判定规则</h3>
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-title">🔴 Must have (必须有)</div>
+                    <ul class="feature-list">
+                        <li>关键词：必须、一定要、核心、基本、必要</li>
+                        <li>缺少则系统无法运行</li>
+                        <li>核心价值无法实现</li>
+                        <li>技术前置依赖</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <div class="card-title">🟡 Should have (应该有)</div>
+                    <ul class="feature-list">
+                        <li>关键词：应该、重要、需要、最好、优先</li>
+                        <li>重要但不紧急</li>
+                        <li>可以短期延期</li>
+                        <li>显著提升用户体验</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <div class="card-title">🟢 Could have (可以有)</div>
+                    <ul class="feature-list">
+                        <li>关键词：可以、能够、可选、锦上添花</li>
+                        <li>锦上添花的功能</li>
+                        <li>资源充足时实现</li>
+                        <li>低优先级增强</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <div class="card-title">⚪ Won't have (暂不实现)</div>
+                    <ul class="feature-list">
+                        <li>关键词：暂不、以后再说、不考虑</li>
+                        <li>本次迭代明确不包含</li>
+                        <li>留待未来版本</li>
+                        <li>已排除的需求</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- SMART 质量评估 -->
+        <section id="smart-evaluation">
+            <h2>SMART 质量评估体系</h2>
+            
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                        <h4 style="color: var(--primary-color);">S - Specific (具体的)</h4>
+                        <p style="color: var(--text-secondary);">需求描述是否清晰具体？检查是否存在模糊词汇如"可能"、"大概"、"快速"等。</p>
+                        <div class="progress-container">
+                            <div class="progress-label">
+                                <span>目标清晰度</span>
+                                <span>≥90%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: 90%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                        <h4 style="color: var(--secondary-color);">M - Measurable (可衡量的)</h4>
+                        <p style="color: var(--text-secondary);">是否有可量化的指标？检查是否包含数值或可验证条件。</p>
+                        <div class="progress-container">
+                            <div class="progress-label">
+                                <span>可衡量度</span>
+                                <span>≥95%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: 95%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                        <h4 style="color: var(--accent-color);">A - Achievable (可实现的)</h4>
+                        <p style="color: var(--text-secondary);">技术上是否可行？结合技术约束和历史数据评估。</p>
+                        <div class="progress-container">
+                            <div class="progress-label">
+                                <span>可实现性</span>
+                                <span>≥85%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: 85%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                        <h4 style="color: var(--success-color);">R - Relevant (相关的)</h4>
+                        <p style="color: var(--text-secondary);">是否与业务目标一致？追溯需求到业务价值。</p>
+                        <div class="progress-container">
+                            <div class="progress-label">
+                                <span>相关性</span>
+                                <span>≥90%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: 90%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                        <h4 style="color: var(--warning-color);">T - Time-bound (有时限的)</h4>
+                        <p style="color: var(--text-secondary);">是否有明确的时间要求？检查是否包含时间节点。</p>
+                        <div class="progress-container">
+                            <div class="progress-label">
+                                <span>时限性</span>
+                                <span>≥80%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: 80%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 输出产物 -->
+        <section id="outputs">
+            <h2>输出产物规范</h2>
+            
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-icon">📄</div>
+                        结构化需求文档 (SRD)
+                    </div>
+                    <ul class="feature-list">
+                        <li>文档 ID 与版本信息</li>
+                        <li>项目基本信息</li>
+                        <li>执行摘要</li>
+                        <li>用户故事列表 (含优先级)</li>
+                        <li>功能需求汇总</li>
+                        <li>非功能需求汇总</li>
+                        <li>技术约束</li>
+                        <li>业务规则</li>
+                        <li>风险与缓解措施</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-icon">📊</div>
+                        需求追踪矩阵 (RTM)
+                    </div>
+                    <ul class="feature-list">
+                        <li>需求 ID 追踪</li>
+                        <li>用户故事映射</li>
+                        <li>功能点关联</li>
+                        <li>优先级标注</li>
+                        <li>状态跟踪</li>
+                        <li>测试用例关联</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h3>JSON 输出示例</h3>
+            <pre><code>{
+  <span class="keyword">"document_id"</span>: <span class="string">"REQ-2026-001"</span>,
+  <span class="keyword">"version"</span>: <span class="string">"1.0"</span>,
+  <span class="keyword">"user_stories"</span>: [
+    {
+      <span class="keyword">"id"</span>: <span class="string">"US-001"</span>,
+      <span class="keyword">"role"</span>: <span class="string">"普通用户"</span>,
+      <span class="keyword">"action"</span>: <span class="string">"注册账号"</span>,
+      <span class="keyword">"business_value"</span>: <span class="string">"成为系统用户，使用核心功能"</span>,
+      <span class="keyword">"priority"</span>: <span class="string">"Must have"</span>,
+      <span class="keyword">"acceptance_criteria"</span>: [
+        <span class="string">"用户可以通过邮箱注册"</span>,
+        <span class="string">"密码长度至少 8 位"</span>,
+        <span class="string">"需要邮箱验证"</span>
+      ],
+      <span class="keyword">"estimated_effort"</span>: <span class="string">"3 story points"</span>
+    }
+  ],
+  <span class="keyword">"quality_report"</span>: {
+    <span class="keyword">"smart_scores"</span>: {
+      <span class="keyword">"specific"</span>: <span class="string">0.9</span>,
+      <span class="keyword">"measurable"</span>: <span class="string">1.0</span>,
+      <span class="keyword">"achievable"</span>: <span class="string">0.95</span>,
+      <span class="keyword">"relevant"</span>: <span class="string">0.9</span>,
+      <span class="keyword">"time_bound"</span>: <span class="string">0.8</span>
+    }
+  }
+}</code></pre>
+        </section>
+
+        <!-- 质量标准 -->
+        <section id="quality-standards">
+            <h2>质量标准与度量</h2>
+            
+            <h3>需求质量指标</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>指标名称</th>
+                        <th>计算方法</th>
+                        <th>目标值</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>需求清晰度</strong></td>
+                        <td>(无模糊表述的需求数 / 总需求数) × 100%</td>
+                        <td><span style="color: var(--success-color); font-weight: bold;">≥ 90%</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>需求完整性</strong></td>
+                        <td>(字段完整的需求数 / 总需求数) × 100%</td>
+                        <td><span style="color: var(--success-color); font-weight: bold;">≥ 95%</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>需求一致性</strong></td>
+                        <td>(无冲突的需求数 / 总需求数) × 100%</td>
+                        <td><span style="color: var(--success-color); font-weight: bold;">≥ 98%</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>需求可追溯性</strong></td>
+                        <td>(有明确来源的需求数 / 总需求数) × 100%</td>
+                        <td><span style="color: var(--success-color); font-weight: bold;">100%</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>需求可验证性</strong></td>
+                        <td>(有验收标准的需求数 / 总需求数) × 100%</td>
+                        <td><span style="color: var(--success-color); font-weight: bold;">100%</span></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>自动化程度指标</h3>
+            <div class="grid-3">
+                <div class="card">
+                    <div class="stat-value" style="font-size: 2em; color: var(--primary-color);">≥80%</div>
+                    <div class="stat-label">自动提取率</div>
+                    <p style="color: var(--text-secondary); font-size: 0.9em; margin-top: 10px;">
+                        自动提取的功能点数 / 总功能点数
+                    </p>
+                </div>
+                <div class="card">
+                    <div class="stat-value" style="font-size: 2em; color: var(--secondary-color);">≥70%</div>
+                    <div class="stat-label">自动澄清率</div>
+                    <p style="color: var(--text-secondary); font-size: 0.9em; margin-top: 10px;">
+                        自动解决的模糊点数 / 总模糊点数
+                    </p>
+                </div>
+                <div class="card">
+                    <div class="stat-value" style="font-size: 2em; color: var(--accent-color);">≤20%</div>
+                    <div class="stat-label">人工介入率</div>
+                    <p style="color: var(--text-secondary); font-size: 0.9em; margin-top: 10px;">
+                        需要人工处理的需求数 / 总需求数
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 与其他 Agent 的接口 -->
+        <section id="interfaces">
+            <h2>与其他 Agent 的接口</h2>
+            
+            <div class="flow-diagram">
+                <div class="flow-step">
+                    <strong>原始需求</strong><br>
+                    <small>输入接口</small>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step" style="border-color: var(--accent-color);">
+                    <strong>需求分析 Agent</strong><br>
+                    <small>核心处理</small>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <strong>PRD 设计 Agent</strong><br>
+                    <small>输出交接</small>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <strong>技术方案 Agent</strong><br>
+                    <small> downstream</small>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-title">📥 输入接口</div>
+                    <pre><code><span class="keyword">class</span> <span class="string">RequirementInput</span>:
+    raw_text: str           <span class="comment"># 原始需求文本</span>
+    attachments: List       <span class="comment"># 附件列表</span>
+    metadata: Dict          <span class="comment"># 元数据</span>
+    context: ProjectContext <span class="comment"># 项目上下文</span></code></pre>
+                </div>
+                <div class="card">
+                    <div class="card-title">📤 输出接口</div>
+                    <pre><code><span class="keyword">class</span> <span class="string">RequirementOutput</span>:
+    structured_requirement: SRD
+    quality_report: QualityReport
+    clarification_log: List
+    recommendations: List
+    next_agent_handoff: HandoffInfo</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer>
+            <p><strong>需求分析 Agent 核心功能定义</strong></p>
+            <p>基于 OpenClaw + Claude Code 的端到端研发自动化系统</p>
+            <div class="footer-links">
+                <a href="#" class="footer-link">📄 查看 Markdown 文档</a>
+                <a href="#" class="footer-link">💻 查看源代码</a>
+                <a href="#" class="footer-link">📊 系统架构图</a>
+                <a href="#" class="footer-link">🔧 API 文档</a>
+            </div>
+            <p style="margin-top: 20px; font-size: 0.9em;">
+                © 2026 AI 研发自动化系统 | 版本 1.0 | 最后更新：2026-03-18
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        // 添加交互动画
+        document.addEventListener('DOMContentLoaded', function() {
+            // 进度条动画
+            const progressBars = document.querySelectorAll('.progress-fill');
+            progressBars.forEach(bar => {
+                const width = bar.style.width;
+                bar.style.width = '0';
+                setTimeout(() => {
+                    bar.style.width = width;
+                }, 500);
+            });
+
+            // 卡片悬停效果增强
+            const cards = document.querySelectorAll('.card');
+            cards.forEach(card => {
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-8px) scale(1.02)';
+                });
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0) scale(1)';
+                });
+            });
+
+            // 平滑滚动
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const target = document.querySelector(this.getAttribute('href'));
+                    if (target) {
+                        target.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start'
+                        });
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

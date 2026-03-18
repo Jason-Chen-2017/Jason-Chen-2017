@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw 原理与实践：AI Agent 执行网关设计</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #00d4ff;
+            --secondary-color: #7b2cbf;
+            --bg-color: #0a0e1a;
+            --card-bg: rgba(20, 30, 50, 0.8);
+            --text-color: #e0e0e0;
+            --border-color: rgba(0, 212, 255, 0.3);
+            --glow-color: rgba(0, 212, 255, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--bg-color) 0%, #1a1a2e 100%);
+            color: var(--text-color);
+            line-height: 1.8;
+            min-height: 100vh;
+        }
+
+        /* 导航栏 */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(10, 14, 26, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 1000;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar h1 {
+            font-size: 1.5rem;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: glow 2s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { filter: drop-shadow(0 0 5px var(--glow-color)); }
+            50% { filter: drop-shadow(0 0 20px var(--glow-color)); }
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            color: var(--text-color);
+            text-decoration: none;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary-color);
+        }
+
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--primary-color);
+            transition: width 0.3s;
+        }
+
+        .nav-links a:hover::after {
+            width: 100%;
+        }
+
+        /* 主容器 */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 100px 2rem 2rem;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 2rem;
+        }
+
+        /* 侧边目录 */
+        .toc {
+            position: sticky;
+            top: 100px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            padding: 1.5rem;
+            height: fit-content;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 212, 255, 0.1);
+        }
+
+        .toc h3 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+
+        .toc ul {
+            list-style: none;
+        }
+
+        .toc li {
+            margin-bottom: 0.5rem;
+        }
+
+        .toc a {
+            color: var(--text-color);
+            text-decoration: none;
+            display: block;
+            padding: 0.5rem;
+            border-radius: 5px;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .toc a:hover {
+            background: rgba(0, 212, 255, 0.1);
+            color: var(--primary-color);
+            transform: translateX(5px);
+        }
+
+        .toc a.active {
+            background: rgba(0, 212, 255, 0.2);
+            color: var(--primary-color);
+            border-left: 3px solid var(--primary-color);
+        }
+
+        /* 主内容区 */
+        .main-content {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            padding: 2rem;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 212, 255, 0.1);
+        }
+
+        .chapter {
+            margin-bottom: 3rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .chapter:last-child {
+            border-bottom: none;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            margin: 2rem 0 1rem;
+            color: var(--primary-color);
+            border-left: 4px solid var(--primary-color);
+            padding-left: 1rem;
+        }
+
+        h3 {
+            font-size: 1.4rem;
+            margin: 1.5rem 0 1rem;
+            color: var(--secondary-color);
+        }
+
+        h4 {
+            font-size: 1.2rem;
+            margin: 1rem 0 0.5rem;
+            color: #a0a0a0;
+        }
+
+        p {
+            margin-bottom: 1rem;
+            text-align: justify;
+        }
+
+        /* 代码块 */
+        pre {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1.5rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+            position: relative;
+        }
+
+        pre::before {
+            content: 'Code';
+            position: absolute;
+            top: 0;
+            right: 1rem;
+            background: var(--secondary-color);
+            color: white;
+            padding: 0.2rem 0.8rem;
+            border-radius: 0 0 5px 5px;
+            font-size: 0.8rem;
+        }
+
+        code {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+
+        p code {
+            background: rgba(0, 212, 255, 0.1);
+            padding: 0.2rem 0.5rem;
+            border-radius: 3px;
+            color: var(--primary-color);
+        }
+
+        /* 引用块 */
+        blockquote {
+            border-left: 4px solid var(--secondary-color);
+            padding-left: 1.5rem;
+            margin: 1.5rem 0;
+            background: rgba(123, 44, 191, 0.1);
+            padding: 1.5rem;
+            border-radius: 0 10px 10px 0;
+        }
+
+        /* 列表 */
+        ul, ol {
+            margin-left: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        /* 表格 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        th {
+            background: rgba(0, 212, 255, 0.2);
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
+        tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        tr:hover {
+            background: rgba(0, 212, 255, 0.1);
+        }
+
+        /* ASCII 图表 */
+        .ascii-art {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 1.5rem;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+            border: 1px solid var(--border-color);
+            color: var(--primary-color);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+
+            .toc {
+                position: relative;
+                top: 0;
+            }
+        }
+
+        /* 滚动条美化 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-color);
+        }
+
+        /* 返回顶部按钮 */
+        .back-to-top {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: var(--secondary-color);
+            color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.3s;
+            border: 2px solid var(--primary-color);
+            text-decoration: none;
+            font-size: 1.5rem;
+        }
+
+        .back-to-top.visible {
+            opacity: 1;
+        }
+
+        .back-to-top:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px var(--glow-color);
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 14, 26, 0.9);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <h1>🚀 OpenClaw 原理与实践</h1>
+        <div class="nav-links">
+            <a href="#introduction">简介</a>
+            <a href="#chapters">章节</a>
+            <a href="#about">关于</a>
+        </div>
+    </nav>
+
+    <!-- 加载动画 -->
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- 主容器 -->
+    <div class="container">
+        <!-- 侧边目录 -->
+        <aside class="toc">
+            <h3>📖 目录</h3>
+            <ul id="toc-list">
+                <li><a href="#chapter-1" class="active">第 1 章 引言与背景</a></li>
+                <li><a href="#chapter-2">第 2 章 架构设计原理</a></li>
+                <li><a href="#chapter-3">第 3 章 核心模块详解</a></li>
+                <li><a href="#chapter-4">第 4 章 LLM 集成</a></li>
+                <li><a href="#chapter-5">第 5 章 安全机制</a></li>
+                <li><a href="#chapter-6">第 6 章 性能优化</a></li>
+                <li><a href="#chapter-7">第 7 章 实战案例</a></li>
+                <li><a href="#chapter-8">第 8 章 扩展与插件</a></li>
+                <li><a href="#chapter-9">第 9 章 部署与运维</a></li>
+                <li><a href="#chapter-10">第 10 章 未来展望</a></li>
+            </ul>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content" id="main-content">
+            <!-- 章节内容将通过 JavaScript 动态加载 -->
+        </main>
+    </div>
+
+    <!-- 返回顶部按钮 -->
+    <a href="#" class="back-to-top" id="backToTop">↑</a>
+
+    <script>
+        // 存储章节内容
+        const chapters = {};
+
+        // 加载 Markdown 文件
+        async function loadChapter(id, filename) {
+            try {
+                const response = await fetch(filename);
+                const markdown = await response.text();
+                chapters[id] = parseMarkdown(markdown);
+                return chapters[id];
+            } catch (error) {
+                console.error(`Error loading ${filename}:`, error);
+                return `<p>Error loading chapter content.</p>`;
+            }
+        }
+
+        // 简单的 Markdown 解析器
+        function parseMarkdown(markdown) {
+            let html = markdown;
+
+            // 标题
+            html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+            html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+            html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+            html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
+
+            // 代码块
+            html = html.replace(/```(\w+)?\n([\s\S]*?)```/gim, (match, lang, code) => {
+                return `<pre><code class="language-${lang || 'plaintext'}">${code.trim()}</code></pre>`;
+            });
+
+            // 行内代码
+            html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+            // 粗体和斜体
+            html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+            // 引用
+            html = html.replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>');
+
+            // 链接
+            html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+
+            // 图片
+            html = html.replace(/!\[([^\]]+)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%; border-radius: 10px; margin: 1rem 0;">');
+
+            // 列表
+            html = html.replace(/^\- (.*$)/gim, '<li>$1</li>');
+            html = html.replace(/^\d+\. (.*$)/gim, '<li>$1</li>');
+            html = html.replace(/(<li>.*<\/li>\n?)+/gim, '<ul>$&</ul>');
+
+            // 段落
+            html = html.replace(/\n\n/g, '</p><p>');
+            html = '<p>' + html + '</p>';
+
+            // 清理多余的段落标签
+            html = html.replace(/<p>\s*(<h[1-6]>)/g, '$1');
+            html = html.replace(/(<\/h[1-6]>)\s*<\/p>/g, '$1');
+            html = html.replace(/<p>\s*(<pre>)/g, '$1');
+            html = html.replace(/(<\/pre>)\s*<\/p>/g, '$1');
+            html = html.replace(/<p>\s*(<ul>)/g, '$1');
+            html = html.replace(/(<\/ul>)\s*<\/p>/g, '$1');
+            html = html.replace(/<p>\s*(<blockquote>)/g, '$1');
+            html = html.replace(/(<\/blockquote>)\s*<\/p>/g, '$1');
+            html = html.replace(/<p>\s*(<table>)/g, '$1');
+            html = html.replace(/(<\/table>)\s*<\/p>/g, '$1');
+            html = html.replace(/<p><\/p>/g, '');
+
+            return html;
+        }
+
+        // 渲染章节
+        async function renderChapters() {
+            const mainContent = document.getElementById('main-content');
+            const chapterFiles = [
+                { id: 'chapter-1', file: 'chapter_01_introduction.md', title: '第 1 章 引言与背景' },
+                { id: 'chapter-2', file: 'chapter_02_architecture.md', title: '第 2 章 OpenClaw 架构设计原理' },
+                { id: 'chapter-3', file: 'chapter_03_core_modules.md', title: '第 3 章 OpenClaw 核心模块详解' },
+                { id: 'chapter-4', file: 'chapter_04_llm_integration.md', title: '第 4 章 OpenClaw 与 LLM 集成' },
+                { id: 'chapter-5', file: 'chapter_05_security.md', title: '第 5 章 OpenClaw 安全机制' },
+                { id: 'chapter-6', file: 'chapter_06_performance.md', title: '第 6 章 OpenClaw 性能优化' },
+                { id: 'chapter-7', file: 'chapter_07_use_cases.md', title: '第 7 章 OpenClaw 实战案例' },
+                { id: 'chapter-8', file: 'chapter_08_extensions.md', title: '第 8 章 OpenClaw 扩展与插件系统' },
+                { id: 'chapter-9', file: 'chapter_09_deployment.md', title: '第 9 章 OpenClaw 部署与运维' },
+                { id: 'chapter-10', file: 'chapter_10_future.md', title: '第 10 章 未来展望与总结' }
+            ];
+
+            for (const chapter of chapterFiles) {
+                const section = document.createElement('section');
+                section.id = chapter.id;
+                section.className = 'chapter';
+                
+                const title = document.createElement('h1');
+                title.textContent = chapter.title;
+                section.appendChild(title);
+
+                const content = document.createElement('div');
+                content.innerHTML = await loadChapter(chapter.id, chapter.file);
+                section.appendChild(content);
+
+                mainContent.appendChild(section);
+            }
+
+            // 代码高亮
+            hljs.highlightAll();
+        }
+
+        // 滚动监听
+        function setupScrollListener() {
+            const backToTop = document.getElementById('backToTop');
+            
+            window.addEventListener('scroll', () => {
+                if (window.pageYOffset > 300) {
+                    backToTop.classList.add('visible');
+                } else {
+                    backToTop.classList.remove('visible');
+                }
+
+                // 更新目录激活状态
+                const sections = document.querySelectorAll('.chapter');
+                const scrollPos = window.pageYOffset + 150;
+
+                sections.forEach(section => {
+                    const top = section.offsetTop;
+                    const height = section.offsetHeight;
+                    const id = section.getAttribute('id');
+
+                    if (scrollPos >= top && scrollPos < top + height) {
+                        document.querySelectorAll('.toc a').forEach(a => {
+                            a.classList.remove('active');
+                            if (a.getAttribute('href') === `#${id}`) {
+                                a.classList.add('active');
+                            }
+                        });
+                    }
+                });
+            });
+        }
+
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            renderChapters();
+            setupScrollListener();
+        });
+    </script>
+</body>
+</html>

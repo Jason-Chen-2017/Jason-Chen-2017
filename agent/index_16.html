@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>后端技术方案评审系统 - 人机协同平台</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <script src="https://unpkg.com/@element-plus/icons-vue"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- 导航栏 -->
+        <el-container>
+            <el-header class="header">
+                <div class="header-content">
+                    <h1 class="logo">🚀 后端技术方案评审系统</h1>
+                    <div class="user-info" v-if="currentUser">
+                        <el-dropdown>
+                            <span class="user-name">
+                                {{ currentUser.username }} 
+                                <el-tag size="small" :type="getRoleType(currentUser.role)">{{ getRoleName(currentUser.role) }}</el-tag>
+                            </span>
+                            <template #dropdown>
+                                <el-dropdown-menu>
+                                    <el-dropdown-item @click="logout">退出登录</el-dropdown-item>
+                                </el-dropdown-menu>
+                            </template>
+                        </el-dropdown>
+                    </div>
+                </div>
+            </el-header>
+            
+            <el-main class="main-content">
+                <!-- 登录页面 -->
+                <div v-if="!currentUser" class="login-container">
+                    <el-card class="login-card">
+                        <h2>{{ isLogin ? '用户登录' : '用户注册' }}</h2>
+                        <el-form :model="authForm" label-width="80px">
+                            <el-form-item label="用户名">
+                                <el-input v-model="authForm.username" placeholder="请输入用户名"></el-input>
+                            </el-form-item>
+                            <el-form-item label="邮箱" v-if="!isLogin">
+                                <el-input v-model="authForm.email" placeholder="请输入邮箱"></el-input>
+                            </el-form-item>
+                            <el-form-item label="密码">
+                                <el-input v-model="authForm.password" type="password" placeholder="请输入密码"></el-input>
+                            </el-form-item>
+                            <el-form-item>
+                                <el-button type="primary" @click="handleAuth" style="width: 100%">
+                                    {{ isLogin ? '登录' : '注册' }}
+                                </el-button>
+                            </el-form-item>
+                            <el-form-item>
+                                <el-link type="primary" @click="isLogin = !isLogin">
+                                    {{ isLogin ? '没有账号？立即注册' : '已有账号？立即登录' }}
+                                </el-link>
+                            </el-form-item>
+                        </el-form>
+                    </el-card>
+                </div>
+                
+                <!-- 主界面 -->
+                <div v-else class="dashboard">
+                    <!-- 侧边栏 -->
+                    <el-aside width="250px" class="sidebar">
+                        <el-menu :default-active="activeMenu" @select="handleMenuSelect">
+                            <el-menu-item index="schemes">
+                                <el-icon><document /></el-icon>
+                                <span>技术方案</span>
+                            </el-menu-item>
+                            <el-menu-item index="reviews">
+                                <el-icon><check /></el-icon>
+                                <span>我的评审</span>
+                            </el-menu-item>
+                            <el-menu-item index="pending">
+                                <el-icon><bell /></el-icon>
+                                <span>待我评审</span>
+                            </el-menu-item>
+                            <el-menu-item index="ai-tools">
+                                <el-icon><cpu /></el-icon>
+                                <span>AI 辅助工具</span>
+                            </el-menu-item>
+                        </el-menu>
+                    </el-aside>
+                    
+                    <!-- 内容区域 -->
+                    <el-container>
+                        <el-main class="content-area">
+                            <!-- 方案列表 -->
+                            <div v-if="activeMenu === 'schemes'">
+                                <div class="toolbar">
+                                    <el-button type="primary" @click="showCreateDialog">
+                                        <el-icon><plus /></el-icon>
+                                        新建方案
+                                    </el-button>
+                                    <el-select v-model="statusFilter" placeholder="状态筛选" clearable @change="loadSchemes">
+                                        <el-option label="草稿" value="draft"></el-option>
+                                        <el-option label="待评审" value="pending_review"></el-option>
+                                        <el-option label="评审中" value="in_review"></el-option>
+                                        <el-option label="已通过" value="approved"></el-option>
+                                        <el-option label="需修改" value="needs_changes"></el-option>
+                                    </el-select>
+                                </div>
+                                
+                                <el-table :data="schemes" style="width: 100%" v-loading="loading">
+                                    <el-table-column prop="id" label="ID" width="80"></el-table-column>
+                                    <el-table-column prop="title" label="标题"></el-table-column>
+                                    <el-table-column prop="author_name" label="作者" width="120"></el-table-column>
+                                    <el-table-column prop="status" label="状态" width="120">
+                                        <template #default="scope">
+                                            <el-tag :type="getStatusType(scope.row.status)">
+                                                {{ getStatusName(scope.row.status) }}
+                                            </el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="version" label="版本" width="80"></el-table-column>
+                                    <el-table-column prop="updated_at" label="更新时间" width="180"></el-table-column>
+                                    <el-table-column label="操作" width="200">
+                                        <template #default="scope">
+                                            <el-button size="small" @click="viewScheme(scope.row)">查看</el-button>
+                                            <el-button size="small" @click="editScheme(scope.row)">编辑</el-button>
+                                            <el-button size="small" type="primary" @click="startReview(scope.row)">评审</el-button>
+                                        </template>
+                                    </el-table-column>
+                                </el-table>
+                            </div>
+                            
+                            <!-- 方案详情/编辑 -->
+                            <div v-if="activeMenu === 'scheme-detail' && currentScheme">
+                                <el-page-header @back="activeMenu = 'schemes'" :title="'方案详情'">
+                                    <template #content>
+                                        <div class="header-content">
+                                            <span class="scheme-title">{{ currentScheme.title }}</span>
+                                            <el-tag :type="getStatusType(currentScheme.status)" style="margin-left: 10px">
+                                                {{ getStatusName(currentScheme.status) }}
+                                            </el-tag>
+                                            <span style="margin-left: 10px; color: #999">v{{ currentScheme.version }}</span>
+                                        </div>
+                                    </template>
+                                </el-page-header>
+                                
+                                <el-row :gutter="20" style="margin-top: 20px">
+                                    <!-- 左侧：方案内容 -->
+                                    <el-col :span="16">
+                                        <el-card>
+                                            <template #header>
+                                                <div class="card-header">
+                                                    <span>方案内容</span>
+                                                    <div>
+                                                        <el-button v-if="canEdit" size="small" @click="toggleEditMode">
+                                                            {{ isEditing ? '预览' : '编辑' }}
+                                                        </el-button>
+                                                        <el-button v-if="isEditing" size="small" type="primary" @click="saveScheme">保存</el-button>
+                                                        <el-button size="small" type="success" @click="requestAIReview">
+                                                            <el-icon><cpu /></el-icon>
+                                                            AI 评审
+                                                        </el-button>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            
+                                            <!-- 编辑模式 -->
+                                            <div v-if="isEditing">
+                                                <el-input
+                                                    v-model="editForm.content"
+                                                    type="textarea"
+                                                    :rows="30"
+                                                    placeholder="使用 Markdown 格式编写技术方案"
+                                                    @input="onContentChange"
+                                                ></el-input>
+                                            </div>
+                                            
+                                            <!-- 预览模式 -->
+                                            <div v-else class="markdown-preview" v-html="renderMarkdown(currentScheme.content)"></div>
+                                        </el-card>
+                                    </el-col>
+                                    
+                                    <!-- 右侧：评论和评审 -->
+                                    <el-col :span="8">
+                                        <!-- 在线协作者 -->
+                                        <el-card style="margin-bottom: 20px">
+                                            <template #header>
+                                                <span>👥 在线协作者 ({{ activeUsers.length }})</span>
+                                            </template>
+                                            <div class="active-users">
+                                                <el-tag v-for="user in activeUsers" :key="user" size="small" style="margin-right: 5px">
+                                                    {{ user }}
+                                                </el-tag>
+                                            </div>
+                                        </el-card>
+                                        
+                                        <!-- 评论列表 -->
+                                        <el-card>
+                                            <template #header>
+                                                <span>💬 评论 ({{ comments.length }})</span>
+                                            </template>
+                                            <div class="comments-list" style="max-height: 400px; overflow-y: auto">
+                                                <div v-for="comment in comments" :key="comment.id" class="comment-item">
+                                                    <div class="comment-header">
+                                                        <strong>{{ comment.username }}</strong>
+                                                        <span class="comment-time">{{ formatTime(comment.created_at) }}</span>
+                                                    </div>
+                                                    <div class="comment-content">{{ comment.content }}</div>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- 发表评论 -->
+                                            <el-input
+                                                v-model="newComment"
+                                                type="textarea"
+                                                :rows="3"
+                                                placeholder="发表评论..."
+                                                style="margin-top: 10px"
+                                            ></el-input>
+                                            <el-button type="primary" size="small" @click="submitComment" style="margin-top: 10px">
+                                                发送
+                                            </el-button>
+                                        </el-card>
+                                    </el-col>
+                                </el-row>
+                            </div>
+                            
+                            <!-- 我的评审 -->
+                            <div v-if="activeMenu === 'reviews'">
+                                <h2>我的评审记录</h2>
+                                <el-table :data="myReviews" style="width: 100%">
+                                    <el-table-column prop="id" label="ID" width="80"></el-table-column>
+                                    <el-table-column prop="scheme_id" label="方案 ID" width="100"></el-table-column>
+                                    <el-table-column prop="status" label="状态" width="120">
+                                        <template #default="scope">
+                                            <el-tag :type="getStatusType(scope.row.status)">
+                                                {{ getStatusName(scope.row.status) }}
+                                            </el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="score" label="评分" width="80"></el-table-column>
+                                    <el-table-column prop="comments" label="评审意见"></el-table-column>
+                                    <el-table-column prop="updated_at" label="更新时间" width="180"></el-table-column>
+                                </el-table>
+                            </div>
+                            
+                            <!-- 待我评审 -->
+                            <div v-if="activeMenu === 'pending'">
+                                <h2>待我评审的方案</h2>
+                                <el-table :data="pendingReviews" style="width: 100%">
+                                    <el-table-column prop="id" label="ID" width="80"></el-table-column>
+                                    <el-table-column prop="scheme_id" label="方案 ID" width="100"></el-table-column>
+                                    <el-table-column prop="status" label="状态" width="120">
+                                        <template #default="scope">
+                                            <el-tag :type="getStatusType(scope.row.status)">
+                                                {{ getStatusName(scope.row.status) }}
+                                            </el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column label="操作" width="150">
+                                        <template #default="scope">
+                                            <el-button size="small" @click="viewSchemeById(scope.row.scheme_id)">查看方案</el-button>
+                                            <el-button size="small" type="primary" @click="submitReview(scope.row)">提交评审</el-button>
+                                        </template>
+                                    </el-table-column>
+                                </el-table>
+                            </div>
+                            
+                            <!-- AI 辅助工具 -->
+                            <div v-if="activeMenu === 'ai-tools'">
+                                <h2>🤖 AI 辅助工具</h2>
+                                <el-row :gutter="20">
+                                    <el-col :span="12">
+                                        <el-card>
+                                            <template #header>
+                                                <span>AI 智能评审</span>
+                                            </template>
+                                            <p>使用 Claude Code 对技术方案进行自动评审，识别潜在问题并提供改进建议。</p>
+                                            <el-select v-model="aiReviewType" placeholder="选择评审类型">
+                                                <el-option label="全面评审" value="comprehensive"></el-option>
+                                                <el-option label="安全评审" value="security"></el-option>
+                                                <el-option label="性能评审" value="performance"></el-option>
+                                                <el-option label="代码规范" value="code_style"></el-option>
+                                            </el-select>
+                                            <el-button type="primary" @click="runAIReview" style="margin-top: 10px">开始评审</el-button>
+                                        </el-card>
+                                    </el-col>
+                                    
+                                    <el-col :span="12">
+                                        <el-card>
+                                            <template #header>
+                                                <span>OpenClaw 编排</span>
+                                            </template>
+                                            <p>通过 OpenClaw 编排层调度多个 AI Agent 协同完成复杂任务。</p>
+                                            <el-input
+                                                v-model="openclawTask"
+                                                type="textarea"
+                                                :rows="4"
+                                                placeholder="输入任务描述..."
+                                            ></el-input>
+                                            <el-button type="success" @click="runOpenClaw" style="margin-top: 10px">执行任务</el-button>
+                                        </el-card>
+                                    </el-col>
+                                </el-row>
+                            </div>
+                        </el-main>
+                    </el-container>
+                </div>
+            </el-main>
+        </el-container>
+        
+        <!-- 创建方案对话框 -->
+        <el-dialog v-model="createDialogVisible" title="创建技术方案" width="60%">
+            <el-form :model="createForm" label-width="100px">
+                <el-form-item label="方案标题">
+                    <el-input v-model="createForm.title" placeholder="请输入方案标题"></el-input>
+                </el-form-item>
+                <el-form-item label="方案描述">
+                    <el-input v-model="createForm.description" type="textarea" :rows="3" placeholder="简要描述方案"></el-input>
+                </el-form-item>
+                <el-form-item label="方案内容">
+                    <el-input v-model="createForm.content" type="textarea" :rows="15" placeholder="使用 Markdown 格式编写详细技术方案"></el-input>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="createDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="createScheme">创建</el-button>
+            </template>
+        </el-dialog>
+        
+        <!-- 提交评审对话框 -->
+        <el-dialog v-model="reviewDialogVisible" title="提交评审意见" width="60%">
+            <el-form :model="reviewForm" label-width="100px">
+                <el-form-item label="评审结论">
+                    <el-radio-group v-model="reviewForm.status">
+                        <el-radio label="approved">✅ 通过</el-radio>
+                        <el-radio label="rejected">❌ 拒绝</el-radio>
+                        <el-radio label="needs_changes">🔄 需要修改</el-radio>
+                    </el-radio-group>
+                </el-form-item>
+                <el-form-item label="评分">
+                    <el-rate v-model="reviewForm.score" :max="10" show-text></el-rate>
+                </el-form-item>
+                <el-form-item label="评审意见">
+                    <el-input v-model="reviewForm.comments" type="textarea" :rows="8" placeholder="请详细说明评审意见"></el-input>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="reviewDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="submitReviewForm">提交</el-button>
+            </template>
+        </el-dialog>
+    </div>
+    
+    <script src="js/app.js"></script>
+</body>
+</html>

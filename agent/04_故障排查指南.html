@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>故障排查指南 - OpenClaw + Claude Code 端到端研发自动化系统</title>
+    <style>
+        :root {
+            --primary: #00f5ff;
+            --secondary: #7b2cbf;
+            --accent: #ff006e;
+            --warning: #ffb700;
+            --danger: #ff4757;
+            --success: #2ed573;
+            --bg-dark: #0a0a1a;
+            --bg-card: #12122a;
+            --text-main: #e0e0ff;
+            --text-muted: #a0a0c0;
+            --gradient: linear-gradient(135deg, #00f5ff, #7b2cbf, #ff006e);
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-main);
+            line-height: 1.7;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, rgba(0,245,255,0.1), rgba(123,44,191,0.1));
+            border-bottom: 2px solid var(--primary);
+            padding: 50px 20px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(0,245,255,0.03) 10px,
+                rgba(0,245,255,0.03) 20px
+            );
+            animation: shift 20s linear infinite;
+        }
+        
+        @keyframes shift {
+            100% { transform: translate(50px, 50px); }
+        }
+        
+        .header h1 {
+            position: relative;
+            font-size: 2.5em;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 15px;
+        }
+        
+        .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
+        
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--secondary);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 25px 0;
+            box-shadow: 0 5px 20px rgba(123,44,191,0.2);
+            transition: transform 0.3s;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card h2 {
+            color: var(--primary);
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .card h3 {
+            color: var(--secondary);
+            margin: 25px 0 15px 0;
+            padding-left: 12px;
+            border-left: 3px solid var(--primary);
+        }
+        
+        code {
+            background: rgba(0,245,255,0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Consolas', monospace;
+            color: var(--primary);
+        }
+        
+        pre {
+            background: #0d0d1a;
+            border: 1px solid var(--primary);
+            border-radius: 8px;
+            padding: 20px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        
+        pre code {
+            background: none;
+            padding: 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: rgba(10,10,26,0.5);
+        }
+        
+        th {
+            background: linear-gradient(135deg, var(--secondary), var(--accent));
+            color: white;
+            padding: 15px;
+            text-align: left;
+        }
+        
+        td {
+            padding: 12px;
+            border: 1px solid rgba(0,245,255,0.2);
+        }
+        
+        tr:hover td {
+            background: rgba(0,245,255,0.05);
+        }
+        
+        .alert {
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid;
+        }
+        
+        .alert-info {
+            background: rgba(0,245,255,0.1);
+            border-color: var(--primary);
+        }
+        
+        .alert-warning {
+            background: rgba(255,183,0,0.1);
+            border-color: var(--warning);
+        }
+        
+        .alert-danger {
+            background: rgba(255,71,87,0.1);
+            border-color: var(--danger);
+        }
+        
+        .alert-success {
+            background: rgba(46,213,115,0.1);
+            border-color: var(--success);
+        }
+        
+        .step-list {
+            list-style: none;
+            counter-reset: step;
+        }
+        
+        .step-list li {
+            counter-increment: step;
+            padding: 20px 20px 20px 60px;
+            margin: 15px 0;
+            background: rgba(123,44,191,0.1);
+            border-radius: 8px;
+            position: relative;
+            border: 1px solid rgba(123,44,191,0.3);
+        }
+        
+        .step-list li::before {
+            content: counter(step);
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 30px;
+            height: 30px;
+            background: var(--gradient);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .flow-diagram {
+            background: rgba(10,10,26,0.8);
+            border: 1px solid var(--primary);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 25px 0;
+            text-align: center;
+        }
+        
+        .flow-step {
+            display: inline-block;
+            padding: 15px 25px;
+            background: linear-gradient(135deg, var(--secondary), var(--accent));
+            border-radius: 8px;
+            margin: 10px;
+            font-weight: bold;
+        }
+        
+        .flow-arrow {
+            color: var(--primary);
+            font-size: 1.5em;
+            margin: 0 10px;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 30px;
+            border-top: 2px solid var(--primary);
+            margin-top: 50px;
+            color: var(--text-muted);
+        }
+        
+        .tag {
+            display: inline-block;
+            padding: 4px 10px;
+            background: rgba(123,44,191,0.3);
+            border-radius: 12px;
+            font-size: 0.85em;
+            margin: 3px;
+        }
+        
+        .tag.p0 { background: var(--danger); }
+        .tag.p1 { background: var(--warning); color: #000; }
+        .tag.p2 { background: var(--primary); color: #000; }
+        .tag.p3 { background: var(--text-muted); color: #000; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔧 故障排查指南</h1>
+        <p>基于 OpenClaw + Claude Code 的端到端研发自动化系统</p>
+        <p style="margin-top: 15px; color: var(--text-muted);">版本：v1.0 | 更新日期：2026-03-16</p>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>📋 故障排查流程</h2>
+            
+            <div class="flow-diagram">
+                <div class="flow-step">问题发现</div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-step">信息收集</div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-step">问题定位</div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-step">方案制定</div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-step">实施修复</div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-step">验证修复</div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-step">事后复盘</div>
+            </div>
+
+            <h3>问题分级</h3>
+            <table>
+                <tr>
+                    <th>级别</th>
+                    <th>名称</th>
+                    <th>响应时间</th>
+                    <th>影响范围</th>
+                </tr>
+                <tr>
+                    <td><span class="tag p0">P0</span></td>
+                    <td>致命</td>
+                    <td>5 分钟</td>
+                    <td>系统完全不可用</td>
+                </tr>
+                <tr>
+                    <td><span class="tag p1">P1</span></td>
+                    <td>严重</td>
+                    <td>30 分钟</td>
+                    <td>核心功能不可用</td>
+                </tr>
+                <tr>
+                    <td><span class="tag p2">P2</span></td>
+                    <td>一般</td>
+                    <td>2 小时</td>
+                    <td>部分功能受影响</td>
+                </tr>
+                <tr>
+                    <td><span class="tag p3">P3</span></td>
+                    <td>轻微</td>
+                    <td>24 小时</td>
+                    <td>轻微影响或无影响</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>🚀 安装问题</h2>
+            
+            <h3>Node.js 安装失败</h3>
+            <div class="alert alert-warning">
+                <strong>问题现象:</strong> <code>command not found: node</code>
+            </div>
+            
+            <ol class="step-list">
+                <li>检查是否已安装：<code>which node</code></li>
+                <li>使用 nvm 安装 (推荐):
+                    <pre>curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+nvm install --lts
+nvm use --lts</pre>
+                </li>
+                <li>验证安装：<code>node -v && npm -v</code></li>
+            </ol>
+
+            <h3>OpenClaw 安装失败</h3>
+            <div class="alert alert-warning">
+                <strong>问题现象:</strong> Permission denied
+            </div>
+            
+            <pre><code># 方案 1: 手动下载安装
+curl -fsSL https://claude.ai/install.sh -o install.sh
+chmod +x install.sh
+sudo ./install.sh
+
+# 方案 2: 使用 npm 安装
+sudo npm install -g @anthropic-ai/claude-code</code></pre>
+        </div>
+
+        <div class="card">
+            <h2>🔐 认证与配置问题</h2>
+            
+            <h3>API Key 无效</h3>
+            <div class="alert alert-danger">
+                <strong>错误信息:</strong> INVALID_API_KEY - 提供的 API Key 无效或已过期
+            </div>
+            
+            <pre><code># 1. 检查环境变量
+echo $ANTHROPIC_API_KEY
+
+# 2. 检查格式 (应以 sk-ant-开头)
+echo $ANTHROPIC_API_KEY | grep "^sk-ant-"
+
+# 3. 重新设置
+export ANTHROPIC_API_KEY="sk-ant-api03-xxxxxxxxxxxxx"
+
+# 4. 验证 API Key
+curl -X POST https://api.anthropic.com/v1/messages \
+  -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"claude-sonnet-4-20250514","max_tokens":10,"messages":[{"role":"user","content":"Hi"}]}'</code></pre>
+
+            <h3>工作区信任问题</h3>
+            <div class="alert alert-info">
+                <strong>解决方案:</strong> 输入 Y 确认信任，或预先配置信任目录
+            </div>
+            <pre>claude config set trusted_directories '["/path/to/project"]'</pre>
+        </div>
+
+        <div class="card">
+            <h2>⚡ 任务执行问题</h2>
+            
+            <h3>任务卡住不执行</h3>
+            <table>
+                <tr><th>可能原因</th><th>诊断方法</th><th>解决方案</th></tr>
+                <tr>
+                    <td>Agent 繁忙</td>
+                    <td><code>GET /agents</code> 查看状态</td>
+                    <td>等待或切换到其他 Agent</td>
+                </tr>
+                <tr>
+                    <td>队列堵塞</td>
+                    <td>检查待处理任务数量</td>
+                    <td>取消不必要的任务</td>
+                </tr>
+                <tr>
+                    <td>资源不足</td>
+                    <td>检查 CPU/内存使用率</td>
+                    <td>扩容或优化任务</td>
+                </tr>
+                <tr>
+                    <td>网络问题</td>
+                    <td>检查 API 连接</td>
+                    <td>检查网络和代理配置</td>
+                </tr>
+            </table>
+
+            <h3>Token 超限问题</h3>
+            <div class="alert alert-warning">
+                <strong>错误:</strong> CONTEXT_LENGTH_EXCEEDED - 超过模型 token 限制
+            </div>
+            
+            <pre><code># 方案 1: 减少上下文 (在 CLAUDE.md 中指定关注目录)
+cat > CLAUDE.md << EOF
+# 项目说明
+只关注以下目录:
+- src/routers/
+- src/schemas/
+
+忽略以下目录:
+- node_modules/
+- .git/
+EOF
+
+# 方案 2: 分批次处理
+claude "先实现用户认证模块"
+claude "接下来实现订单管理模块"
+
+# 方案 3: 使用小模型
+export ANTHROPIC_MODEL="claude-sonnet-4-20250514"</code></pre>
+        </div>
+
+        <div class="card">
+            <h2>💻 代码生成问题</h2>
+            
+            <h3>生成的代码无法运行</h3>
+            <div class="alert alert-danger">
+                <strong>示例:</strong> ImportError: cannot import name 'FastAPI' from 'fastapi'
+            </div>
+            
+            <pre><code># 1. 检查包版本
+pip show fastapi
+
+# 2. 升级/降级
+pip install --upgrade fastapi
+# 或
+pip install fastapi==0.104.1
+
+# 3. 让 AI 修复
+claude "检测到 FastAPI 导入错误，请修复兼容性问题"</code></pre>
+
+            <h3>代码风格不一致</h3>
+            <div class="alert alert-info">
+                <strong>解决方案:</strong> 配置 CLAUDE.md 明确规范 + 使用格式化工具
+            </div>
+            <pre><code># 添加代码规范到 CLAUDE.md
+cat >> CLAUDE.md << EOF
+
+## 代码风格规范
+- 变量和函数：snake_case
+- 类名：PascalCase
+- 缩进：4 空格
+- 导入顺序：标准库 → 第三方库 → 本地模块
+EOF
+
+# 使用格式化工具
+pip install black isort
+black src/
+isort src/</code></pre>
+        </div>
+
+        <div class="card">
+            <h2>🧪 测试相关问题</h2>
+            
+            <h3>测试覆盖率不达标</h3>
+            <pre><code># 1. 识别未覆盖的代码
+pytest tests/ --cov=src --cov-report=html
+open htmlcov/index.html
+
+# 2. 让 AI 生成补充测试
+claude "以下代码行未被测试覆盖，请生成对应的测试用例"
+
+# 3. 运行补充测试
+pytest tests/ --cov=src --cov-fail-under=80</code></pre>
+
+            <h3>测试间歇性失败</h3>
+            <div class="alert alert-warning">
+                <strong>可能原因:</strong> 测试数据污染、外部依赖不稳定、并发问题
+            </div>
+            <pre><code># 解决方案：隔离测试数据 + Mock 外部依赖
+@pytest.fixture
+def clean_db():
+    db.drop_all()
+    db.create_all()
+    yield db
+    db.drop_all()
+
+@patch('requests.post')
+def test_external_api(mock_post):
+    mock_post.return_value.status_code = 200
+    # 测试逻辑</code></pre>
+        </div>
+
+        <div class="card">
+            <h2>🚢 CI/CD 部署问题</h2>
+            
+            <h3>K8s 部署失败 - ImagePullBackOff</h3>
+            <pre><code># 1. 查看 Pod 详情
+kubectl describe pod order-service-xxx -n test
+
+# 2. 查看事件日志
+kubectl get events -n test --sort-by='.lastTimestamp'
+
+# 3. 检查镜像拉取凭证
+kubectl get secret registry-credentials -n test -o yaml
+
+# 4. 更新凭证
+kubectl create secret docker-registry registry-credentials \
+  --docker-server=harbor.internal.com \
+  --docker-username=admin \
+  --docker-password=Harbor12345 \
+  -n test</code></pre>
+
+            <h3>健康检查失败</h3>
+            <div class="alert alert-info">
+                <strong>解决方案:</strong> 延长初始延迟时间，确保应用实现了健康检查端点
+            </div>
+            <pre><code># Helm Chart values.yaml
+healthCheck:
+  readinessProbe:
+    initialDelaySeconds: 30  # 从 10 增加到 30
+    periodSeconds: 10
+    
+  livenessProbe:
+    initialDelaySeconds: 60  # 从 30 增加到 60
+    periodSeconds: 20
+
+# 确保应用实现健康检查端点
+@app.get("/health/ready")
+def health_ready():
+    return {"status": "ready"}</code></pre>
+        </div>
+
+        <div class="card">
+            <h2>🔒 安全问题</h2>
+            
+            <h3>API Key 泄露紧急处理</h3>
+            <div class="alert alert-danger">
+                <strong>⚠️ 立即执行以下步骤:</strong>
+            </div>
+            
+            <ol class="step-list">
+                <li>立即撤销泄露的 API Key (登录 Anthropic Console → API Keys → Revoke)</li>
+                <li>从 Git 历史中删除:
+                    <pre>java -jar bfg.jar --delete-files .env
+git reflog expire --expire=now --all
+git gc --prune=now --aggressive</pre>
+                </li>
+                <li>轮换所有相关凭证 (生成新的 API Key)</li>
+                <li>审计 API 调用记录 (检查异常调用)</li>
+                <li>添加预防措施 (git-secrets / pre-commit hooks)</li>
+            </ol>
+
+            <h3>容器安全漏洞</h3>
+            <pre><code># 使用 Trivy 扫描
+trivy image order-service:latest
+
+# 修复方案:
+# 1. 使用最小化基础镜像
+FROM python:3.12-slim
+
+# 2. 多阶段构建
+FROM node:22 AS builder
+...
+FROM python:3.12-slim
+COPY --from=builder ...
+
+# 3. 非 root 用户运行
+RUN useradd -m -u 1000 appuser
+USER appuser</code></pre>
+        </div>
+
+        <div class="card">
+            <h2>📊 日志分析</h2>
+            
+            <h3>日志位置</h3>
+            <table>
+                <tr><th>组件</th><th>日志路径</th></tr>
+                <tr><td>OpenClaw</td><td><code>~/.openclaw/logs/</code></td></tr>
+                <tr><td>Claude Code</td><td><code>~/.claude/logs/</code></td></tr>
+                <tr><td>应用日志</td><td><code>/var/log/app/</code> 或 stdout</td></tr>
+                <tr><td>Jenkins</td><td><code>/var/jenkins_home/jobs/*/builds/*/log</code></td></tr>
+                <tr><td>K8s Pods</td><td><code>kubectl logs &lt;pod-name&gt; -n &lt;namespace&gt;</code></td></tr>
+            </table>
+
+            <h3>常用日志分析命令</h3>
+            <pre><code># 实时查看日志
+tail -f /var/log/app/application.log
+
+# 搜索错误
+grep -i "error\|exception\|critical" application.log
+
+# 查看错误上下文
+grep -B 5 -A 5 "ERROR" application.log
+
+# 按时间过滤
+awk '/2026-03-16 10:00:00/,/2026-03-16 11:00:00/' application.log
+
+# JSON 日志分析
+cat application.log | jq 'select(.level == "ERROR")'</code></pre>
+        </div>
+
+        <div class="card">
+            <h2>🆘 紧急恢复流程</h2>
+            
+            <h3>K8s 回滚操作</h3>
+            <pre><code># 1. 查看部署历史
+kubectl rollout history deployment/order-service -n test
+
+# 2. 回滚到上一个版本
+kubectl rollout undo deployment/order-service -n test
+
+# 3. 回滚到指定版本
+kubectl rollout undo deployment/order-service -n test --to-revision=5
+
+# 4. 验证回滚
+kubectl rollout status deployment/order-service -n test</code></pre>
+
+            <h3>数据库回滚</h3>
+            <pre><code># 使用 Alembic 回滚迁移
+alembic downgrade -1        # 回滚一个版本
+alembic downgrade head~3    # 回滚三个版本
+alembic downgrade base      # 回滚到初始状态
+
+# 从备份恢复
+pg_restore -U postgres -d orders_db -Fc backup_20260315.dump</code></pre>
+        </div>
+
+        <div class="card">
+            <h2>📞 联系支持</h2>
+            
+            <table>
+                <tr><th>问题类型</th><th>联系方式</th><th>响应时间</th></tr>
+                <tr>
+                    <td><span class="tag p0">P0</span> 级故障</td>
+                    <td>电话 + Slack</td>
+                    <td>5 分钟</td>
+                </tr>
+                <tr>
+                    <td><span class="tag p1">P1</span> 级故障</td>
+                    <td>Slack + 邮件</td>
+                    <td>30 分钟</td>
+                </tr>
+                <tr>
+                    <td><span class="tag p2">P2</span> 技术问题</td>
+                    <td>GitHub Issues</td>
+                    <td>24 小时</td>
+                </tr>
+                <tr>
+                    <td><span class="tag p3">P3</span> 一般咨询</td>
+                    <td>社区论坛</td>
+                    <td>48 小时</td>
+                </tr>
+            </table>
+
+            <div class="alert alert-success">
+                <strong>紧急联系人:</strong><br>
+                On-call 工程师：+86-XXX-XXXX-XXXX<br>
+                技术负责人：tech-lead@example.com<br>
+                产品负责人：product-owner@example.com
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>© 2026 OpenClaw + Claude Code 端到端研发自动化系统</p>
+        <p>文档版本：v1.0 | 最后更新：2026-03-16</p>
+    </div>
+</body>
+</html>

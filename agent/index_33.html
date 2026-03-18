@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>研发自动化系统 Dashboard - OpenClaw + Claude Code</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- 顶部导航栏 -->
+        <header class="dashboard-header">
+            <div class="logo">
+                <span class="logo-icon">🚀</span>
+                <h1>研发自动化系统 Dashboard</h1>
+            </div>
+            <div class="header-info">
+                <span class="system-status">
+                    <span class="status-dot" :class="systemStatus"></span>
+                    {{ systemStatusText }}
+                </span>
+                <span class="current-time">{{ currentTime }}</span>
+                <button class="refresh-btn" @click="refreshData">🔄 刷新</button>
+            </div>
+        </header>
+
+        <!-- 主内容区 -->
+        <main class="dashboard-main">
+            <!-- 左侧：流程可视化 -->
+            <section class="panel flow-visualization-panel">
+                <div class="panel-header">
+                    <h2>📊 研发流程可视化</h2>
+                    <span class="panel-badge">{{ completedSteps }}/{{ totalSteps }} 已完成</span>
+                </div>
+                <div class="panel-content">
+                    <div class="flow-chart" ref="flowChartRef"></div>
+                    
+                    <!-- 流程步骤详情 -->
+                    <div class="flow-steps">
+                        <div 
+                            v-for="(step, index) in workflowSteps" 
+                            :key="step.id"
+                            class="flow-step"
+                            :class="['status-' + step.status, { active: currentStep === index }]"
+                            @click="selectStep(index)"
+                        >
+                            <div class="step-number">{{ index + 1 }}</div>
+                            <div class="step-content">
+                                <div class="step-title">{{ step.name }}</div>
+                                <div class="step-agent">{{ step.agent }}</div>
+                                <div class="step-progress">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" :style="{ width: step.progress + '%' }"></div>
+                                    </div>
+                                    <span class="progress-text">{{ step.progress }}%</span>
+                                </div>
+                            </div>
+                            <div class="step-status">
+                                <span class="status-icon">{{ getStatusIcon(step.status) }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 中间：待办任务 -->
+            <section class="panel todo-tasks-panel">
+                <div class="panel-header">
+                    <h2>✅ 待办任务中心</h2>
+                    <div class="task-filters">
+                        <button 
+                            v-for="filter in taskFilters" 
+                            :key="filter.value"
+                            :class="['filter-btn', { active: currentFilter === filter.value }]"
+                            @click="currentFilter = filter.value"
+                        >
+                            {{ filter.label }}
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div class="task-list">
+                        <div 
+                            v-for="task in filteredTasks" 
+                            :key="task.id"
+                            class="task-item"
+                            :class="'priority-' + task.priority"
+                        >
+                            <div class="task-left">
+                                <input 
+                                    type="checkbox" 
+                                    :checked="task.completed"
+                                    @change="toggleTask(task)"
+                                    class="task-checkbox"
+                                >
+                                <div class="task-info">
+                                    <div class="task-title">{{ task.title }}</div>
+                                    <div class="task-meta">
+                                        <span class="task-role">👤 {{ task.role }}</span>
+                                        <span class="task-deadline">⏰ {{ task.deadline }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="task-right">
+                                <span class="priority-badge">{{ getPriorityText(task.priority) }}</span>
+                                <button class="action-btn" @click="viewTaskDetail(task)">👁️</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 任务统计 -->
+                    <div class="task-statistics">
+                        <div class="stat-item">
+                            <div class="stat-value">{{ todoCount }}</div>
+                            <div class="stat-label">待处理</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value in-progress">{{ inProgressCount }}</div>
+                            <div class="stat-label">进行中</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value completed">{{ completedCount }}</div>
+                            <div class="stat-label">已完成</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value overdue">{{ overdueCount }}</div>
+                            <div class="stat-label">已逾期</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 右侧：节点状态 -->
+            <section class="panel node-status-panel">
+                <div class="panel-header">
+                    <h2>🔧 节点状态监控</h2>
+                    <span class="node-count">共 {{ nodes.length }} 个节点</span>
+                </div>
+                <div class="panel-content">
+                    <!-- 节点状态概览 -->
+                    <div class="nodes-overview">
+                        <div class="overview-item status-running">
+                            <span class="count">{{ runningNodes }}</span>
+                            <span class="label">运行中</span>
+                        </div>
+                        <div class="overview-item status-success">
+                            <span class="count">{{ successNodes }}</span>
+                            <span class="label">成功</span>
+                        </div>
+                        <div class="overview-item status-failed">
+                            <span class="count">{{ failedNodes }}</span>
+                            <span class="label">失败</span>
+                        </div>
+                        <div class="overview-item status-pending">
+                            <span class="count">{{ pendingNodes }}</span>
+                            <span class="label">等待中</span>
+                        </div>
+                    </div>
+
+                    <!-- 节点列表 -->
+                    <div class="nodes-list">
+                        <div 
+                            v-for="node in nodes" 
+                            :key="node.id"
+                            class="node-item"
+                            :class="'status-' + node.status"
+                        >
+                            <div class="node-header">
+                                <span class="node-name">{{ node.name }}</span>
+                                <span class="node-status-badge">{{ getStatusBadge(node.status) }}</span>
+                            </div>
+                            <div class="node-body">
+                                <div class="node-detail">
+                                    <span class="label">类型:</span>
+                                    <span class="value">{{ node.type }}</span>
+                                </div>
+                                <div class="node-detail">
+                                    <span class="label">耗时:</span>
+                                    <span class="value">{{ node.duration }}</span>
+                                </div>
+                                <div class="node-detail">
+                                    <span class="label">负责人:</span>
+                                    <span class="value">{{ node.owner }}</span>
+                                </div>
+                            </div>
+                            <div class="node-footer">
+                                <div class="node-progress">
+                                    <div class="progress-bar-small">
+                                        <div class="progress-fill" :style="{ width: node.progress + '%' }"></div>
+                                    </div>
+                                </div>
+                                <div class="node-actions">
+                                    <button class="btn-icon" @click="retryNode(node)" title="重试">🔄</button>
+                                    <button class="btn-icon" @click="viewNodeLog(node)" title="日志">📋</button>
+                                    <button class="btn-icon" @click="stopNode(node)" title="停止">⏹️</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- 底部统计栏 -->
+        <footer class="dashboard-footer">
+            <div class="footer-stats">
+                <div class="footer-stat">
+                    <span class="label">项目总数:</span>
+                    <span class="value">12</span>
+                </div>
+                <div class="footer-stat">
+                    <span class="label">活跃 Agents:</span>
+                    <span class="value">8</span>
+                </div>
+                <div class="footer-stat">
+                    <span class="label">今日完成:</span>
+                    <span class="value">24</span>
+                </div>
+                <div class="footer-stat">
+                    <span class="label">成功率:</span>
+                    <span class="value">96.5%</span>
+                </div>
+                <div class="footer-stat">
+                    <span class="label">平均耗时:</span>
+                    <span class="value">2.3h</span>
+                </div>
+            </div>
+            <div class="footer-info">
+                <span>OpenClaw + Claude Code 端到端研发自动化系统 v1.0</span>
+                <span>© 2026 All Rights Reserved</span>
+            </div>
+        </footer>
+
+        <!-- 任务详情弹窗 -->
+        <div v-if="showTaskDetail" class="modal-overlay" @click="closeTaskDetail">
+            <div class="modal-content" @click.stop>
+                <div class="modal-header">
+                    <h3>{{ selectedTask?.title }}</h3>
+                    <button class="close-btn" @click="closeTaskDetail">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="detail-row">
+                        <span class="label">负责人:</span>
+                        <span class="value">{{ selectedTask?.role }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">优先级:</span>
+                        <span class="value">{{ getPriorityText(selectedTask?.priority) }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">截止时间:</span>
+                        <span class="value">{{ selectedTask?.deadline }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">描述:</span>
+                        <p class="description">{{ selectedTask?.description }}</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" @click="startTask(selectedTask)">开始执行</button>
+                    <button class="btn btn-secondary" @click="delegateTask(selectedTask)">委托他人</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/js/app.js"></script>
+</body>
+</html>

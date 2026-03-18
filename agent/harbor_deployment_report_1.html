@@ -1,0 +1,1553 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Harbor 私有镜像仓库部署与权限配置方案</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #00f5ff;
+            --secondary-color: #7b2cbf;
+            --accent-color: #ff006e;
+            --bg-dark: #0a0a1a;
+            --bg-light: #1a1a3a;
+            --text-primary: #ffffff;
+            --text-secondary: #b8b8d0;
+            --success: #00ff88;
+            --warning: #ffaa00;
+            --error: #ff4444;
+            --info: #00d4ff;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-light) 100%);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* 头部样式 */
+        header {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.3), rgba(0, 245, 255, 0.2));
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 30px;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+            animation: glow 3s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(0, 245, 255, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(0, 245, 255, 0.6); }
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(0, 245, 255, 0.1) 0%, transparent 70%);
+            animation: rotate 20s linear infinite;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        h1 {
+            font-size: 2.5em;
+            text-align: center;
+            background: linear-gradient(45deg, var(--primary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+            text-shadow: 0 0 30px rgba(0, 245, 255, 0.5);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 1.2em;
+            position: relative;
+            z-index: 1;
+        }
+
+        .meta-info {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .meta-tag {
+            background: rgba(0, 245, 255, 0.1);
+            border: 1px solid var(--primary-color);
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+        }
+
+        .meta-tag:hover {
+            background: rgba(0, 245, 255, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 245, 255, 0.4);
+        }
+
+        /* 导航栏 */
+        .toc {
+            background: rgba(26, 26, 58, 0.8);
+            border: 1px solid rgba(123, 44, 191, 0.3);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        .toc h2 {
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+        }
+
+        .toc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .toc-item {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.2), rgba(0, 245, 255, 0.1));
+            padding: 15px 20px;
+            border-radius: 10px;
+            border-left: 4px solid var(--primary-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: var(--text-primary);
+            display: block;
+        }
+
+        .toc-item:hover {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.4), rgba(0, 245, 255, 0.2));
+            transform: translateX(10px);
+            box-shadow: 0 5px 20px rgba(0, 245, 255, 0.3);
+        }
+
+        /* 章节样式 */
+        section {
+            background: rgba(26, 26, 58, 0.6);
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        section:hover {
+            border-color: rgba(0, 245, 255, 0.4);
+            box-shadow: 0 10px 40px rgba(0, 245, 255, 0.2);
+        }
+
+        h2 {
+            color: var(--primary-color);
+            font-size: 2em;
+            margin-bottom: 25px;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        h2::before {
+            content: '◈';
+            color: var(--accent-color);
+            font-size: 1.2em;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        h3 {
+            color: var(--info);
+            font-size: 1.5em;
+            margin: 25px 0 15px 0;
+            border-left: 4px solid var(--info);
+            padding-left: 15px;
+        }
+
+        h4 {
+            color: var(--text-primary);
+            font-size: 1.2em;
+            margin: 20px 0 10px 0;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: var(--text-secondary);
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: rgba(10, 10, 26, 0.5);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        th {
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(0, 245, 255, 0.1);
+            color: var(--text-secondary);
+        }
+
+        tr:hover td {
+            background: rgba(0, 245, 255, 0.1);
+            color: var(--text-primary);
+        }
+
+        /* 代码块样式 */
+        pre {
+            background: rgba(10, 10, 26, 0.8);
+            border: 1px solid rgba(123, 44, 191, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            overflow-x: auto;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        pre::before {
+            content: 'TERMINAL';
+            position: absolute;
+            top: 5px;
+            right: 10px;
+            font-size: 0.7em;
+            color: var(--primary-color);
+            opacity: 0.7;
+        }
+
+        code {
+            font-family: 'Courier New', Consolas, monospace;
+            color: var(--primary-color);
+            background: rgba(0, 245, 255, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            color: var(--text-secondary);
+        }
+
+        .keyword { color: var(--accent-color); }
+        .string { color: var(--success); }
+        .comment { color: #666; font-style: italic; }
+        .function { color: var(--info); }
+
+        /* 架构图样式 */
+        .architecture-diagram {
+            background: rgba(10, 10, 26, 0.8);
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 20px 0;
+            overflow-x: auto;
+        }
+
+        .diagram-box {
+            display: inline-block;
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.3), rgba(0, 245, 255, 0.2));
+            border: 2px solid var(--primary-color);
+            border-radius: 10px;
+            padding: 15px 25px;
+            margin: 10px;
+            text-align: center;
+            min-width: 150px;
+            transition: all 0.3s ease;
+        }
+
+        .diagram-box:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(0, 245, 255, 0.4);
+        }
+
+        .diagram-arrow {
+            display: inline-block;
+            color: var(--primary-color);
+            font-size: 1.5em;
+            margin: 0 10px;
+            animation: moveArrow 2s ease-in-out infinite;
+        }
+
+        @keyframes moveArrow {
+            0%, 100% { transform: translateX(0); }
+            50% { transform: translateX(5px); }
+        }
+
+        /* 特性卡片 */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .feature-card {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.2), rgba(0, 245, 255, 0.1));
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            border-radius: 15px;
+            padding: 25px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(0, 245, 255, 0.1) 0%, transparent 70%);
+            animation: rotate 15s linear infinite;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 245, 255, 0.3);
+            border-color: var(--primary-color);
+        }
+
+        .feature-icon {
+            font-size: 2.5em;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .feature-title {
+            color: var(--primary-color);
+            font-size: 1.3em;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .feature-desc {
+            color: var(--text-secondary);
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 步骤流程 */
+        .step-container {
+            counter-reset: step;
+            margin: 30px 0;
+        }
+
+        .step {
+            position: relative;
+            padding-left: 60px;
+            margin-bottom: 30px;
+        }
+
+        .step::before {
+            counter-increment: step;
+            content: counter(step);
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 5px 20px rgba(0, 245, 255, 0.4);
+        }
+
+        .step-title {
+            color: var(--primary-color);
+            font-size: 1.3em;
+            margin-bottom: 10px;
+        }
+
+        /* 警告和提示框 */
+        .alert {
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid;
+        }
+
+        .alert-info {
+            background: rgba(0, 212, 255, 0.1);
+            border-color: var(--info);
+        }
+
+        .alert-warning {
+            background: rgba(255, 170, 0, 0.1);
+            border-color: var(--warning);
+        }
+
+        .alert-success {
+            background: rgba(0, 255, 136, 0.1);
+            border-color: var(--success);
+        }
+
+        .alert-error {
+            background: rgba(255, 68, 68, 0.1);
+            border-color: var(--error);
+        }
+
+        .alert-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* 页脚 */
+        footer {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.3), rgba(0, 245, 255, 0.2));
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            margin-top: 40px;
+            backdrop-filter: blur(10px);
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            color: var(--primary-color);
+            text-decoration: none;
+            padding: 10px 20px;
+            border: 1px solid var(--primary-color);
+            border-radius: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .footer-link:hover {
+            background: var(--primary-color);
+            color: var(--bg-dark);
+            box-shadow: 0 5px 20px rgba(0, 245, 255, 0.4);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            h1 { font-size: 1.8em; }
+            h2 { font-size: 1.5em; }
+            .container { padding: 10px; }
+            .meta-info { flex-direction: column; gap: 10px; }
+            .toc-grid { grid-template-columns: 1fr; }
+        }
+
+        /* 粒子背景效果 */
+        .particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            animation: float 15s infinite;
+            opacity: 0.3;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(100vh) translateX(0);
+                opacity: 0;
+            }
+            10% {
+                opacity: 0.3;
+            }
+            90% {
+                opacity: 0.3;
+            }
+            100% {
+                transform: translateY(-100vh) translateX(100px);
+                opacity: 0;
+            }
+        }
+
+        /* 进度条 */
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: rgba(123, 44, 191, 0.3);
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
+            width: 0%;
+            transition: width 0.3s ease;
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { filter: brightness(1); }
+            50% { filter: brightness(1.3); }
+            100% { filter: brightness(1); }
+        }
+
+        /* 标签 */
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .badge-primary { background: var(--primary-color); color: var(--bg-dark); }
+        .badge-secondary { background: var(--secondary-color); color: white; }
+        .badge-accent { background: var(--accent-color); color: white; }
+        .badge-success { background: var(--success); color: var(--bg-dark); }
+        .badge-warning { background: var(--warning); color: var(--bg-dark); }
+
+        /* 检查列表 */
+        .checklist {
+            list-style: none;
+            padding: 0;
+        }
+
+        .checklist li {
+            padding: 10px 0 10px 35px;
+            position: relative;
+            color: var(--text-secondary);
+        }
+
+        .checklist li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--success);
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        /* 时间线 */
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+            margin: 30px 0;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to bottom, var(--primary-color), var(--secondary-color));
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(10, 10, 26, 0.5);
+            border-radius: 10px;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -24px;
+            top: 25px;
+            width: 12px;
+            height: 12px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            border: 3px solid var(--bg-dark);
+        }
+
+        .timeline-date {
+            color: var(--primary-color);
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 粒子背景 -->
+    <div class="particles" id="particles"></div>
+
+    <div class="container">
+        <!-- 头部 -->
+        <header>
+            <h1>🚀 Harbor 私有镜像仓库部署与权限配置方案</h1>
+            <p class="subtitle">企业级容器镜像管理解决方案 | 基于 OpenClaw + Claude Code 的端到端研发自动化系统</p>
+            <div class="meta-info">
+                <span class="meta-tag">📅 版本：v1.0</span>
+                <span class="meta-tag">🔖 Harbor v2.10.0+</span>
+                <span class="meta-tag">📝 日期：2026-03-18</span>
+                <span class="meta-tag">⚡ Docker 20.10.10+</span>
+                <span class="meta-tag">🔒 RBAC 权限控制</span>
+            </div>
+        </header>
+
+        <!-- 目录 -->
+        <nav class="toc">
+            <h2>📑 目录导航</h2>
+            <div class="toc-grid">
+                <a href="#section1" class="toc-item">1️⃣ Harbor 概述与核心功能</a>
+                <a href="#section2" class="toc-item">2️⃣ 系统架构设计</a>
+                <a href="#section3" class="toc-item">3️⃣ 环境准备与初始化</a>
+                <a href="#section4" class="toc-item">4️⃣ Harbor 部署步骤</a>
+                <a href="#section5" class="toc-item">5️⃣ RBAC 权限配置</a>
+                <a href="#section6" class="toc-item">6️⃣ CI/CD 集成配置</a>
+                <a href="#section7" class="toc-item">7️⃣ Kubernetes 集成</a>
+                <a href="#section8" class="toc-item">8️⃣ 运维管理与监控</a>
+                <a href="#section9" class="toc-item">9️⃣ 故障排查指南</a>
+            </div>
+        </nav>
+
+        <!-- 1. Harbor 概述 -->
+        <section id="section1">
+            <h2>Harbor 概述与核心功能</h2>
+            
+            <div class="alert alert-info">
+                <div class="alert-title">ℹ️ 什么是 Harbor？</div>
+                <p>Harbor 是由 VMware 公司开源的企业级 Docker Registry 项目，其目标是帮助用户迅速搭建一个企业级的 Docker Registry 服务。Harbor 以 Docker 公司开源的 Registry 为基础，提供了图形管理 UI、基于角色的访问控制 (RBAC)、AD/LDAP 集成、以及审计日志等企业用户需求的功能，同时原生支持中文。</p>
+            </div>
+
+            <h3>🎯 核心功能特性</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <span class="feature-icon">🔐</span>
+                    <h4 class="feature-title">基于角色的访问控制 (RBAC)</h4>
+                    <p class="feature-desc">用户与 Docker 镜像仓库通过"项目"进行组织管理，一个用户可以对多个镜像仓库在同一命名空间里有不同的权限。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🔄</span>
+                    <h4 class="feature-title">镜像复制</h4>
+                    <p class="feature-desc">镜像可以在多个 Registry 实例中复制（同步），适合负载均衡、高可用、混合云和多云的场景。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🖥️</span>
+                    <h4 class="feature-title">图形化用户界面</h4>
+                    <p class="feature-desc">用户可以通过浏览器来浏览、检索当前 Docker 镜像仓库，管理项目和命名空间。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">👥</span>
+                    <h4 class="feature-title">AD/LDAP 支持</h4>
+                    <p class="feature-desc">Harbor 可以集成企业内部已有的 AD/LDAP，用于鉴权认证管理。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">📊</span>
+                    <h4 class="feature-title">审计日志</h4>
+                    <p class="feature-desc">记录所有操作日志，便于追踪和审计，满足企业合规要求。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🛡️</span>
+                    <h4 class="feature-title">镜像漏洞扫描</h4>
+                    <p class="feature-desc">集成 Trivy 进行镜像安全漏洞扫描，确保镜像安全性。</p>
+                </div>
+            </div>
+
+            <h3>📊 角色权限矩阵</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>角色</th>
+                        <th>创建项目</th>
+                        <th>删除项目</th>
+                        <th>添加成员</th>
+                        <th>推送镜像</th>
+                        <th>拉取镜像</th>
+                        <th>删除镜像</th>
+                        <th>扫描漏洞</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="badge badge-accent">超级管理员</span></td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge badge-primary">项目管理员</span></td>
+                        <td>❌</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge badge-secondary">开发人员</span></td>
+                        <td>❌</td>
+                        <td>❌</td>
+                        <td>❌</td>
+                        <td>✅</td>
+                        <td>✅</td>
+                        <td>❌</td>
+                        <td>✅</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge badge-success">访客</span></td>
+                        <td>❌</td>
+                        <td>❌</td>
+                        <td>❌</td>
+                        <td>❌</td>
+                        <td>✅</td>
+                        <td>❌</td>
+                        <td>❌</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- 2. 系统架构设计 -->
+        <section id="section2">
+            <h2>系统架构设计</h2>
+            
+            <h3>🏗️ 整体架构图</h3>
+            <div class="architecture-diagram">
+                <div style="text-align: center;">
+                    <div class="diagram-box">
+                        <strong>👥 用户层</strong><br>
+                        <small>开发/测试/运维/CI/CD</small>
+                    </div>
+                    <div class="diagram-arrow">⬇</div>
+                    <div class="diagram-box">
+                        <strong>🌐 接入层 (Nginx)</strong><br>
+                        <small>HTTPS: 443 / HTTP: 80</small>
+                    </div>
+                    <div class="diagram-arrow">⬇</div>
+                    <div class="diagram-box">
+                        <strong>⚙️ Harbor 核心服务层</strong><br>
+                        <small>Core API / Jobservice / Portal</small>
+                    </div>
+                    <div class="diagram-arrow">⬇</div>
+                    <div class="diagram-box">
+                        <strong>💾 数据存储层</strong><br>
+                        <small>PostgreSQL / Redis / Storage</small>
+                    </div>
+                </div>
+            </div>
+
+            <h3>🖥️ 组件说明</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>组件名称</th>
+                        <th>端口</th>
+                        <th>协议</th>
+                        <th>功能描述</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Nginx Proxy</td>
+                        <td>80/443</td>
+                        <td>HTTP/HTTPS</td>
+                        <td>对外服务端口，反向代理</td>
+                    </tr>
+                    <tr>
+                        <td>Harbor Core</td>
+                        <td>8080</td>
+                        <td>HTTP</td>
+                        <td>内部 API 服务，核心业务逻辑</td>
+                    </tr>
+                    <tr>
+                        <td>Registry Service</td>
+                        <td>5000</td>
+                        <td>HTTP</td>
+                        <td>镜像仓库服务，存储镜像数据</td>
+                    </tr>
+                    <tr>
+                        <td>PostgreSQL</td>
+                        <td>5432</td>
+                        <td>TCP</td>
+                        <td>数据库服务 (内部)，存储元数据</td>
+                    </tr>
+                    <tr>
+                        <td>Redis</td>
+                        <td>6379</td>
+                        <td>TCP</td>
+                        <td>缓存服务 (内部)，会话管理</td>
+                    </tr>
+                    <tr>
+                        <td>Trivy Adapter</td>
+                        <td>8081</td>
+                        <td>HTTP</td>
+                        <td>漏洞扫描适配器</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>💻 硬件资源要求</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>环境规模</th>
+                        <th>CPU</th>
+                        <th>内存</th>
+                        <th>存储</th>
+                        <th>适用场景</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="badge badge-warning">最小配置</span></td>
+                        <td>2 核</td>
+                        <td>4GB</td>
+                        <td>50GB</td>
+                        <td>测试/开发环境</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge badge-primary">标准配置</span></td>
+                        <td>4 核</td>
+                        <td>8GB</td>
+                        <td>200GB</td>
+                        <td>中小型团队</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge badge-accent">生产配置</span></td>
+                        <td>8 核</td>
+                        <td>16GB</td>
+                        <td>1TB+</td>
+                        <td>大型企业</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- 3. 环境准备 -->
+        <section id="section3">
+            <h2>环境准备与初始化</h2>
+            
+            <div class="alert alert-warning">
+                <div class="alert-title">⚠️ 系统要求</div>
+                <ul class="checklist">
+                    <li>操作系统：CentOS 7.9+ / Ubuntu 20.04+ / Debian 10+</li>
+                    <li>CPU：最低 2 核，推荐 4 核以上</li>
+                    <li>内存：最低 4GB，推荐 8GB 以上</li>
+                    <li>存储：根据镜像数量确定，建议 200GB 以上</li>
+                    <li>网络：稳定的网络连接，开放 80/443 端口</li>
+                </ul>
+            </div>
+
+            <h3>📦 软件依赖检查</h3>
+            <pre><code><span class="comment"># 检查 Docker 版本 (需要 20.10.10+)</span>
+<span class="function">docker</span> --version
+
+<span class="comment"># 检查 Docker Compose 版本 (需要 1.18.0+)</span>
+<span class="function">docker-compose</span> --version</code></pre>
+
+            <h3>🔧 环境初始化脚本</h3>
+            <pre><code><span class="comment">#!/bin/bash</span>
+<span class="comment"># 文件名：prepare_environment.sh</span>
+
+<span class="keyword">set</span> -e
+
+<span class="comment"># 1. 关闭防火墙</span>
+systemctl stop firewalld
+systemctl disable firewalld
+
+<span class="comment"># 2. 关闭 SELinux</span>
+sed -i <span class="string">'s/enforcing/disabled/'</span> /etc/selinux/config
+setenforce 0
+
+<span class="comment"># 3. 关闭 Swap</span>
+swapoff -a
+sed -ri <span class="string">'s/.*swap.*/#&/'</span> /etc/fstab
+
+<span class="comment"># 4. 安装 Docker</span>
+yum install -y yum-utils
+yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+yum install -y docker-ce docker-ce-cli containerd.io
+systemctl start docker
+systemctl enable docker
+
+<span class="comment"># 5. 安装 Docker Compose</span>
+curl -L <span class="string">"https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)"</span> -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+
+<span class="comment"># 6. 配置 Docker 加速器</span>
+cat > /etc/docker/daemon.json << EOF
+{
+  <span class="string">"registry-mirrors"</span>: [
+    <span class="string">"https://docker.mirrors.ustc.edu.cn"</span>,
+    <span class="string">"https://registry.cn-hangzhou.aliyuncs.com"</span>
+  ]
+}
+EOF
+
+systemctl daemon-reload
+systemctl restart docker</code></pre>
+        </section>
+
+        <!-- 4. Harbor 部署步骤 -->
+        <section id="section4">
+            <h2>Harbor 部署步骤</h2>
+            
+            <div class="step-container">
+                <div class="step">
+                    <h4 class="step-title">下载 Harbor 安装包</h4>
+                    <pre><code><span class="comment"># 创建工作目录</span>
+mkdir -p /opt/harbor
+cd /opt/harbor
+
+<span class="comment"># 下载 Harbor 离线安装包 (v2.10.0)</span>
+wget https://github.com/goharbor/harbor/releases/download/v2.10.0/harbor-offline-installer-v2.10.0.tgz
+
+<span class="comment"># 解压安装包</span>
+tar -zxvf harbor-offline-installer-v2.10.0.tgz
+
+<span class="comment"># 进入 Harbor 目录</span>
+cd harbor</code></pre>
+                </div>
+
+                <div class="step">
+                    <h4 class="step-title">配置文件说明</h4>
+                    <pre><code><span class="comment"># 复制配置模板</span>
+cp harbor.yml.tmpl harbor.yml
+
+<span class="comment"># 编辑配置文件</span>
+vim harbor.yml</code></pre>
+                    
+                    <div class="alert alert-info">
+                        <div class="alert-title">📝 关键配置项</div>
+                        <ul class="checklist">
+                            <li><strong>hostname:</strong> Harbor 服务器的 IP 地址或域名</li>
+                            <li><strong>harbor_admin_password:</strong> 管理员初始密码 (首次登录后请修改)</li>
+                            <li><strong>http.port:</strong> HTTP 访问端口 (默认 80)</li>
+                            <li><strong>https:</strong> 生产环境建议启用 HTTPS</li>
+                            <li><strong>data_volume:</strong> 数据卷存储路径</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <h4 class="step-title">执行安装</h4>
+                    <pre><code><span class="comment"># 执行准备脚本</span>
+./prepare
+
+<span class="comment"># 执行安装脚本</span>
+./install.sh
+
+<span class="comment"># 或使用 Docker Compose 直接启动</span>
+docker-compose up -d</code></pre>
+                </div>
+
+                <div class="step">
+                    <h4 class="step-title">验证安装</h4>
+                    <pre><code><span class="comment"># 查看容器状态</span>
+docker-compose ps
+
+<span class="comment"># 查看 Harbor 日志</span>
+docker-compose logs -f
+
+<span class="comment"># 检查服务端口</span>
+netstat -tlnp | grep -E <span class="string">'80|443|5000'</span>
+
+<span class="comment"># 访问测试</span>
+curl -I http://localhost</code></pre>
+                </div>
+
+                <div class="step">
+                    <h4 class="step-title">配置开机自启</h4>
+                    <pre><code><span class="comment"># 创建 systemd 服务文件</span>
+cat > /lib/systemd/system/harbor.service << EOF
+[Unit]
+Description=Harbor Container Registry
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/harbor/harbor
+ExecStart=/usr/bin/docker-compose up -d
+ExecStop=/usr/bin/docker-compose down
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+<span class="comment"># 重载 systemd 配置</span>
+systemctl daemon-reload
+
+<span class="comment"># 启用 Harbor 服务</span>
+systemctl enable harbor
+systemctl start harbor</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. RBAC 权限配置 -->
+        <section id="section5">
+            <h2>RBAC 权限配置</h2>
+            
+            <h3>🎭 Harbor 角色体系</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>角色 ID</th>
+                        <th>角色名称</th>
+                        <th>权限描述</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td><span class="badge badge-accent">超级管理员</span></td>
+                        <td>系统最高权限，可管理所有项目和用户</td>
+                    </tr>
+                    <tr>
+                        <td>2</td>
+                        <td><span class="badge badge-primary">项目管理员</span></td>
+                        <td>管理单个项目的所有资源和成员</td>
+                    </tr>
+                    <tr>
+                        <td>3</td>
+                        <td><span class="badge badge-secondary">开发人员</span></td>
+                        <td>推送/拉取镜像，管理 Helm Chart</td>
+                    </tr>
+                    <tr>
+                        <td>4</td>
+                        <td><span class="badge badge-success">访客</span></td>
+                        <td>仅可拉取镜像，查看项目信息</td>
+                    </tr>
+                    <tr>
+                        <td>5</td>
+                        <td><span class="badge badge-warning">受限访客</span></td>
+                        <td>仅可拉取公共项目镜像</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>📁 创建项目示例</h3>
+            <pre><code><span class="comment"># 使用 Harbor API 创建项目</span>
+curl -X POST <span class="string">"http://harbor.example.com/api/v2.0/projects"</span> \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -u <span class="string">"admin:Harbor12345"</span> \
+  -d <span class="string">'{
+    "project_name": "production",
+    "public": false,
+    "metadata": {
+      "auto_scan": "true",
+      "enable_content_trust": "false"
+    }
+  }'</span></code></pre>
+
+            <h3>👥 添加项目成员</h3>
+            <pre><code><span class="comment"># 添加用户到项目</span>
+curl -X POST <span class="string">"http://harbor.example.com/api/v2.0/projects/1/members"</span> \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -u <span class="string">"admin:Harbor12345"</span> \
+  -d <span class="string">'{
+    "role_id": 3,
+    "member_user": {
+      "username": "developer1"
+    }
+  }'</span></code></pre>
+
+            <div class="alert alert-success">
+                <div class="alert-title">✅ 最佳实践</div>
+                <ul class="checklist">
+                    <li>为不同团队创建独立的项目空间</li>
+                    <li>遵循最小权限原则分配角色</li>
+                    <li>定期审计用户权限</li>
+                    <li>启用 LDAP/AD 集成统一管理用户</li>
+                    <li>开启镜像自动漏洞扫描</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 6. CI/CD 集成配置 -->
+        <section id="section6">
+            <h2>CI/CD 集成配置</h2>
+            
+            <h3>🔗 Jenkins Pipeline 集成</h3>
+            <pre><code><span class="keyword">pipeline</span> {
+    agent any
+    
+    environment {
+        HARBOR_URL = <span class="string">'harbor.example.com'</span>
+        HARBOR_PROJECT = <span class="string">'production'</span>
+        IMAGE_NAME = <span class="string">'myapp'</span>
+        IMAGE_TAG = <span class="string">"${BUILD_NUMBER}"</span>
+    }
+    
+    stages {
+        stage(<span class="string">'Checkout'</span>) {
+            steps {
+                git branch: <span class="string">'main'</span>, 
+                    url: <span class="string">'https://gitlab.example.com/team/myapp.git'</span>
+            }
+        }
+        
+        stage(<span class="string">'Build'</span>) {
+            steps {
+                sh <span class="string">'mvn clean package -DskipTests'</span>
+            }
+        }
+        
+        stage(<span class="string">'Test'</span>) {
+            steps {
+                sh <span class="string">'mvn test'</span>
+            }
+        }
+        
+        stage(<span class="string">'Build Docker Image'</span>) {
+            steps {
+                script {
+                    docker.build(<span class="string">"${env.HARBOR_URL}/${env.HARBOR_PROJECT}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"</span>)
+                }
+            }
+        }
+        
+        stage(<span class="string">'Push to Harbor'</span>) {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: <span class="string">'harbor-credentials'</span>,
+                    usernameVariable: <span class="string">'HARBOR_USER'</span>,
+                    passwordVariable: <span class="string">'HARBOR_PASSWORD'</span>
+                )]) {
+                    sh <span class="string">'''
+                        echo $HARBOR_PASSWORD | docker login ${HARBOR_URL} -u ${HARBOR_USER} --password-stdin
+                        docker push ${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}
+                    '''</span>
+                }
+            }
+        }
+    }
+}</code></pre>
+
+            <h3>🐙 GitLab CI/CD 集成</h3>
+            <pre><code><span class="comment"># .gitlab-ci.yml 示例</span>
+stages:
+  - build
+  - test
+  - docker-build
+  - deploy
+
+variables:
+  HARBOR_URL: <span class="string">"harbor.example.com"</span>
+  HARBOR_PROJECT: <span class="string">"production"</span>
+  IMAGE_NAME: <span class="string">"myapp"</span>
+
+docker-build:
+  stage: docker-build
+  script:
+    - echo <span class="string">"$HARBOR_PASSWORD"</span> | docker login $HARBOR_URL -u <span class="string">"$HARBOR_USER"</span> --password-stdin
+    - docker build -t $HARBOR_URL/$HARBOR_PROJECT/$IMAGE_NAME:$CI_COMMIT_SHA .
+    - docker push $HARBOR_URL/$HARBOR_PROJECT/$IMAGE_NAME:$CI_COMMIT_SHA
+  only:
+    - main</code></pre>
+
+            <h3>🐳 Docker 客户端配置</h3>
+            <pre><code><span class="comment"># 配置 Docker 信任 Harbor 仓库</span>
+cat > /etc/docker/daemon.json << EOF
+{
+  <span class="string">"insecure-registries"</span>: [<span class="string">"harbor.example.com"</span>],
+  <span class="string">"registry-mirrors"</span>: [
+    <span class="string">"https://docker.mirrors.ustc.edu.cn"</span>
+  ]
+}
+EOF
+
+<span class="comment"># 重启 Docker</span>
+systemctl daemon-reload
+systemctl restart docker
+
+<span class="comment"># 登录 Harbor</span>
+docker login harbor.example.com
+
+<span class="comment"># 推送镜像</span>
+docker tag myapp:latest harbor.example.com/production/myapp:v1.0
+docker push harbor.example.com/production/myapp:v1.0</code></pre>
+        </section>
+
+        <!-- 7. Kubernetes 集成 -->
+        <section id="section7">
+            <h2>Kubernetes 集成</h2>
+            
+            <h3>🔑 创建 ImagePullSecret</h3>
+            <pre><code><span class="comment"># 创建 Kubernetes Secret</span>
+kubectl create secret docker-registry harbor-secret \
+  --docker-server=harbor.example.com \
+  --docker-username=admin \
+  --docker-password=Harbor12345 \
+  --docker-email=admin@example.com \
+  -n default
+
+<span class="comment"># 验证 Secret</span>
+kubectl get secret harbor-secret -o yaml</code></pre>
+
+            <h3>📦 Deployment 配置示例</h3>
+            <pre><code><span class="comment"># deployment.yaml</span>
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      imagePullSecrets:
+        - name: harbor-secret
+      containers:
+        - name: myapp
+          image: harbor.example.com/production/myapp:v1.0
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              memory: <span class="string">"256Mi"</span>
+              cpu: <span class="string">"250m"</span>
+            limits:
+              memory: <span class="string">"512Mi"</span>
+              cpu: <span class="string">"500m"</span></code></pre>
+
+            <div class="alert alert-info">
+                <div class="alert-title">ℹ️ KubeSphere 集成</div>
+                <p>在 KubeSphere 中，可以通过工作负载配置直接使用 Harbor 镜像，只需在容器组模板中指定 imagePullSecrets 即可。</p>
+            </div>
+        </section>
+
+        <!-- 8. 运维管理 -->
+        <section id="section8">
+            <h2>运维管理与监控</h2>
+            
+            <h3>💾 备份策略</h3>
+            <pre><code><span class="comment">#!/bin/bash</span>
+<span class="comment"># 文件名：backup_harbor.sh</span>
+
+BACKUP_DIR=<span class="string">"/backup/harbor"</span>
+DATE=$(date +%Y%m%d_%H%M%S)
+HARBOR_DATA=<span class="string">"/data/harbor"</span>
+
+<span class="comment"># 创建备份目录</span>
+mkdir -p $BACKUP_DIR
+
+<span class="comment"># 停止 Harbor 服务</span>
+docker-compose -f /opt/harbor/harbor/docker-compose.yml down
+
+<span class="comment"># 备份数据卷</span>
+tar -czf $BACKUP_DIR/harbor_data_$DATE.tar.gz $HARBOR_DATA
+
+<span class="comment"># 备份数据库</span>
+docker exec harbor-db pg_dumpall -U postgres > $BACKUP_DIR/harbor_db_$DATE.sql
+
+<span class="comment"># 启动 Harbor 服务</span>
+docker-compose -f /opt/harbor/harbor/docker-compose.yml up -d
+
+<span class="comment"># 清理 7 天前的备份</span>
+find $BACKUP_DIR -name <span class="string">"*.tar.gz"</span> -mtime +7 -delete
+find $BACKUP_DIR -name <span class="string">"*.sql"</span> -mtime +7 -delete</code></pre>
+
+            <h3>📊 监控配置</h3>
+            <pre><code><span class="comment"># Prometheus 监控配置</span>
+scrape_configs:
+  - job_name: <span class="string">'harbor'</span>
+    static_configs:
+      - targets: [<span class="string">'harbor.example.com:9090'</span>]
+    metrics_path: /metrics</code></pre>
+
+            <h3>📝 日志管理</h3>
+            <pre><code><span class="comment"># 查看 Harbor 日志</span>
+docker-compose logs -f core
+docker-compose logs -f jobservice
+docker-compose logs -f registry
+
+<span class="comment"># 日志轮转配置</span>
+/var/log/harbor/*.log {
+    daily
+    rotate 50
+    size 200M
+    missingok
+    notifempty
+    compress
+}</code></pre>
+
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-date">每日</div>
+                    <h4>检查 Harbor 服务状态</h4>
+                    <p>运行 <code>docker-compose ps</code> 确认所有容器正常运行</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-date">每周</div>
+                    <h4>清理过期镜像</h4>
+                    <p>使用 Harbor API 或 UI 清理不再使用的镜像版本</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-date">每月</div>
+                    <h4>安全漏洞扫描</h4>
+                    <p>对所有镜像执行漏洞扫描并修复高危漏洞</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-date">每季度</div>
+                    <h4>系统升级</h4>
+                    <p>检查 Harbor 新版本并规划升级计划</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 9. 故障排查 -->
+        <section id="section9">
+            <h2>故障排查指南</h2>
+            
+            <h3>🔍 常见问题及解决方案</h3>
+            
+            <div class="alert alert-error">
+                <div class="alert-title">❌ 问题 1: Harbor 无法启动</div>
+                <pre><code><span class="comment"># 检查 Docker 服务</span>
+systemctl status docker
+
+<span class="comment"># 检查端口占用</span>
+netstat -tlnp | grep -E <span class="string">'80|443|5000'</span>
+
+<span class="comment"># 查看容器日志</span>
+docker-compose logs
+
+<span class="comment"># 检查磁盘空间</span>
+df -h</code></pre>
+            </div>
+
+            <div class="alert alert-warning">
+                <div class="alert-title">⚠️ 问题 2: 无法推送镜像</div>
+                <pre><code><span class="comment"># 检查 Docker 登录状态</span>
+docker logout harbor.example.com
+docker login harbor.example.com
+
+<span class="comment"># 检查 daemon.json 配置</span>
+cat /etc/docker/daemon.json
+
+<span class="comment"># 检查防火墙规则</span>
+iptables -L -n | grep -E <span class="string">'80|443'</span></code></pre>
+            </div>
+
+            <div class="alert alert-info">
+                <div class="alert-title">ℹ️ 问题 3: 数据库连接失败</div>
+                <pre><code><span class="comment"># 检查数据库容器</span>
+docker-compose ps harbor-db
+
+<span class="comment"># 查看数据库日志</span>
+docker-compose logs harbor-db
+
+<span class="comment"># 测试数据库连接</span>
+docker exec -it harbor-db psql -U postgres -d registry</code></pre>
+            </div>
+
+            <div class="alert alert-success">
+                <div class="alert-title">✅ 问题 4: 镜像扫描失败</div>
+                <pre><code><span class="comment"># 检查 Trivy 服务</span>
+docker-compose ps trivy-adapter
+
+<span class="comment"># 更新 Trivy 数据库</span>
+docker exec -it harbor-trivy-adapter trivy image --download-db-only
+
+<span class="comment"># 查看扫描日志</span>
+docker-compose logs trivy-adapter</code></pre>
+            </div>
+
+            <h3>🚀 性能优化建议</h3>
+            <ul class="checklist">
+                <li>增加数据库连接池大小 (max_open_conns: 2000)</li>
+                <li>调整 Jobservice 并发数 (max_job_workers: 20)</li>
+                <li>配置 Redis 缓存过期时间 (expire_hours: 24)</li>
+                <li>使用对象存储 (S3/OSS) 替代本地存储</li>
+                <li>启用 CDN 加速静态资源访问</li>
+            </ul>
+        </section>
+
+        <!-- 页脚 -->
+        <footer>
+            <h3>📚 参考资料</h3>
+            <div class="footer-links">
+                <a href="https://goharbor.io/" target="_blank" class="footer-link">Harbor 官网</a>
+                <a href="https://github.com/goharbor/harbor" target="_blank" class="footer-link">GitHub 仓库</a>
+                <a href="https://goharbor.io/docs/" target="_blank" class="footer-link">官方文档</a>
+                <a href="https://github.com/goharbor/harbor/wiki/Swagger-API-Documentation" target="_blank" class="footer-link">API 文档</a>
+            </div>
+            <p style="margin-top: 30px; color: var(--text-secondary);">
+                © 2026 Harbor 部署方案 | 基于 OpenClaw + Claude Code 的端到端研发自动化系统<br>
+                文档版本：v1.0 | 最后更新：2026-03-18 | 维护者：AI Code Agent
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        // 创建粒子效果
+        function createParticles() {
+            const particlesContainer = document.getElementById('particles');
+            const particleCount = 50;
+
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 15 + 's';
+                particle.style.animationDuration = (Math.random() * 10 + 10) + 's';
+                particlesContainer.appendChild(particle);
+            }
+        }
+
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 代码块复制功能
+        document.querySelectorAll('pre').forEach(pre => {
+            const button = document.createElement('button');
+            button.textContent = '复制';
+            button.style.cssText = `
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                background: rgba(0, 245, 255, 0.2);
+                border: 1px solid var(--primary-color);
+                color: var(--primary-color);
+                padding: 5px 10px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 12px;
+                transition: all 0.3s ease;
+            `;
+            
+            button.addEventListener('mouseover', () => {
+                button.style.background = 'var(--primary-color)';
+                button.style.color = 'var(--bg-dark)';
+            });
+            
+            button.addEventListener('mouseout', () => {
+                button.style.background = 'rgba(0, 245, 255, 0.2)';
+                button.style.color = 'var(--primary-color)';
+            });
+            
+            button.addEventListener('click', () => {
+                const code = pre.querySelector('code');
+                navigator.clipboard.writeText(code.textContent);
+                button.textContent = '已复制!';
+                setTimeout(() => {
+                    button.textContent = '复制';
+                }, 2000);
+            });
+            
+            pre.style.position = 'relative';
+            pre.appendChild(button);
+        });
+
+        // 初始化
+        createParticles();
+
+        // 滚动动画
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('section').forEach(section => {
+            section.style.opacity = '0';
+            section.style.transform = 'translateY(20px)';
+            section.style.transition = 'all 0.6s ease';
+            observer.observe(section);
+        });
+    </script>
+</body>
+</html>

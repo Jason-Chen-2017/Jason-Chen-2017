@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CI/CD 工具链版本选型与部署架构设计报告</title>
+    <style>
+        :root {
+            --primary-color: #00f5ff;
+            --secondary-color: #7b2cbf;
+            --accent-color: #ff006e;
+            --bg-dark: #0a0e27;
+            --bg-medium: #1a1f3a;
+            --bg-light: #2d3561;
+            --text-primary: #ffffff;
+            --text-secondary: #b8c5d6;
+            --success-color: #00ff88;
+            --warning-color: #ffbe0b;
+            --error-color: #ff4d4d;
+            --gradient-1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --gradient-2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --gradient-3: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --gradient-4: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            --glow-effect: 0 0 20px rgba(0, 245, 255, 0.5);
+            --card-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 20% 50%, rgba(123, 44, 191, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(0, 245, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 40% 20%, rgba(255, 0, 110, 0.1) 0%, transparent 50%);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header Styles */
+        header {
+            text-align: center;
+            padding: 60px 20px;
+            background: var(--gradient-1);
+            border-radius: 20px;
+            margin-bottom: 40px;
+            box-shadow: var(--card-shadow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: rotate 30s linear infinite;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        header h1 {
+            font-size: 2.8em;
+            margin-bottom: 15px;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+            position: relative;
+            z-index: 1;
+        }
+
+        header .subtitle {
+            font-size: 1.3em;
+            color: rgba(255, 255, 255, 0.9);
+            position: relative;
+            z-index: 1;
+        }
+
+        header .meta-info {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+        }
+
+        header .meta-item {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px 20px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        /* Section Styles */
+        section {
+            background: var(--bg-medium);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: var(--card-shadow);
+            border: 1px solid rgba(0, 245, 255, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        section:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 50px rgba(0, 245, 255, 0.2);
+            border-color: var(--primary-color);
+        }
+
+        section h2 {
+            font-size: 2em;
+            margin-bottom: 25px;
+            color: var(--primary-color);
+            border-bottom: 3px solid var(--secondary-color);
+            padding-bottom: 10px;
+            display: inline-block;
+        }
+
+        section h3 {
+            font-size: 1.5em;
+            margin: 25px 0 15px;
+            color: var(--accent-color);
+        }
+
+        /* Version Cards */
+        .version-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 25px 0;
+        }
+
+        .version-card {
+            background: var(--bg-light);
+            border-radius: 15px;
+            padding: 25px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .version-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background: var(--gradient-3);
+        }
+
+        .version-card:hover {
+            border-color: var(--primary-color);
+            box-shadow: var(--glow-effect);
+            transform: translateY(-3px);
+        }
+
+        .version-card h4 {
+            font-size: 1.6em;
+            margin-bottom: 15px;
+            color: var(--primary-color);
+        }
+
+        .version-card .version-number {
+            font-size: 2em;
+            font-weight: bold;
+            background: var(--gradient-3);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 10px 0;
+        }
+
+        .version-card .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .version-card .info-label {
+            color: var(--text-secondary);
+        }
+
+        .version-card .info-value {
+            color: var(--success-color);
+            font-weight: 600;
+        }
+
+        /* Compatibility Matrix */
+        .compatibility-matrix {
+            overflow-x: auto;
+            margin: 25px 0;
+        }
+
+        .matrix-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-light);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .matrix-table th,
+        .matrix-table td {
+            padding: 15px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .matrix-table th {
+            background: var(--gradient-2);
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        .matrix-table tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .matrix-table tr:hover {
+            background: rgba(0, 245, 255, 0.1);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .status-compatible {
+            background: rgba(0, 255, 136, 0.2);
+            color: var(--success-color);
+            border: 1px solid var(--success-color);
+        }
+
+        .status-warning {
+            background: rgba(255, 190, 11, 0.2);
+            color: var(--warning-color);
+            border: 1px solid var(--warning-color);
+        }
+
+        /* Architecture Diagram */
+        .architecture-diagram {
+            background: var(--bg-dark);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 25px 0;
+            border: 2px solid var(--primary-color);
+            box-shadow: var(--glow-effect);
+        }
+
+        .diagram-layer {
+            background: var(--bg-light);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+            border: 1px solid rgba(0, 245, 255, 0.3);
+        }
+
+        .diagram-layer-title {
+            font-size: 1.3em;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .diagram-components {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .diagram-component {
+            background: var(--gradient-1);
+            padding: 15px 25px;
+            border-radius: 10px;
+            text-align: center;
+            min-width: 150px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease;
+        }
+
+        .diagram-component:hover {
+            transform: scale(1.05);
+        }
+
+        .diagram-component strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .diagram-arrow {
+            text-align: center;
+            font-size: 2em;
+            color: var(--primary-color);
+            margin: 10px 0;
+        }
+
+        /* Resource Table */
+        .resource-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: var(--bg-light);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .resource-table th {
+            background: var(--gradient-4);
+            color: var(--bg-dark);
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .resource-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .resource-table tr:hover {
+            background: rgba(0, 245, 255, 0.05);
+        }
+
+        .resource-highlight {
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        /* Timeline */
+        .timeline {
+            position: relative;
+            padding: 20px 0;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 30px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: var(--gradient-3);
+        }
+
+        .timeline-item {
+            position: relative;
+            padding-left: 70px;
+            margin-bottom: 30px;
+        }
+
+        .timeline-marker {
+            position: absolute;
+            left: 15px;
+            top: 0;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--gradient-3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: var(--bg-dark);
+        }
+
+        .timeline-content {
+            background: var(--bg-light);
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .timeline-title {
+            font-size: 1.3em;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+
+        /* Feature List */
+        .feature-list {
+            list-style: none;
+            margin: 15px 0;
+        }
+
+        .feature-list li {
+            padding: 10px 0 10px 35px;
+            position: relative;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .feature-list li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--success-color);
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        /* Code Block */
+        .code-block {
+            background: var(--bg-dark);
+            border: 1px solid var(--primary-color);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        .code-block code {
+            color: var(--text-secondary);
+        }
+
+        .code-keyword {
+            color: var(--accent-color);
+        }
+
+        .code-string {
+            color: var(--success-color);
+        }
+
+        .code-comment {
+            color: #6a9955;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 25px 0;
+        }
+
+        .stat-card {
+            background: var(--gradient-1);
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: var(--card-shadow);
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+
+        /* Risk Table */
+        .risk-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: var(--bg-light);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .risk-table th {
+            background: var(--gradient-2);
+            padding: 15px;
+            text-align: left;
+        }
+
+        .risk-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .risk-high {
+            color: var(--error-color);
+            font-weight: 600;
+        }
+
+        .risk-medium {
+            color: var(--warning-color);
+            font-weight: 600;
+        }
+
+        .risk-low {
+            color: var(--success-color);
+            font-weight: 600;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            background: var(--bg-medium);
+            border-radius: 15px;
+            margin-top: 40px;
+            border-top: 3px solid var(--primary-color);
+        }
+
+        footer p {
+            color: var(--text-secondary);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8em;
+            }
+
+            .version-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .matrix-table {
+                font-size: 0.85em;
+            }
+
+            .diagram-components {
+                flex-direction: column;
+            }
+
+            .timeline-item {
+                padding-left: 50px;
+            }
+        }
+
+        /* Animation */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        section {
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        /* Print Styles */
+        @media print {
+            body {
+                background: white;
+                color: black;
+            }
+
+            section {
+                break-inside: avoid;
+                box-shadow: none;
+                border: 1px solid #ccc;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🚀 CI/CD 工具链版本选型与部署架构设计</h1>
+            <p class="subtitle">基于 OpenClaw + Claude Code 的端到端研发自动化系统</p>
+            <div class="meta-info">
+                <div class="meta-item">📅 编制日期：2026 年 3 月 18 日</div>
+                <div class="meta-item">📄 文档版本：v1.0</div>
+                <div class="meta-item">🎯 适用场景：企业级生产环境</div>
+            </div>
+        </header>
+
+        <!-- Executive Summary -->
+        <section>
+            <h2>📋 执行摘要</h2>
+            <p style="font-size: 1.1em; line-height: 1.8;">
+                本方案针对"基于 OpenClaw + Claude Code 的端到端研发自动化系统"项目，提供完整的 
+                <strong style="color: var(--primary-color);">CI/CD 工具链版本选型</strong> 与 
+                <strong style="color: var(--accent-color);">部署架构设计</strong>。
+                方案涵盖 Jenkins、Docker、Kubernetes、KubeSphere 四大核心组件的最新稳定版本选择、
+                兼容性分析、部署架构设计、资源配置建议及最佳实践指南。
+            </p>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--success-color);">99.9%</div>
+                    <div class="stat-label">目标可用性</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--primary-color);">50+</div>
+                    <div class="stat-label">并发构建数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--accent-color);">10x</div>
+                    <div class="stat-label">部署效率提升</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color: var(--warning-color);">&lt;30min</div>
+                    <div class="stat-label">故障恢复时间</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Version Selection -->
+        <section>
+            <h2>🎯 版本选型方案</h2>
+            
+            <div class="version-grid">
+                <!-- Jenkins Card -->
+                <div class="version-card">
+                    <h4>Jenkins</h4>
+                    <div class="version-number">2.440.x LTS</div>
+                    <div class="info-row">
+                        <span class="info-label">发布类型:</span>
+                        <span class="info-value">LTS (长期支持)</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">发布日期:</span>
+                        <span class="info-value">2025 年 11 月</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">支持周期:</span>
+                        <span class="info-value">至 2027 年 5 月</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Java 要求:</span>
+                        <span class="info-value">Java 17 / 21</span>
+                    </div>
+                    <ul class="feature-list">
+                        <li>Pipeline as Code 完整支持</li>
+                        <li>Kubernetes Plugin 4423.vb_59f230b_ce53+</li>
+                        <li>WebSocket 改进连接</li>
+                        <li>增强的安全控制</li>
+                    </ul>
+                </div>
+
+                <!-- Docker Card -->
+                <div class="version-card">
+                    <h4>Docker Engine</h4>
+                    <div class="version-number">27.5.x</div>
+                    <div class="info-row">
+                        <span class="info-label">发布类型:</span>
+                        <span class="info-value">Stable</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">发布日期:</span>
+                        <span class="info-value">2025 年 12 月</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Containerd:</span>
+                        <span class="info-value">2.0.x</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">编排支持:</span>
+                        <span class="info-value">Kubernetes-native</span>
+                    </div>
+                    <ul class="feature-list">
+                        <li>Containerd 2.0 运行时</li>
+                        <li>BuildKit 增强构建</li>
+                        <li>Rootless 模式</li>
+                        <li>Compose V2 原生支持</li>
+                    </ul>
+                </div>
+
+                <!-- Kubernetes Card -->
+                <div class="version-card">
+                    <h4>Kubernetes</h4>
+                    <div class="version-number">1.32.x</div>
+                    <div class="info-row">
+                        <span class="info-label">发布类型:</span>
+                        <span class="info-value">GA (生产就绪)</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">发布日期:</span>
+                        <span class="info-value">2025 年 12 月</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">生命周期:</span>
+                        <span class="info-value">至 2026 年 12 月</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">API 版本:</span>
+                        <span class="info-value">apps/v1</span>
+                    </div>
+                    <ul class="feature-list">
+                        <li>Gateway API 流量管理</li>
+                        <li>Pod Security Admission</li>
+                        <li>HPA/VPA 增强</li>
+                        <li>Windows 节点支持</li>
+                    </ul>
+                </div>
+
+                <!-- KubeSphere Card -->
+                <div class="version-card">
+                    <h4>KubeSphere</h4>
+                    <div class="version-number">4.2.0</div>
+                    <div class="info-row">
+                        <span class="info-label">版本类型:</span>
+                        <span class="info-value">Enterprise</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">代号:</span>
+                        <span class="info-value">LuBan Architecture</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">发布日期:</span>
+                        <span class="info-value">2026 年 3 月</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">架构:</span>
+                        <span class="info-value">微内核 + 插件</span>
+                    </div>
+                    <ul class="feature-list">
+                        <li>LuBan 可扩展开放架构</li>
+                        <li>DevOps 2.0 流水线引擎</li>
+                        <li>多集群管理</li>
+                        <li>全栈可观测性</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Compatibility Matrix -->
+            <h3>🔗 兼容性矩阵</h3>
+            <div class="compatibility-matrix">
+                <table class="matrix-table">
+                    <thead>
+                        <tr>
+                            <th>组件</th>
+                            <th>Jenkins 2.440.x</th>
+                            <th>Docker 27.5.x</th>
+                            <th>K8s 1.32.x</th>
+                            <th>KubeSphere 4.2.0</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Jenkins 2.440.x</strong></td>
+                            <td><span class="status-badge status-compatible">✅ 自身</span></td>
+                            <td><span class="status-badge status-compatible">✅ 兼容</span></td>
+                            <td><span class="status-badge status-compatible">✅ 兼容</span></td>
+                            <td><span class="status-badge status-compatible">✅ 支持</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Docker 27.5.x</strong></td>
+                            <td><span class="status-badge status-compatible">✅ 兼容</span></td>
+                            <td><span class="status-badge status-compatible">✅ 自身</span></td>
+                            <td><span class="status-badge status-compatible">✅ 兼容</span></td>
+                            <td><span class="status-badge status-compatible">✅ 支持</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Kubernetes 1.32.x</strong></td>
+                            <td><span class="status-badge status-compatible">✅ 兼容</span></td>
+                            <td><span class="status-badge status-compatible">✅ 兼容</span></td>
+                            <td><span class="status-badge status-compatible">✅ 自身</span></td>
+                            <td><span class="status-badge status-compatible">✅ 基于</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>KubeSphere 4.2.0</strong></td>
+                            <td><span class="status-badge status-compatible">✅ 集成</span></td>
+                            <td><span class="status-badge status-compatible">✅ 使用</span></td>
+                            <td><span class="status-badge status-compatible">✅ 基于</span></td>
+                            <td><span class="status-badge status-compatible">✅ 自身</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Architecture Design -->
+        <section>
+            <h2>🏗️ 部署架构设计</h2>
+            
+            <h3>整体架构图</h3>
+            <div class="architecture-diagram">
+                <!-- User Access Layer -->
+                <div class="diagram-layer">
+                    <div class="diagram-layer-title">🌐 用户访问层 (User Access Layer)</div>
+                    <div class="diagram-components">
+                        <div class="diagram-component">
+                            <strong>Browser</strong>
+                            <small>Web 浏览器</small>
+                        </div>
+                        <div class="diagram-component">
+                            <strong>CLI Tools</strong>
+                            <small>kubectl/helm</small>
+                        </div>
+                        <div class="diagram-component">
+                            <strong>IDE Plugin</strong>
+                            <small>VS Code/JetBrains</small>
+                        </div>
+                        <div class="diagram-component">
+                            <strong>API Client</strong>
+                            <small>REST API</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="diagram-arrow">⬇️</div>
+
+                <!-- Load Balancer Layer -->
+                <div class="diagram-layer">
+                    <div class="diagram-layer-title">⚖️ 负载均衡层 (Load Balancer Layer)</div>
+                    <div class="diagram-components">
+                        <div class="diagram-component" style="background: var(--gradient-3);">
+                            <strong>Nginx Ingress</strong>
+                            <small>Controller</small>
+                        </div>
+                        <div class="diagram-component" style="background: var(--gradient-3);">
+                            <strong>MetalLB / F5</strong>
+                            <small>External LB</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="diagram-arrow">⬇️</div>
+
+                <!-- Platform Layer -->
+                <div class="diagram-layer">
+                    <div class="diagram-layer-title">🎛️ KubeSphere 平台层 (Platform Layer)</div>
+                    <div class="diagram-components">
+                        <div class="diagram-component" style="background: var(--gradient-2);">
+                            <strong>DevOps Module</strong>
+                            <small>CI/CD 引擎</small>
+                        </div>
+                        <div class="diagram-component" style="background: var(--gradient-2);">
+                            <strong>Monitoring</strong>
+                            <small>Prometheus+Grafana</small>
+                        </div>
+                        <div class="diagram-component" style="background: var(--gradient-2);">
+                            <strong>Logging</strong>
+                            <small>EFK Stack</small>
+                        </div>
+                        <div class="diagram-component" style="background: var(--gradient-2);">
+                            <strong>IAM</strong>
+                            <small>权限管理</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="diagram-arrow">⬇️</div>
+
+                <!-- Kubernetes Cluster Layer -->
+                <div class="diagram-layer">
+                    <div class="diagram-layer-title">☸️ Kubernetes 集群层 (Cluster Layer)</div>
+                    <div class="diagram-components">
+                        <div class="diagram-component" style="background: var(--gradient-4);">
+                            <strong>Control Plane</strong>
+                            <small>HA (3 节点)</small>
+                        </div>
+                        <div class="diagram-component" style="background: var(--gradient-4);">
+                            <strong>etcd Cluster</strong>
+                            <small>3/5 节点</small>
+                        </div>
+                        <div class="diagram-component" style="background: var(--gradient-4);">
+                            <strong>Worker Nodes</strong>
+                            <small>弹性扩展</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="diagram-arrow">⬇️</div>
+
+                <!-- CI/CD Tools Layer -->
+                <div class="diagram-layer">
+                    <div class="diagram-layer-title">🔄 CI/CD 工具层 (CI/CD Tools Layer)</div>
+                    <div class="diagram-components">
+                        <div class="diagram-component" style="background: var(--gradient-1);">
+                            <strong>Jenkins Master</strong>
+                            <small>StatefulSet HA</small>
+                        </div>
+                        <div class="diagram-component" style="background: var(--gradient-1);">
+                            <strong>Jenkins Agents</strong>
+                            <small>Dynamic Pods</small>
+                        </div>
+                        <div class="diagram-component" style="background: var(--gradient-1);">
+                            <strong>Docker Registry</strong>
+                            <small>镜像仓库</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="diagram-arrow">⬇️</div>
+
+                <!-- Storage & Network Layer -->
+                <div class="diagram-layer">
+                    <div class="diagram-layer-title">💾 存储与网络层 (Storage & Network)</div>
+                    <div class="diagram-components">
+                        <div class="diagram-component" style="background: linear-gradient(135deg, #f5af19 0%, #f12711 100%);">
+                            <strong>Ceph RBD</strong>
+                            <small>块存储</small>
+                        </div>
+                        <div class="diagram-component" style="background: linear-gradient(135deg, #f5af19 0%, #f12711 100%);">
+                            <strong>NFS/CIFS</strong>
+                            <small>文件存储</small>
+                        </div>
+                        <div class="diagram-component" style="background: linear-gradient(135deg, #f5af19 0%, #f12711 100%);">
+                            <strong>Calico</strong>
+                            <small>BGP 网络</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Resource Configuration -->
+        <section>
+            <h2>💻 资源配置方案</h2>
+            
+            <h3>最小高可用部署 (6 台服务器)</h3>
+            <table class="resource-table">
+                <thead>
+                    <tr>
+                        <th>节点类型</th>
+                        <th>CPU</th>
+                        <th>内存</th>
+                        <th>磁盘</th>
+                        <th>网络</th>
+                        <th>数量</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="resource-highlight">Control Plane Nodes</td>
+                        <td>8 Core</td>
+                        <td>32 GB</td>
+                        <td>500GB SSD</td>
+                        <td>10 Gbps</td>
+                        <td>3 台</td>
+                    </tr>
+                    <tr>
+                        <td class="resource-highlight">Worker Nodes</td>
+                        <td>16 Core</td>
+                        <td>64 GB</td>
+                        <td>1TB NVMe SSD</td>
+                        <td>10 Gbps</td>
+                        <td>3 台</td>
+                    </tr>
+                    <tr>
+                        <td class="resource-highlight">Load Balancer</td>
+                        <td>4 Core</td>
+                        <td>16 GB</td>
+                        <td>200GB SSD</td>
+                        <td>10 Gbps</td>
+                        <td>2 台</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>大规模生产部署 (15+ 台服务器)</h3>
+            <table class="resource-table">
+                <thead>
+                    <tr>
+                        <th>节点类型</th>
+                        <th>CPU</th>
+                        <th>内存</th>
+                        <th>磁盘</th>
+                        <th>网络</th>
+                        <th>用途</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="resource-highlight">Control Plane</td>
+                        <td>16 Core</td>
+                        <td>64 GB</td>
+                        <td>1TB NVMe</td>
+                        <td>25 Gbps</td>
+                        <td>K8s 控制平面 (5 台)</td>
+                    </tr>
+                    <tr>
+                        <td class="resource-highlight">Dedicated etcd</td>
+                        <td>8 Core</td>
+                        <td>32 GB</td>
+                        <td>1TB NVMe</td>
+                        <td>25 Gbps</td>
+                        <td>etcd 专用 (3 台)</td>
+                    </tr>
+                    <tr>
+                        <td class="resource-highlight">Worker - General</td>
+                        <td>16 Core</td>
+                        <td>64 GB</td>
+                        <td>1TB SSD</td>
+                        <td>10 Gbps</td>
+                        <td>通用工作负载</td>
+                    </tr>
+                    <tr>
+                        <td class="resource-highlight">Worker - Compute</td>
+                        <td>32 Core</td>
+                        <td>128 GB</td>
+                        <td>2TB SSD</td>
+                        <td>10 Gbps</td>
+                        <td>计算密集型</td>
+                    </tr>
+                    <tr>
+                        <td class="resource-highlight">Jenkins Dedicated</td>
+                        <td>16 Core</td>
+                        <td>64-128 GB</td>
+                        <td>2TB NVMe</td>
+                        <td>10 Gbps</td>
+                        <td>Jenkins 专用节点</td>
+                    </tr>
+                    <tr>
+                        <td class="resource-highlight">Monitoring Nodes</td>
+                        <td>16 Core</td>
+                        <td>128 GB</td>
+                        <td>4TB SSD</td>
+                        <td>10 Gbps</td>
+                        <td>监控日志存储</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Implementation Timeline -->
+        <section>
+            <h2>📅 实施路线图</h2>
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-marker">1</div>
+                    <div class="timeline-content">
+                        <div class="timeline-title">Phase 1: 基础环境准备 (Week 1-2)</div>
+                        <ul class="feature-list">
+                            <li>服务器采购/准备</li>
+                            <li>操作系统安装与加固</li>
+                            <li>网络规划与配置</li>
+                            <li>存储系统部署</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">2</div>
+                    <div class="timeline-content">
+                        <div class="timeline-title">Phase 2: Kubernetes 集群部署 (Week 3-4)</div>
+                        <ul class="feature-list">
+                            <li>etcd 集群部署</li>
+                            <li>Control Plane 部署</li>
+                            <li>Worker Nodes 加入</li>
+                            <li>CNI 网络插件配置</li>
+                            <li>基础组件安装</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">3</div>
+                    <div class="timeline-content">
+                        <div class="timeline-title">Phase 3: KubeSphere 安装 (Week 5)</div>
+                        <ul class="feature-list">
+                            <li>KubeSphere 安装部署</li>
+                            <li>存储类配置</li>
+                            <li>监控日志组件部署</li>
+                            <li>用户权限配置</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">4</div>
+                    <div class="timeline-content">
+                        <div class="timeline-title">Phase 4: Jenkins 集成 (Week 6)</div>
+                        <ul class="feature-list">
+                            <li>Jenkins 部署与配置</li>
+                            <li>插件安装</li>
+                            <li>Kubernetes Cloud 配置</li>
+                            <li>流水线模板开发</li>
+                            <li>凭证管理配置</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">5</div>
+                    <div class="timeline-content">
+                        <div class="timeline-title">Phase 5: 安全加固 (Week 7)</div>
+                        <ul class="feature-list">
+                            <li>RBAC 权限细化</li>
+                            <li>网络策略实施</li>
+                            <li>安全扫描集成</li>
+                            <li>审计日志开启</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">6</div>
+                    <div class="timeline-content">
+                        <div class="timeline-title">Phase 6: 测试验证 (Week 8)</div>
+                        <ul class="feature-list">
+                            <li>功能测试</li>
+                            <li>性能测试</li>
+                            <li>高可用测试</li>
+                            <li>灾备演练</li>
+                            <li>文档完善</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">7</div>
+                    <div class="timeline-content">
+                        <div class="timeline-title">Phase 7: 上线切换 (Week 9)</div>
+                        <ul class="feature-list">
+                            <li>试点项目迁移</li>
+                            <li>用户培训</li>
+                            <li>正式切换</li>
+                            <li>持续优化</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Risk Assessment -->
+        <section>
+            <h2>⚠️ 风险评估与缓解</h2>
+            
+            <h3>技术风险</h3>
+            <table class="risk-table">
+                <thead>
+                    <tr>
+                        <th>风险项</th>
+                        <th>影响程度</th>
+                        <th>发生概率</th>
+                        <th>缓解措施</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>版本兼容性问题</td>
+                        <td class="risk-high">高</td>
+                        <td class="risk-medium">中</td>
+                        <td>严格遵循兼容性矩阵，先在测试环境验证</td>
+                    </tr>
+                    <tr>
+                        <td>性能瓶颈</td>
+                        <td class="risk-medium">中</td>
+                        <td class="risk-medium">中</td>
+                        <td>前期容量规划，持续监控优化</td>
+                    </tr>
+                    <tr>
+                        <td>安全漏洞</td>
+                        <td class="risk-high">高</td>
+                        <td class="risk-low">低</td>
+                        <td>定期更新补丁，安全扫描</td>
+                    </tr>
+                    <tr>
+                        <td>存储故障</td>
+                        <td class="risk-high">高</td>
+                        <td class="risk-low">低</td>
+                        <td>分布式存储 + 定期备份</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>运维风险</h3>
+            <table class="risk-table">
+                <thead>
+                    <tr>
+                        <th>风险项</th>
+                        <th>影响程度</th>
+                        <th>发生概率</th>
+                        <th>缓解措施</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>人员技能不足</td>
+                        <td class="risk-high">高</td>
+                        <td class="risk-medium">中</td>
+                        <td>培训计划 + 文档完善 + 外部咨询</td>
+                    </tr>
+                    <tr>
+                        <td>配置漂移</td>
+                        <td class="risk-medium">中</td>
+                        <td class="risk-high">高</td>
+                        <td>GitOps + IaC (Infrastructure as Code)</td>
+                    </tr>
+                    <tr>
+                        <td>监控盲区</td>
+                        <td class="risk-medium">中</td>
+                        <td class="risk-medium">中</td>
+                        <td>完善监控指标体系，定期审查</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Cost Estimation -->
+        <section>
+            <h2>💰 成本估算</h2>
+            
+            <div class="version-grid">
+                <div class="version-card">
+                    <h4>硬件成本</h4>
+                    <div class="version-number" style="color: var(--warning-color);">¥186,000</div>
+                    <p style="color: var(--text-secondary); margin-top: 10px;">约 $26,000 USD</p>
+                    <ul class="feature-list" style="margin-top: 20px;">
+                        <li>Control Plane (3 台): ¥45,000</li>
+                        <li>Worker Nodes (3 台): ¥75,000</li>
+                        <li>Load Balancer (2 台): ¥16,000</li>
+                        <li>网络设备：¥20,000</li>
+                        <li>存储 (可选): ¥30,000</li>
+                    </ul>
+                </div>
+
+                <div class="version-card">
+                    <h4>软件成本</h4>
+                    <div class="version-number" style="color: var(--success-color);">¥0</div>
+                    <p style="color: var(--text-secondary); margin-top: 10px;">Open Source Stack</p>
+                    <ul class="feature-list" style="margin-top: 20px;">
+                        <li>Kubernetes: Apache 2.0</li>
+                        <li>Jenkins: MIT License</li>
+                        <li>Docker: Apache 2.0</li>
+                        <li>KubeSphere Community: Apache 2.0</li>
+                        <li style="color: var(--warning-color);">KubeSphere Enterprise: 联系销售</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Success Criteria -->
+        <section>
+            <h2>✅ 成功标准</h2>
+            
+            <div class="version-grid">
+                <div class="version-card">
+                    <h4 style="color: var(--primary-color);">技术指标</h4>
+                    <ul class="feature-list">
+                        <li>集群可用性 ≥ 99.9%</li>
+                        <li>API Server P99 延迟 &lt; 500ms</li>
+                        <li>Pod 启动时间 &lt; 30s</li>
+                        <li>构建成功率 ≥ 95%</li>
+                    </ul>
+                </div>
+
+                <div class="version-card">
+                    <h4 style="color: var(--accent-color);">运维指标</h4>
+                    <ul class="feature-list">
+                        <li>故障恢复时间 &lt; 30 分钟</li>
+                        <li>备份恢复验证通过率 100%</li>
+                        <li>监控覆盖率 100%</li>
+                    </ul>
+                </div>
+
+                <div class="version-card">
+                    <h4 style="color: var(--success-color);">业务指标</h4>
+                    <ul class="feature-list">
+                        <li>支持并发构建数 ≥ 50</li>
+                        <li>部署频率提升 ≥ 10 倍</li>
+                        <li>部署失败率降低 ≥ 50%</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer>
+            <p><strong>📄 文档版本:</strong> v1.0 | <strong>📅 编制日期:</strong> 2026 年 3 月 18 日</p>
+            <p style="margin-top: 15px;">
+                <strong>📚 参考文档:</strong> 
+                <a href="https://www.jenkins.io/doc/" style="color: var(--primary-color);">Jenkins</a> | 
+                <a href="https://kubernetes.io/docs/" style="color: var(--primary-color);">Kubernetes</a> | 
+                <a href="https://kubesphere.io/docs/" style="color: var(--primary-color);">KubeSphere</a> | 
+                <a href="https://docs.docker.com/" style="color: var(--primary-color);">Docker</a>
+            </p>
+            <p style="margin-top: 20px; color: var(--text-secondary);">
+                ⚠️ 本方案基于 2026 年 3 月的最新技术版本编写，建议在实施前再次确认各组件的最新版本和安全公告。
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        // Add smooth scroll and interactive effects
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Add hover effect to sections
+        document.querySelectorAll('section').forEach(section => {
+            section.addEventListener('mouseenter', function() {
+                this.style.borderColor = 'var(--primary-color)';
+            });
+            section.addEventListener('mouseleave', function() {
+                this.style.borderColor = 'rgba(0, 245, 255, 0.1)';
+            });
+        });
+
+        // Animate stats on scroll
+        const observerOptions = {
+            threshold: 0.5,
+            rootMargin: '0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.stat-card').forEach(card => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            card.style.transition = 'all 0.6s ease-out';
+            observer.observe(card);
+        });
+    </script>
+</body>
+</html>
